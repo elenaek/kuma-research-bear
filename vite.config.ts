@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite';
+import preact from '@preact/preset-vite';
 import webExtension from 'vite-plugin-web-extension';
 
 export default defineConfig({
   plugins: [
+    preact(),
     webExtension({
       manifest: './src/manifest.json',
       additionalInputs: [
@@ -12,7 +14,7 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    extensions: ['.ts', '.js', '.json'],
+    extensions: ['.tsx', '.ts', '.jsx', '.js', '.json'],
   },
   build: {
     outDir: 'dist',

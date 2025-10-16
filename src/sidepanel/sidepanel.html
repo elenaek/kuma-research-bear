@@ -4,92 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Research Bear - Explanations</title>
-  <link rel="stylesheet" href="./sidepanel.css">
 </head>
 <body>
-  <div class="sidepanel-container">
-    <header class="header">
-      <div class="header-content">
-        <h1>Research Bear</h1>
-        <p class="subtitle">Paper Explanations</p>
-      </div>
-    </header>
-
-    <div id="loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>Loading explanation...</p>
-    </div>
-
-    <div id="empty-state" class="empty-state">
-      <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-        <circle cx="32" cy="32" r="30" stroke="#e5e7eb" stroke-width="4"/>
-        <path d="M32 20v24M20 32h24" stroke="#9ca3af" stroke-width="4" stroke-linecap="round"/>
-      </svg>
-      <h2>No Explanation Yet</h2>
-      <p>Click "Explain Paper" in the popup to generate an explanation</p>
-    </div>
-
-    <div id="content" class="content hidden">
-      <div class="paper-info">
-        <h2 id="paper-title" class="paper-title"></h2>
-        <p id="paper-authors" class="paper-authors"></p>
-        <a id="paper-link" class="paper-link" href="#" target="_blank">View Original Paper →</a>
-      </div>
-
-      <div class="tabs">
-        <button class="tab active" data-tab="summary">Summary</button>
-        <button class="tab" data-tab="explanation">Explanation</button>
-        <button class="tab" data-tab="original">Original</button>
-      </div>
-
-      <div class="tab-content">
-        <div id="tab-summary" class="tab-panel active">
-          <div class="card">
-            <h3>Quick Summary</h3>
-            <p id="summary-text" class="summary-text"></p>
-          </div>
-
-          <div class="card">
-            <h3>Key Points</h3>
-            <ul id="key-points" class="key-points"></ul>
-          </div>
-        </div>
-
-        <div id="tab-explanation" class="tab-panel">
-          <div class="card">
-            <h3>Simplified Explanation</h3>
-            <div id="explanation-text" class="explanation-text"></div>
-          </div>
-        </div>
-
-        <div id="tab-original" class="tab-panel">
-          <div class="card">
-            <h3>Original Abstract</h3>
-            <div id="original-text" class="original-text"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="actions">
-        <button id="copy-btn" class="btn btn-secondary">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect x="2" y="2" width="10" height="10" stroke="currentColor" stroke-width="2"/>
-            <path d="M4 14h10V4" stroke="currentColor" stroke-width="2"/>
-          </svg>
-          Copy Explanation
-        </button>
-
-        <button id="refresh-btn" class="btn btn-secondary">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M14 8a6 6 0 11-12 0 6 6 0 0112 0z" stroke="currentColor" stroke-width="2"/>
-            <path d="M14 8l-3-3M14 8l-3 3" stroke="currentColor" stroke-width="2"/>
-          </svg>
-          Regenerate
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <script type="module" src="./sidepanel.ts"></script>
+  <div id="app"></div>
+  <script type="module" src="./index.tsx"></script>
 </body>
 </html>
