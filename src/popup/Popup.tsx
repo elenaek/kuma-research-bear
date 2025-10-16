@@ -121,7 +121,7 @@ export function Popup() {
       <div class="p-6">
         {/* Header */}
         <header class="mb-6">
-          <h1 class="text-2xl font-bold text-gray-800">Research Bear</h1>
+          <h1 class="text-2xl font-bold text-gray-800">Kuma the Research Bear</h1>
           <p class="text-sm text-gray-600">AI-Powered Paper Explainer</p>
         </header>
 

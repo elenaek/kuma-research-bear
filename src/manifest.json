@@ -6,8 +6,7 @@
   "permissions": [
     "activeTab",
     "storage",
-    "sidePanel",
-    "aiLanguageModelOriginTrial"
+    "sidePanel"
   ],
   "host_permissions": [
     "https://arxiv.org/*",

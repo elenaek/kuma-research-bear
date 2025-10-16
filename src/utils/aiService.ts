@@ -1,35 +1,37 @@
-import { AICapabilities, AILanguageModel, AISessionOptions, ExplanationResult, SummaryResult } from '../types/index.ts';
+import { AICapabilities, AILanguageModelSession, AISessionOptions, ExplanationResult, SummaryResult, AIAvailability } from '../types/index.ts';
 
 /**
  * Chrome AI Service for interacting with Chrome's built-in AI APIs
+ * Uses the stable Prompt API (Chrome 138+)
  */
 class ChromeAIService {
-  private session: AILanguageModel | null = null;
+  private session: AILanguageModelSession | null = null;
   private capabilities: AICapabilities | null = null;
 
   /**
-   * Check if Chrome AI is available
+   * Check if Chrome Prompt API is available
    */
   async checkAvailability(): Promise<AICapabilities> {
     try {
-      // @ts-ignore - Chrome AI API is experimental
-      if (!window.ai || !window.ai.languageModel) {
+      // Check if LanguageModel global is available
+      if (typeof LanguageModel === 'undefined') {
         return {
           available: false,
-          canCreateSession: false,
+          availability: 'no',
+          model: 'Gemini Nano',
         };
       }
 
-      // @ts-ignore
-      const capabilities = await window.ai.languageModel.capabilities();
+      const availability: AIAvailability = await LanguageModel.availability();
+      const params = await LanguageModel.params();
 
       this.capabilities = {
-        available: capabilities.available === 'readily',
-        model: capabilities.defaultTemperature !== undefined ? 'Gemini Nano' : undefined,
-        canCreateSession: capabilities.available === 'readily',
-        defaultTemperature: capabilities.defaultTemperature,
-        defaultTopK: capabilities.defaultTopK,
-        maxTopK: capabilities.maxTopK,
+        available: availability === 'readily',
+        availability,
+        model: 'Gemini Nano',
+        defaultTemperature: params.temperature.default,
+        defaultTopK: params.topK.default,
+        maxTopK: params.topK.max,
       };
 
       return this.capabilities;
@@ -37,23 +39,22 @@ class ChromeAIService {
       console.error('Error checking AI availability:', error);
       return {
         available: false,
-        canCreateSession: false,
+        availability: 'no',
+        model: 'Gemini Nano',
       };
     }
   }
 
   /**
-   * Create an AI session
+   * Create an AI session using the Prompt API
    */
   async createSession(options?: AISessionOptions): Promise<boolean> {
     try {
-      // @ts-ignore
-      if (!window.ai || !window.ai.languageModel) {
-        throw new Error('AI language model not available');
+      if (typeof LanguageModel === 'undefined') {
+        throw new Error('Prompt API not available');
       }
 
-      // @ts-ignore
-      this.session = await window.ai.languageModel.create(options);
+      this.session = await LanguageModel.create(options);
 
       return true;
     } catch (error) {

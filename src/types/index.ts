@@ -37,10 +37,12 @@ export interface PaperSection {
 }
 
 // AI-related types
+export type AIAvailability = 'readily' | 'after-download' | 'no';
+
 export interface AICapabilities {
   available: boolean;
-  model?: string;
-  canCreateSession: boolean;
+  availability: AIAvailability;
+  model: string;
   defaultTemperature?: number;
   defaultTopK?: number;
   maxTopK?: number;
@@ -58,28 +60,32 @@ export interface SummaryResult {
   timestamp: number;
 }
 
-// Chrome AI API types (experimental)
-declare global {
-  interface Window {
-    ai?: {
-      languageModel?: {
-        capabilities: () => Promise<AICapabilities>;
-        create: (options?: AISessionOptions) => Promise<AILanguageModel>;
-      };
-    };
-  }
-}
-
+// Chrome Prompt API types (Stable - Chrome 138+)
 export interface AISessionOptions {
   temperature?: number;
   topK?: number;
   systemPrompt?: string;
+  signal?: AbortSignal;
 }
 
-export interface AILanguageModel {
+export interface AILanguageModelSession {
   prompt: (input: string) => Promise<string>;
   promptStreaming: (input: string) => ReadableStream;
   destroy: () => void;
+}
+
+export interface AILanguageModelParams {
+  temperature: { default: number; min: number; max: number };
+  topK: { default: number; min: number; max: number };
+}
+
+// Global type declarations for Chrome Prompt API
+declare global {
+  class LanguageModel {
+    static availability(): Promise<AIAvailability>;
+    static params(): Promise<AILanguageModelParams>;
+    static create(options?: AISessionOptions): Promise<AILanguageModelSession>;
+  }
 }
 
 // Storage types
