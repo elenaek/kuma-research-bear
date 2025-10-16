@@ -1,0 +1,54 @@
+/* Content script styles */
+
+.research-bear-highlight {
+  background-color: #fef3c7;
+  border-bottom: 2px solid #f59e0b;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.research-bear-highlight:hover {
+  background-color: #fde68a;
+}
+
+.research-bear-tooltip {
+  position: absolute;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-width: 300px;
+  z-index: 10000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.research-bear-tooltip::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 20px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 8px solid white;
+}
+
+.research-bear-loading {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e5e7eb;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

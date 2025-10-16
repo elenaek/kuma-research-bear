@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "Research Bear - Paper Explainer",
+  "version": "1.0.0",
+  "description": "Explains research papers using Chrome's built-in AI",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "sidePanel",
+    "aiLanguageModelOriginTrial"
+  ],
+  "host_permissions": [
+    "https://arxiv.org/*",
+    "https://www.ncbi.nlm.nih.gov/pmc/*",
+    "https://*.biorxiv.org/*",
+    "https://scholar.google.com/*",
+    "https://papers.ssrn.com/*",
+    "https://pubmed.ncbi.nlm.nih.gov/*"
+  ],
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/background.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://arxiv.org/*",
+        "https://www.ncbi.nlm.nih.gov/pmc/*",
+        "https://*.biorxiv.org/*",
+        "https://scholar.google.com/*",
+        "https://papers.ssrn.com/*",
+        "https://pubmed.ncbi.nlm.nih.gov/*"
+      ],
+      "js": ["src/content/content.ts"],
+      "css": ["src/content/content.css"]
+    }
+  ],
+  "side_panel": {
+    "default_path": "src/sidepanel/sidepanel.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "trial_tokens": []
+}

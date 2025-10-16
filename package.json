@@ -1,0 +1,27 @@
+{
+  "name": "kuma-research-bear",
+  "version": "1.0.0",
+  "description": "Chrome extension that explains research papers using built-in AI",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "chrome-extension",
+    "research-papers",
+    "ai",
+    "explanation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "@types/node": "^20.12.7",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.10",
+    "vite-plugin-web-extension": "^4.1.6"
+  }
+}
