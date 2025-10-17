@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
 import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader } from 'lucide-preact';
 import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, MessageType } from '../types/index.ts';
+import { MarkdownRenderer } from '../components/MarkdownRenderer.tsx';
 
 // Helper function to get paper from background worker's IndexedDB
 async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
@@ -625,9 +626,7 @@ Source: ${paper.url}
                           </div>
                           <div class="mb-3">
                             <p class="text-sm font-semibold text-gray-900 mb-1">Answer:</p>
-                            <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                              {qa.answer}
-                            </div>
+                            <MarkdownRenderer content={qa.answer} className="text-sm" />
                           </div>
                           {qa.sources.length > 0 && (
                             <div class="pt-3 border-t border-gray-200">
@@ -950,7 +949,7 @@ Source: ${paper.url}
               <>
                 <div class="card">
                   <h3 class="text-base font-semibold text-gray-900 mb-3">Quick Summary</h3>
-                  <p class="text-gray-700 leading-relaxed">{data?.summary.summary}</p>
+                  <MarkdownRenderer content={data?.summary.summary || ''} />
                 </div>
 
                 <div class="card">
@@ -959,7 +958,7 @@ Source: ${paper.url}
                     {data?.summary.keyPoints.map((point, index) => (
                       <li key={index} class="flex gap-2 text-gray-700">
                         <span class="text-bear-600 font-bold">•</span>
-                        <span>{point}</span>
+                        <MarkdownRenderer content={point} />
                       </li>
                     ))}
                   </ul>
@@ -970,9 +969,7 @@ Source: ${paper.url}
             {activeTab === 'explanation' && (
               <div class="card">
                 <h3 class="text-base font-semibold text-gray-900 mb-3">Simplified Explanation</h3>
-                <div class="text-gray-700 leading-relaxed whitespace-pre-wrap">
-                  {data?.explanation.explanation}
-                </div>
+                <MarkdownRenderer content={data?.explanation.explanation || ''} />
               </div>
             )}
 
@@ -1274,9 +1271,7 @@ Source: ${paper.url}
                         {/* Answer */}
                         <div class="mb-3">
                           <p class="text-sm font-semibold text-gray-900 mb-1">Answer:</p>
-                          <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                            {qa.answer}
-                          </div>
+                          <MarkdownRenderer content={qa.answer} className="text-sm" />
                         </div>
 
                         {/* Sources */}

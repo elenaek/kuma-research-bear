@@ -108,9 +108,18 @@ class ChromeAIService {
   async explainAbstract(abstract: string): Promise<ExplanationResult> {
     const systemPrompt = `You are a helpful research assistant that explains complex academic papers in simple terms.
 Your goal is to make research papers accessible to people without specialized knowledge.
-Break down technical jargon, use analogies when helpful, and focus on the key insights.`;
+Break down technical jargon, use analogies when helpful, and focus on the key insights.
+Use markdown formatting to enhance readability (bold for key terms, bullet points for lists, etc.).`;
 
-    const input = `Please explain this research paper abstract in simple terms that anyone can understand:\n\n${abstract}`;
+    const input = `Please explain this research paper abstract in simple terms that anyone can understand.
+Use markdown formatting for better readability:
+- Use **bold** for important concepts or key terms
+- Use bullet points or numbered lists where appropriate
+- Use *italic* for emphasis
+- Keep paragraphs concise
+
+Abstract:
+${abstract}`;
 
     const explanation = await this.prompt(input, systemPrompt);
 
@@ -126,16 +135,18 @@ Break down technical jargon, use analogies when helpful, and focus on the key in
    */
   async generateSummary(title: string, abstract: string): Promise<SummaryResult> {
     const systemPrompt = `You are a research assistant that creates concise summaries of academic papers.
-Extract the most important information and present it clearly.`;
+Extract the most important information and present it clearly.
+Use markdown formatting to enhance readability.`;
 
-    const input = `Create a brief summary and list 3-5 key points from this paper:
+    const input = `Create a brief summary and list 3-5 key points from this paper.
+Use markdown formatting for better readability (bold for key terms, etc.):
 
 Title: ${title}
 
 Abstract: ${abstract}
 
 Format your response as:
-SUMMARY: [2-3 sentence summary]
+SUMMARY: [2-3 sentence summary with **bold** for key concepts]
 KEY POINTS:
 - [point 1]
 - [point 2]
@@ -396,7 +407,8 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
 
     const input = `Analyze the methodology of this research paper and return ONLY valid JSON:
 {
-  "studyDesign": "brief description of study design (experimental, observational, etc.)",
+  "studyDesign": "detailed description of study design (experimental, observational, etc.) - Max 25 words",
+  "studyType": "type of study (e.g. randomized controlled trial, cohort study, case-control study, etc.)",
   "dataCollection": "how data was collected",
   "sampleSize": "sample size and population details",
   "statisticalMethods": "statistical analyses used",
@@ -593,7 +605,8 @@ Return ONLY the JSON, no other text.`;
       .join('\n\n---\n\n');
 
     const systemPrompt = `You are Kuma, a helpful research assistant. Answer questions about research papers based ONLY on the provided context.
-Be accurate, cite which sections you used, and if the context doesn't contain enough information to answer, say so clearly.`;
+Be accurate, cite which sections you used, and if the context doesn't contain enough information to answer, say so clearly.
+Use markdown formatting to make your answers more readable and well-structured.`;
 
     const input = `Based on the following excerpts from a research paper, answer this question:
 
@@ -602,7 +615,12 @@ Question: ${question}
 Paper Context:
 ${context}
 
-Provide a clear, accurate answer based on the information above. Mention which sections you used.`;
+Provide a clear, accurate answer based on the information above.
+Use markdown formatting for better readability:
+- Use **bold** for key findings or important concepts
+- Use bullet points or numbered lists for multiple items
+- Use *italic* for emphasis
+- Mention which sections you used in your answer`;
 
     try {
       this.destroySession();

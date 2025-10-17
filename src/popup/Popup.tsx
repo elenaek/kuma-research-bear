@@ -188,7 +188,16 @@ export function Popup() {
     <div class="w-80 bg-gradient-to-br from-gray-50 to-gray-100">
       <div class="p-6">
         {/* Header */}
-        <header class="mb-6">
+        <header class="mb-6 text-center">
+          {/* Logo */}
+          <div class="flex justify-center mb-4">
+            <img
+              src="/icons/icon128.png"
+              alt="Kuma the Research Bear"
+              class="w-16 h-16"
+            />
+          </div>
+
           <h1 class="text-2xl font-bold text-gray-800">Kuma the Research Bear</h1>
           <p class="text-sm text-gray-600">AI-Powered Paper Explainer</p>
         </header>
