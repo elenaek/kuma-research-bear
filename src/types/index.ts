@@ -14,6 +14,7 @@ export enum MessageType {
   DELETE_PAPER = 'DELETE_PAPER',
   CHECK_PAPER_STORED = 'CHECK_PAPER_STORED',
   ANALYZE_PAPER = 'ANALYZE_PAPER',
+  ASK_QUESTION = 'ASK_QUESTION',
 }
 
 export interface Message {
@@ -186,4 +187,17 @@ export interface PaperAnalysisResult {
   implications: ImplicationAnalysis;
   limitations: LimitationAnalysis;
   timestamp: number;
+}
+
+// Q&A types
+export interface QuestionAnswer {
+  question: string;
+  answer: string;
+  sources: string[]; // Section names or chunk references
+  timestamp: number;
+}
+
+export interface QAHistoryItem extends QuestionAnswer {
+  paperId: string;
+  paperTitle: string;
 }

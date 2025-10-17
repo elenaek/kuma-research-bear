@@ -1,4 +1,4 @@
-import { AICapabilities, AILanguageModelSession, AISessionOptions, ExplanationResult, SummaryResult, AIAvailability, PaperAnalysisResult, MethodologyAnalysis, ConfounderAnalysis, ImplicationAnalysis, LimitationAnalysis } from '../types/index.ts';
+import { AICapabilities, AILanguageModelSession, AISessionOptions, ExplanationResult, SummaryResult, AIAvailability, PaperAnalysisResult, MethodologyAnalysis, ConfounderAnalysis, ImplicationAnalysis, LimitationAnalysis, QuestionAnswer } from '../types/index.ts';
 
 /**
  * Utility: Sleep for a specified duration
@@ -575,6 +575,69 @@ Return ONLY the JSON, no other text.`;
       limitations,
       timestamp: Date.now(),
     };
+  }
+
+  /**
+   * Answer a question about a research paper using RAG
+   * Uses relevant content chunks to provide context-aware answers
+   */
+  async answerQuestion(question: string, contextChunks: Array<{ content: string; section?: string }>): Promise<QuestionAnswer> {
+    console.log('Answering question using RAG...');
+
+    // Combine chunks into context with section markers
+    const context = contextChunks
+      .map((chunk, idx) => {
+        const sectionLabel = chunk.section ? `[${chunk.section}]` : `[Section ${idx + 1}]`;
+        return `${sectionLabel}\n${chunk.content}`;
+      })
+      .join('\n\n---\n\n');
+
+    const systemPrompt = `You are Kuma, a helpful research assistant. Answer questions about research papers based ONLY on the provided context.
+Be accurate, cite which sections you used, and if the context doesn't contain enough information to answer, say so clearly.`;
+
+    const input = `Based on the following excerpts from a research paper, answer this question:
+
+Question: ${question}
+
+Paper Context:
+${context}
+
+Provide a clear, accurate answer based on the information above. Mention which sections you used.`;
+
+    try {
+      this.destroySession();
+      const answer = await this.prompt(input, systemPrompt);
+
+      // Extract section references from the answer (simple heuristic)
+      const sources: string[] = [];
+      contextChunks.forEach(chunk => {
+        if (chunk.section && answer.toLowerCase().includes(chunk.section.toLowerCase().slice(0, 15))) {
+          if (!sources.includes(chunk.section)) {
+            sources.push(chunk.section);
+          }
+        }
+      });
+
+      // If no sources detected, use all sections
+      if (sources.length === 0) {
+        sources.push(...contextChunks.map(c => c.section || 'Content').filter((v, i, a) => a.indexOf(v) === i));
+      }
+
+      return {
+        question,
+        answer,
+        sources,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      console.error('Question answering failed:', error);
+      return {
+        question,
+        answer: 'Sorry, I encountered an error while trying to answer this question. Please try again.',
+        sources: [],
+        timestamp: Date.now(),
+      };
+    }
   }
 
   /**

@@ -47,20 +47,48 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           currentPaper = await detectPaperWithAI();
 
           // Store in IndexedDB if detected
+          let stored = false;
+          let chunkCount = 0;
+          let alreadyStored = false;
+          let storageError: string | undefined;
+
           if (currentPaper) {
             try {
-              const alreadyStored = await isPaperStored(currentPaper.url);
+              alreadyStored = await isPaperStored(currentPaper.url);
               if (!alreadyStored) {
                 console.log('Storing paper in IndexedDB...');
-                await storePaper(currentPaper);
+                const storedPaper = await storePaper(currentPaper);
                 console.log('✓ Paper stored locally for offline access');
+                stored = true;
+                chunkCount = storedPaper.chunkCount;
+              } else {
+                console.log('Paper already stored in IndexedDB');
+                // Get chunk count for already stored paper
+                const existingPaper = await (await import('../utils/dbService.ts')).getPaperByUrl(currentPaper.url);
+                stored = true;
+                chunkCount = existingPaper?.chunkCount || 0;
               }
             } catch (dbError) {
-              console.warn('Failed to store paper in IndexedDB:', dbError);
+              // Capture detailed error message for debugging
+              console.error('Failed to store paper in IndexedDB:', dbError);
+              stored = false;
+
+              // Extract error message
+              if (dbError instanceof Error) {
+                storageError = dbError.message;
+              } else {
+                storageError = String(dbError);
+              }
             }
           }
 
-          sendResponse({ paper: currentPaper });
+          sendResponse({
+            paper: currentPaper,
+            stored,
+            chunkCount,
+            alreadyStored,
+            storageError
+          });
           break;
 
         case MessageType.EXPLAIN_PAPER:

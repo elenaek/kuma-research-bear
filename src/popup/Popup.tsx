@@ -102,10 +102,25 @@ export function Popup() {
         // Store current paper in storage
         await chrome.storage.local.set({ currentPaper: response.paper });
 
-        // Success message with source
+        // Show storage status based on response
         const source = response.paper.source.replace('-', ' ');
-        setDetectionStatus(`✅ Kuma found a research paper! (${source})`);
-        setTimeout(() => setDetectionStatus(null), 4000);
+
+        if (response.stored) {
+          if (response.alreadyStored) {
+            // Paper was already stored
+            setDetectionStatus(`✅ Paper found (already stored with ${response.chunkCount} chunks)`);
+          } else {
+            // Newly stored paper
+            setDetectionStatus(`✅ Paper found and stored! (${response.chunkCount} chunks ready for Q&A)`);
+          }
+        } else {
+          // Paper found but storage failed - show specific error
+          console.log(response);
+          const errorMsg = response.storageError || 'Unknown error';
+          setDetectionStatus(`⚠️ Storage failed: ${errorMsg}`);
+        }
+
+        setTimeout(() => setDetectionStatus(null), 5000);
       } else {
         setDetectionStatus('❌ No paper detected on this page');
         setTimeout(() => setDetectionStatus(null), 4000);

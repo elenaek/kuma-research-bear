@@ -1,6 +1,6 @@
-import { MessageType, ResearchPaper, ExplanationResult, PaperAnalysisResult } from '../types/index.ts';
+import { MessageType, ResearchPaper, ExplanationResult, PaperAnalysisResult, QuestionAnswer } from '../types/index.ts';
 import { aiService } from '../utils/aiService.ts';
-import { getPaperByUrl, getPaperChunks } from '../utils/dbService.ts';
+import { getPaperByUrl, getPaperChunks, getRelevantChunks } from '../utils/dbService.ts';
 
 // Handle extension installation
 chrome.runtime.onInstalled.addListener(() => {
@@ -114,6 +114,64 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
           sendResponse({
             success: false,
             error: `Analysis failed: ${String(analysisError)}`
+          });
+        }
+        break;
+
+      case MessageType.ASK_QUESTION:
+        try {
+          const { paperUrl, question } = message.payload;
+
+          if (!paperUrl || !question) {
+            sendResponse({
+              success: false,
+              error: 'Paper URL and question are required'
+            });
+            break;
+          }
+
+          console.log(`Answering question about paper: ${paperUrl}`);
+
+          // Retrieve paper from IndexedDB
+          const storedPaper = await getPaperByUrl(paperUrl);
+
+          if (!storedPaper) {
+            sendResponse({
+              success: false,
+              error: 'Paper not found in storage. Please store the paper first to ask questions.'
+            });
+            break;
+          }
+
+          // Get relevant chunks based on the question (top 5 chunks)
+          const relevantChunks = await getRelevantChunks(storedPaper.id, question, 5);
+
+          if (relevantChunks.length === 0) {
+            sendResponse({
+              success: false,
+              error: 'No relevant content found to answer this question.'
+            });
+            break;
+          }
+
+          console.log(`Found ${relevantChunks.length} relevant chunks for question`);
+
+          // Format chunks for AI
+          const contextChunks = relevantChunks.map(chunk => ({
+            content: chunk.content,
+            section: chunk.section,
+          }));
+
+          // Use AI to answer the question
+          const qaResult: QuestionAnswer = await aiService.answerQuestion(question, contextChunks);
+
+          console.log('✓ Question answered successfully');
+          sendResponse({ success: true, answer: qaResult });
+        } catch (qaError) {
+          console.error('Error answering question:', qaError);
+          sendResponse({
+            success: false,
+            error: `Failed to answer question: ${String(qaError)}`
           });
         }
         break;

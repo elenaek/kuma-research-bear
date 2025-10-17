@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'preact/hooks';
 import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader } from 'lucide-preact';
-import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult } from '../types/index.ts';
+import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, MessageType } from '../types/index.ts';
 import { getPaperByUrl } from '../utils/dbService.ts';
 
 type ViewState = 'loading' | 'empty' | 'content';
-type TabType = 'summary' | 'explanation' | 'original' | 'analysis';
+type TabType = 'summary' | 'explanation' | 'qa' | 'analysis' | 'original';
 
 interface ExplanationData {
   paper: ResearchPaper;
@@ -21,6 +21,11 @@ export function Sidepanel() {
   const [storedPaper, setStoredPaper] = useState<StoredPaper | null>(null);
   const [analysis, setAnalysis] = useState<PaperAnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Q&A state
+  const [question, setQuestion] = useState('');
+  const [isAsking, setIsAsking] = useState(false);
+  const [qaHistory, setQaHistory] = useState<QuestionAnswer[]>([]);
 
   useEffect(() => {
     loadExplanation();
@@ -96,6 +101,45 @@ export function Sidepanel() {
       console.error('Error triggering analysis:', error);
     } finally {
       setIsAnalyzing(false);
+    }
+  }
+
+  async function handleAskQuestion() {
+    if (!question.trim() || !data?.paper.url) {
+      return;
+    }
+
+    if (!storedPaper) {
+      alert('Paper must be stored before asking questions. Please wait for paper to be stored.');
+      return;
+    }
+
+    try {
+      setIsAsking(true);
+      console.log('Asking question:', question);
+
+      const response = await chrome.runtime.sendMessage({
+        type: MessageType.ASK_QUESTION,
+        payload: {
+          paperUrl: data.paper.url,
+          question: question.trim(),
+        },
+      });
+
+      if (response.success) {
+        console.log('✓ Question answered successfully');
+        // Add to history
+        setQaHistory([response.answer, ...qaHistory]);
+        setQuestion(''); // Clear input
+      } else {
+        console.error('Question answering failed:', response.error);
+        alert(`Failed to answer question: ${response.error}`);
+      }
+    } catch (error) {
+      console.error('Error asking question:', error);
+      alert('Failed to ask question. Please try again.');
+    } finally {
+      setIsAsking(false);
     }
   }
 
@@ -374,6 +418,17 @@ Source: ${paper.url}
               {isAnalyzing && <Loader size={14} class="animate-spin" />}
             </button>
             <button
+              onClick={() => setActiveTab('qa')}
+              class={`px-4 py-2 font-medium transition-colors border-b-2 ${
+                activeTab === 'qa'
+                  ? 'border-bear-600 text-bear-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-800'
+              } ${!storedPaper ? 'opacity-50' : ''}`}
+              title={!storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper'}
+            >
+              Q&A
+            </button>
+            <button
               onClick={() => setActiveTab('original')}
               class={`px-4 py-2 font-medium transition-colors border-b-2 ${
                 activeTab === 'original'
@@ -623,6 +678,100 @@ Source: ${paper.url}
                 </div>
               </>
             )}
+              </>
+            )}
+
+            {activeTab === 'qa' && (
+              <>
+                {/* Q&A Input */}
+                <div class="card">
+                  <h3 class="text-base font-semibold text-gray-900 mb-3">Ask a Question</h3>
+
+                  {!storedPaper ? (
+                    <div class="p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                      Paper must be stored before asking questions. Please wait for the paper to be stored.
+                    </div>
+                  ) : (
+                    <>
+                      <div class="flex gap-2 mb-3">
+                        <input
+                          type="text"
+                          value={question}
+                          onInput={(e) => setQuestion((e.target as HTMLInputElement).value)}
+                          onKeyPress={(e) => e.key === 'Enter' && !isAsking && handleAskQuestion()}
+                          placeholder="Ask anything about this paper..."
+                          disabled={isAsking}
+                          class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bear-500 focus:border-transparent disabled:bg-gray-100"
+                        />
+                        <button
+                          onClick={handleAskQuestion}
+                          disabled={!question.trim() || isAsking}
+                          class="btn btn-primary px-4 hover:cursor-pointer"
+                        >
+                          {isAsking ? (
+                            <Loader size={16} class="animate-spin" />
+                          ) : (
+                            'Ask'
+                          )}
+                        </button>
+                      </div>
+
+                      <p class="text-xs text-gray-500">
+                        Kuma will search through {storedPaper.chunkCount} content chunks to find relevant information.
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                {/* Q&A History */}
+                {qaHistory.length > 0 ? (
+                  <div class="space-y-4">
+                    {qaHistory.map((qa, idx) => (
+                      <div key={idx} class="card">
+                        {/* Question */}
+                        <div class="mb-3 pb-3 border-b border-gray-200">
+                          <p class="text-sm font-semibold text-gray-900 mb-1">Question:</p>
+                          <p class="text-sm text-gray-700">{qa.question}</p>
+                        </div>
+
+                        {/* Answer */}
+                        <div class="mb-3">
+                          <p class="text-sm font-semibold text-gray-900 mb-1">Answer:</p>
+                          <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                            {qa.answer}
+                          </div>
+                        </div>
+
+                        {/* Sources */}
+                        {qa.sources.length > 0 && (
+                          <div class="pt-3 border-t border-gray-200">
+                            <p class="text-xs font-medium text-gray-600 mb-1">Sources:</p>
+                            <div class="flex flex-wrap gap-1">
+                              {qa.sources.map((source, sIdx) => (
+                                <span
+                                  key={sIdx}
+                                  class="px-2 py-0.5 text-xs rounded bg-bear-100 text-bear-700"
+                                >
+                                  {source}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Timestamp */}
+                        <div class="mt-2 text-xs text-gray-500">
+                          {new Date(qa.timestamp).toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : storedPaper ? (
+                  <div class="card text-center py-8">
+                    <p class="text-sm text-gray-600">No questions asked yet.</p>
+                    <p class="text-xs text-gray-500 mt-1">Ask a question above to get started!</p>
+                  </div>
+                ) : null}
               </>
             )}
 
