@@ -1,4 +1,6 @@
 import { ResearchPaper, PaperSection } from '../types/index.ts';
+import { extractPageText, isPDFPage } from './contentExtractor.ts';
+import { aiService } from './aiService.ts';
 
 // Detector for arXiv papers
 export function detectArXivPaper(): ResearchPaper | null {
@@ -28,6 +30,8 @@ export function detectArXivPaper(): ResearchPaper | null {
       metadata: {
         arxivId,
         pdfUrl: `https://arxiv.org/pdf/${arxivId}.pdf`,
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
       },
     };
   } catch (error) {
@@ -57,6 +61,10 @@ export function detectPubMedPaper(): ResearchPaper | null {
     const doiElement = document.querySelector('[data-doi]');
     const doi = doiElement?.getAttribute('data-doi') || '';
 
+    // Extract PubMed ID from URL
+    const pmidMatch = url.match(/pubmed\.ncbi\.nlm\.nih\.gov\/(\d+)/);
+    const pmid = pmidMatch ? pmidMatch[1] : '';
+
     return {
       title,
       authors,
@@ -65,6 +73,9 @@ export function detectPubMedPaper(): ResearchPaper | null {
       source: 'pubmed',
       metadata: {
         doi,
+        pmid,
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
       },
     };
   } catch (error) {
@@ -101,6 +112,8 @@ export function detectBioRxivPaper(): ResearchPaper | null {
       source: 'biorxiv',
       metadata: {
         doi,
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
       },
     };
   } catch (error) {
@@ -129,8 +142,11 @@ export function detectSchemaOrgPaper(): ResearchPaper | null {
           url: window.location.href,
           source: 'other',
           metadata: {
-            doi: data.doi || '',
-            publishDate: data.datePublished || '',
+            doi: data.doi || undefined,
+            publishDate: data.datePublished || undefined,
+            journal: data.publisher?.name || undefined,
+            extractionMethod: 'schema.org',
+            extractionTimestamp: Date.now(),
           },
         };
       }
@@ -143,8 +159,154 @@ export function detectSchemaOrgPaper(): ResearchPaper | null {
   }
 }
 
-// Main detector function that tries all detectors
-export function detectPaper(): ResearchPaper | null {
+/**
+ * Validate that a detected paper has minimum required information
+ */
+function isValidPaper(paper: ResearchPaper | null): boolean {
+  if (!paper) return false;
+
+  return (
+    paper.title.length > 10 &&
+    paper.authors.length > 0 &&
+    paper.abstract.length > 50
+  );
+}
+
+/**
+ * Main detector function - uses AI-powered extraction
+ * Falls back to site-specific detectors if AI fails
+ */
+export async function detectPaper(): Promise<ResearchPaper | null> {
+  console.log('Starting paper detection...');
+
+  // Strategy 1: Try schema.org structured data (fast and reliable)
+  const schemaPaper = detectSchemaOrgPaper();
+  if (isValidPaper(schemaPaper)) {
+    console.log('Paper detected via schema.org:', schemaPaper!.title);
+    return schemaPaper;
+  }
+
+  // Strategy 2: Try site-specific detectors (fast, but fragile)
+  const siteDetectors = [
+    detectArXivPaper,
+    detectPubMedPaper,
+    detectBioRxivPaper,
+  ];
+
+  for (const detector of siteDetectors) {
+    const paper = detector();
+    if (isValidPaper(paper)) {
+      console.log('Paper detected via site-specific detector:', paper!.title);
+      return paper;
+    }
+  }
+
+  // Strategy 3: AI-powered extraction (works everywhere, but slower)
+  try {
+    console.log('Attempting AI-powered extraction...');
+
+    // Check if we're on a PDF page
+    if (isPDFPage()) {
+      console.log('PDF detected, but PDF extraction not yet implemented');
+      // TODO: Implement PDF extraction in Phase 6
+      return null;
+    }
+
+    // Extract page text
+    const extracted = extractPageText();
+
+    if (extracted.text.length < 100) {
+      console.log('Not enough content for AI extraction');
+      return null;
+    }
+
+    // Use AI to extract metadata
+    const aiPaper = await aiService.extractPaperMetadata(extracted.text);
+
+    if (isValidPaper(aiPaper)) {
+      console.log('Paper detected via AI extraction:', aiPaper!.title);
+      return aiPaper;
+    }
+
+    console.log('AI extraction failed validation');
+    return null;
+  } catch (error) {
+    console.error('Error in AI extraction:', error);
+    return null;
+  }
+}
+
+/**
+ * AI-first paper detection (for manual button clicks)
+ * Prioritizes AI extraction, then falls back to other methods
+ * Best used when triggered by user gesture (has access to AI)
+ */
+export async function detectPaperWithAI(): Promise<ResearchPaper | null> {
+  console.log('Starting AI-first paper detection...');
+
+  // Strategy 1: Try AI extraction first (priority for manual detection)
+  try {
+    // Check if we're on a PDF page
+    if (isPDFPage()) {
+      console.log('PDF detected, but PDF extraction not yet implemented');
+      // TODO: Implement PDF extraction in Phase 6
+      return null;
+    }
+
+    // Extract page text
+    const extracted = extractPageText();
+
+    if (extracted.text.length >= 100) {
+      console.log('Attempting AI extraction (priority)...');
+
+      // Use AI to extract metadata
+      const aiPaper = await aiService.extractPaperMetadata(extracted.text);
+
+      if (isValidPaper(aiPaper)) {
+        console.log('✓ Paper detected via AI:', aiPaper!.title);
+        return aiPaper;
+      }
+
+      console.log('AI extraction did not return valid paper, trying fallbacks...');
+    } else {
+      console.log('Not enough content for AI extraction, trying fallbacks...');
+    }
+  } catch (error) {
+    console.error('Error during AI extraction:', error);
+    console.log('Falling back to traditional detection methods...');
+  }
+
+  // Strategy 2: Fall back to schema.org structured data
+  const schemaPaper = detectSchemaOrgPaper();
+  if (isValidPaper(schemaPaper)) {
+    console.log('Paper detected via schema.org:', schemaPaper!.title);
+    return schemaPaper;
+  }
+
+  // Strategy 3: Fall back to site-specific detectors
+  const siteDetectors = [
+    detectArXivPaper,
+    detectPubMedPaper,
+    detectBioRxivPaper,
+  ];
+
+  for (const detector of siteDetectors) {
+    const paper = detector();
+    if (isValidPaper(paper)) {
+      console.log('Paper detected via site-specific detector:', paper!.title);
+      return paper;
+    }
+  }
+
+  console.log('❌ No research paper detected on this page');
+  return null;
+}
+
+/**
+ * Synchronous version for backward compatibility
+ * Only tries non-AI detectors
+ */
+export function detectPaperSync(): ResearchPaper | null {
   const detectors = [
     detectArXivPaper,
     detectPubMedPaper,
@@ -155,7 +317,7 @@ export function detectPaper(): ResearchPaper | null {
   for (const detector of detectors) {
     const paper = detector();
     if (paper) {
-      console.log('Paper detected:', paper);
+      console.log('Paper detected (sync):', paper.title);
       return paper;
     }
   }

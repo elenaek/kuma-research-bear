@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'preact/hooks';
-import { Search, Sparkles, PanelRight, Settings } from 'lucide-preact';
-import { MessageType, ResearchPaper } from '../types/index.ts';
+import { Search, Sparkles, PanelRight, Settings, Download, Loader } from 'lucide-preact';
+import { MessageType, ResearchPaper, AIAvailability } from '../types/index.ts';
 
 export function Popup() {
-  const [aiStatus, setAiStatus] = useState<'checking' | 'ready' | 'error'>('checking');
+  const [aiStatus, setAiStatus] = useState<'checking' | 'ready' | 'needsInit' | 'downloading' | 'error'>('checking');
+  const [aiAvailability, setAiAvailability] = useState<AIAvailability>('no');
   const [statusMessage, setStatusMessage] = useState('Checking AI availability...');
   const [paper, setPaper] = useState<ResearchPaper | null>(null);
   const [isExplaining, setIsExplaining] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
 
   // Check AI availability on mount
   useEffect(() => {
@@ -20,17 +22,55 @@ export function Popup() {
         type: MessageType.AI_STATUS,
       });
 
-      if (response.available) {
+      const availability = response.capabilities?.availability || 'no';
+      setAiAvailability(availability);
+
+      if (availability === 'available') {
         setAiStatus('ready');
         setStatusMessage('AI Ready');
+      } else if (availability === 'downloadable') {
+        setAiStatus('needsInit');
+        setStatusMessage('AI needs initialization');
+      } else if (availability === 'downloading') {
+        setAiStatus('downloading');
+        setStatusMessage('Downloading AI model...');
+      } else if (availability === 'unavailable') {
+        setAiStatus('error');
+        setStatusMessage('AI model crashed - needs reset');
       } else {
         setAiStatus('error');
-        setStatusMessage('AI not available. Enable Chrome AI flags.');
+        setStatusMessage('AI not available on this device');
       }
     } catch (error) {
       setAiStatus('error');
       setStatusMessage('Error checking AI status');
       console.error('AI status check failed:', error);
+    }
+  }
+
+  async function handleInitializeAI() {
+    try {
+      setIsInitializing(true);
+      setStatusMessage('Initializing AI...');
+
+      const response = await chrome.runtime.sendMessage({
+        type: MessageType.INITIALIZE_AI,
+      });
+
+      if (response.success) {
+        setAiStatus('ready');
+        setStatusMessage('AI Ready');
+        alert('AI initialized successfully! You can now use all features.');
+      } else {
+        alert(`Failed to initialize AI: ${response.message}`);
+        setStatusMessage(response.message || 'Initialization failed');
+      }
+    } catch (error) {
+      console.error('AI initialization failed:', error);
+      alert('Failed to initialize AI. Please try again.');
+      setStatusMessage('Initialization failed');
+    } finally {
+      setIsInitializing(false);
     }
   }
 
@@ -131,6 +171,50 @@ export function Popup() {
             <span class={`status-dot ${aiStatus === 'ready' ? 'ready' : aiStatus === 'error' ? 'error' : ''}`} />
             <span class="text-sm text-gray-700">{statusMessage}</span>
           </div>
+
+          {/* Initialize AI Button */}
+          {aiStatus === 'needsInit' && (
+            <button
+              onClick={handleInitializeAI}
+              disabled={isInitializing}
+              class="btn btn-primary w-full mt-3"
+            >
+              {isInitializing ? (
+                <>
+                  <Loader size={16} class="animate-spin" />
+                  Initializing...
+                </>
+              ) : (
+                <>
+                  <Download size={16} />
+                  Initialize AI
+                </>
+              )}
+            </button>
+          )}
+
+          {/* Downloading Status */}
+          {aiStatus === 'downloading' && (
+            <div class="mt-3 flex items-center gap-2 text-sm text-gray-600">
+              <Loader size={16} class="animate-spin" />
+              <span>Please wait while AI model downloads...</span>
+            </div>
+          )}
+
+          {/* Error/Crashed Status */}
+          {aiStatus === 'error' && aiAvailability === 'unavailable' && (
+            <div class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs">
+              <p class="font-semibold text-yellow-800 mb-2">AI Model Crashed</p>
+              <p class="text-yellow-700 mb-2">Chrome's AI has crashed. To fix:</p>
+              <ol class="list-decimal ml-4 text-yellow-700 space-y-1">
+                <li>Open: <code class="bg-yellow-100 px-1">chrome://flags/#optimization-guide-on-device-model</code></li>
+                <li>Set to "Enabled BypassPerfRequirement"</li>
+                <li>Restart Chrome completely</li>
+                <li>Reload this extension</li>
+              </ol>
+              <p class="mt-2 text-yellow-600">Note: Extension still works using basic detection (arXiv, PubMed, etc.)</p>
+            </div>
+          )}
         </div>
 
         {/* Paper Info */}
@@ -148,6 +232,7 @@ export function Popup() {
             onClick={handleDetectPaper}
             disabled={aiStatus !== 'ready'}
             class="btn btn-primary w-full"
+            title={aiStatus !== 'ready' ? 'Initialize AI first' : ''}
           >
             <Search size={16} />
             Detect Paper
@@ -155,8 +240,9 @@ export function Popup() {
 
           <button
             onClick={handleExplainPaper}
-            disabled={!paper || isExplaining}
+            disabled={!paper || isExplaining || aiStatus !== 'ready'}
             class="btn btn-secondary w-full"
+            title={aiStatus !== 'ready' ? 'Initialize AI first' : ''}
           >
             <Sparkles size={16} />
             {isExplaining ? 'Explaining...' : 'Explain Paper'}

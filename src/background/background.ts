@@ -29,6 +29,11 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         sendResponse({ available: capabilities.available, capabilities });
         break;
 
+      case MessageType.INITIALIZE_AI:
+        const initResult = await aiService.initializeAI();
+        sendResponse(initResult);
+        break;
+
       case MessageType.EXPLAIN_PAPER:
         const paper: ResearchPaper = message.payload.paper;
         const explanation = await aiService.explainAbstract(paper.abstract);

@@ -7,6 +7,7 @@ export enum MessageType {
   GENERATE_SUMMARY = 'GENERATE_SUMMARY',
   OPEN_SIDEPANEL = 'OPEN_SIDEPANEL',
   AI_STATUS = 'AI_STATUS',
+  INITIALIZE_AI = 'INITIALIZE_AI',
 }
 
 export interface Message {
@@ -20,14 +21,36 @@ export interface ResearchPaper {
   authors: string[];
   abstract: string;
   url: string;
-  source: 'arxiv' | 'pubmed' | 'biorxiv' | 'scholar' | 'ssrn' | 'other';
+  source: 'arxiv' | 'pubmed' | 'biorxiv' | 'scholar' | 'ssrn' | 'ai-extracted' | 'other';
   sections?: PaperSection[];
-  metadata?: {
-    publishDate?: string;
-    doi?: string;
-    arxivId?: string;
-    pdfUrl?: string;
-  };
+  metadata?: PaperMetadata;
+}
+
+// Enhanced metadata for papers
+export interface PaperMetadata {
+  // Publication info
+  publishDate?: string;
+  journal?: string;
+  venue?: string; // Conference or journal name
+
+  // Identifiers
+  doi?: string;
+  arxivId?: string;
+  pmid?: string; // PubMed ID
+  pmcid?: string; // PubMed Central ID
+
+  // Links
+  pdfUrl?: string;
+  htmlUrl?: string;
+
+  // Additional metadata
+  keywords?: string[];
+  citations?: number;
+
+  // AI extraction metadata
+  extractionMethod?: 'manual' | 'schema.org' | 'site-specific' | 'ai';
+  extractionTimestamp?: number;
+  confidence?: number; // 0-1 confidence score for AI extractions
 }
 
 export interface PaperSection {
@@ -37,7 +60,8 @@ export interface PaperSection {
 }
 
 // AI-related types
-export type AIAvailability = 'readily' | 'after-download' | 'no';
+// Official Chrome Prompt API availability states: https://developer.chrome.com/docs/ai/get-started#model_download
+export type AIAvailability = 'available' | 'downloadable' | 'downloading' | 'unavailable' | 'no';
 
 export interface AICapabilities {
   available: boolean;

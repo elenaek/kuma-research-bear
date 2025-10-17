@@ -1,52 +1,67 @@
 import { MessageType, ResearchPaper } from '../types/index.ts';
-import { detectPaper } from '../utils/paperDetectors.ts';
+import { detectPaper, detectPaperWithAI } from '../utils/paperDetectors.ts';
 
 let currentPaper: ResearchPaper | null = null;
 
 // Auto-detect paper on page load
-function init() {
-  currentPaper = detectPaper();
+async function init() {
+  try {
+    currentPaper = await detectPaper();
 
-  if (currentPaper) {
-    console.log('Research paper detected:', currentPaper.title);
-    // Store in chrome storage for access by other components
-    chrome.storage.local.set({ currentPaper });
+    if (currentPaper) {
+      console.log('Research paper detected:', currentPaper.title);
+      // Store in chrome storage for access by other components
+      await chrome.storage.local.set({ currentPaper });
+    } else {
+      console.log('No research paper detected on this page');
+    }
+  } catch (error) {
+    console.error('Error during paper detection:', error);
   }
 }
 
 // Listen for messages from popup/background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  switch (message.type) {
-    case MessageType.DETECT_PAPER:
-      currentPaper = detectPaper();
-      sendResponse({ paper: currentPaper });
-      break;
+  // Handle async operations properly
+  (async () => {
+    try {
+      switch (message.type) {
+        case MessageType.DETECT_PAPER:
+          // Manual detection uses AI-first approach
+          currentPaper = await detectPaperWithAI();
+          sendResponse({ paper: currentPaper });
+          break;
 
-    case MessageType.EXPLAIN_PAPER:
-      if (currentPaper) {
-        // Send paper to background for explanation
-        chrome.runtime.sendMessage({
-          type: MessageType.EXPLAIN_PAPER,
-          payload: { paper: currentPaper },
-        });
-        sendResponse({ success: true });
-      } else {
-        sendResponse({ success: false, error: 'No paper detected' });
+        case MessageType.EXPLAIN_PAPER:
+          if (currentPaper) {
+            // Send paper to background for explanation
+            chrome.runtime.sendMessage({
+              type: MessageType.EXPLAIN_PAPER,
+              payload: { paper: currentPaper },
+            });
+            sendResponse({ success: true });
+          } else {
+            sendResponse({ success: false, error: 'No paper detected' });
+          }
+          break;
+
+        case MessageType.EXPLAIN_SECTION:
+          // Handle section explanation
+          chrome.runtime.sendMessage({
+            type: MessageType.EXPLAIN_SECTION,
+            payload: message.payload,
+          });
+          sendResponse({ success: true });
+          break;
+
+        default:
+          sendResponse({ success: false, error: 'Unknown message type' });
       }
-      break;
-
-    case MessageType.EXPLAIN_SECTION:
-      // Handle section explanation
-      chrome.runtime.sendMessage({
-        type: MessageType.EXPLAIN_SECTION,
-        payload: message.payload,
-      });
-      sendResponse({ success: true });
-      break;
-
-    default:
-      sendResponse({ success: false, error: 'Unknown message type' });
-  }
+    } catch (error) {
+      console.error('Error handling message:', error);
+      sendResponse({ success: false, error: String(error) });
+    }
+  })();
 
   return true; // Keep message channel open for async response
 });
@@ -61,10 +76,18 @@ const observer = new MutationObserver((mutations) => {
   );
 
   if (significantChange && !currentPaper) {
-    currentPaper = detectPaper();
-    if (currentPaper) {
-      chrome.storage.local.set({ currentPaper });
-    }
+    // Use async detection
+    (async () => {
+      try {
+        currentPaper = await detectPaper();
+        if (currentPaper) {
+          await chrome.storage.local.set({ currentPaper });
+          console.log('Paper detected after page mutation:', currentPaper.title);
+        }
+      } catch (error) {
+        console.error('Error detecting paper after mutation:', error);
+      }
+    })();
   }
 });
 
