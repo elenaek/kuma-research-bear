@@ -68,13 +68,29 @@ function generatePaperId(url: string): string {
  * Store a research paper with its full content
  */
 export async function storePaper(paper: ResearchPaper, fullText?: string): Promise<StoredPaper> {
+  console.log('[IndexedDB] storePaper called:', {
+    title: paper.title,
+    url: paper.url,
+    source: paper.source
+  });
+
   const db = await initDB();
 
   try {
     const paperId = generatePaperId(paper.url);
+    console.log('[IndexedDB] Generated paper ID:', paperId, 'for URL:', paper.url);
 
-    // Extract full text if not provided
-    const extractedText = fullText || extractPageText().text;
+    // Extract full text if not provided (only works in content script context)
+    let extractedText: string;
+    if (fullText) {
+      extractedText = fullText;
+    } else if (typeof document !== 'undefined') {
+      // We're in a content script context, can extract text
+      extractedText = extractPageText().text;
+    } else {
+      // We're in a background script context without fullText provided
+      throw new Error('fullText must be provided when storing paper from background script context');
+    }
 
     // Create chunks with metadata using contentExtractor
     const extractorChunks = chunkContent(extractedText, 1000, 200);
@@ -136,6 +152,8 @@ export async function storePaper(paper: ResearchPaper, fullText?: string): Promi
  * Get a paper by URL
  */
 export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
+  console.log('[IndexedDB] getPaperByUrl called with URL:', url);
+
   const db = await initDB();
 
   try {
@@ -145,8 +163,21 @@ export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
 
     const paper = await new Promise<StoredPaper | null>((resolve) => {
       const request = index.get(url);
-      request.onsuccess = () => resolve(request.result || null);
-      request.onerror = () => resolve(null);
+      request.onsuccess = () => {
+        const result = request.result || null;
+        console.log('[IndexedDB] Query result:', result ? {
+          found: true,
+          id: result.id,
+          title: result.title,
+          url: result.url,
+          chunkCount: result.chunkCount
+        } : { found: false, queriedUrl: url });
+        resolve(result);
+      };
+      request.onerror = () => {
+        console.error('[IndexedDB] Query error:', request.error);
+        resolve(null);
+      };
     });
 
     // Update last accessed timestamp
@@ -155,13 +186,18 @@ export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
       const updateTransaction = db.transaction([PAPERS_STORE], 'readwrite');
       const updateStore = updateTransaction.objectStore(PAPERS_STORE);
       updateStore.put(paper);
+      console.log('[IndexedDB] Updated lastAccessedAt for paper:', paper.id);
     }
 
     db.close();
     return paper;
   } catch (error) {
     db.close();
-    console.error('Error getting paper by URL:', error);
+    console.error('[IndexedDB] Error getting paper by URL:', {
+      error,
+      url,
+      stack: error instanceof Error ? error.stack : undefined
+    });
     return null;
   }
 }

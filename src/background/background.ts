@@ -185,6 +185,70 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         }
         break;
 
+      // IndexedDB operations (centralized in background worker)
+      case MessageType.STORE_PAPER_IN_DB:
+        try {
+          console.log('[Background] Storing paper in IndexedDB:', message.payload.paper.title);
+          const storedPaper = await (await import('../utils/dbService.ts')).storePaper(
+            message.payload.paper,
+            message.payload.fullText
+          );
+          console.log('[Background] ✓ Paper stored successfully:', storedPaper.id);
+          sendResponse({ success: true, paper: storedPaper });
+        } catch (dbError) {
+          console.error('[Background] Failed to store paper:', dbError);
+          sendResponse({ success: false, error: String(dbError) });
+        }
+        break;
+
+      case MessageType.GET_PAPER_FROM_DB_BY_URL:
+        try {
+          console.log('[Background] Getting paper by URL:', message.payload.url);
+          const paper = await getPaperByUrl(message.payload.url);
+          console.log('[Background] Paper retrieval result:', paper ? 'Found' : 'Not found');
+          sendResponse({ success: true, paper });
+        } catch (dbError) {
+          console.error('[Background] Failed to get paper:', dbError);
+          sendResponse({ success: false, error: String(dbError), paper: null });
+        }
+        break;
+
+      case MessageType.IS_PAPER_STORED_IN_DB:
+        try {
+          console.log('[Background] Checking if paper is stored:', message.payload.url);
+          const isStored = await (await import('../utils/dbService.ts')).isPaperStored(message.payload.url);
+          console.log('[Background] Paper stored check result:', isStored);
+          sendResponse({ success: true, isStored });
+        } catch (dbError) {
+          console.error('[Background] Failed to check if paper stored:', dbError);
+          sendResponse({ success: false, error: String(dbError), isStored: false });
+        }
+        break;
+
+      case MessageType.GET_ALL_PAPERS_FROM_DB:
+        try {
+          console.log('[Background] Getting all papers from IndexedDB');
+          const papers = await (await import('../utils/dbService.ts')).getAllPapers();
+          console.log('[Background] Retrieved', papers.length, 'papers');
+          sendResponse({ success: true, papers });
+        } catch (dbError) {
+          console.error('[Background] Failed to get all papers:', dbError);
+          sendResponse({ success: false, error: String(dbError), papers: [] });
+        }
+        break;
+
+      case MessageType.DELETE_PAPER_FROM_DB:
+        try {
+          console.log('[Background] Deleting paper:', message.payload.paperId);
+          const deleted = await (await import('../utils/dbService.ts')).deletePaper(message.payload.paperId);
+          console.log('[Background] Paper deletion result:', deleted);
+          sendResponse({ success: deleted });
+        } catch (dbError) {
+          console.error('[Background] Failed to delete paper:', dbError);
+          sendResponse({ success: false, error: String(dbError) });
+        }
+        break;
+
       default:
         sendResponse({ success: false, error: 'Unknown message type' });
     }

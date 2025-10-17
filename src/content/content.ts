@@ -1,6 +1,31 @@
 import { MessageType, ResearchPaper } from '../types/index.ts';
 import { detectPaper, detectPaperWithAI } from '../utils/paperDetectors.ts';
-import { storePaper, isPaperStored } from '../utils/dbService.ts';
+import { extractPageText } from '../utils/contentExtractor.ts';
+
+// Helper functions to communicate with background worker for IndexedDB operations
+async function storePaperInDB(paper: ResearchPaper, fullText?: string): Promise<any> {
+  const response = await chrome.runtime.sendMessage({
+    type: MessageType.STORE_PAPER_IN_DB,
+    payload: { paper, fullText },
+  });
+  return response;
+}
+
+async function isPaperStoredInDB(url: string): Promise<boolean> {
+  const response = await chrome.runtime.sendMessage({
+    type: MessageType.IS_PAPER_STORED_IN_DB,
+    payload: { url },
+  });
+  return response.isStored;
+}
+
+async function getPaperByUrlFromDB(url: string): Promise<any> {
+  const response = await chrome.runtime.sendMessage({
+    type: MessageType.GET_PAPER_FROM_DB_BY_URL,
+    payload: { url },
+  });
+  return response.paper;
+}
 
 let currentPaper: ResearchPaper | null = null;
 
@@ -14,18 +39,24 @@ async function init() {
       // Store in chrome storage for access by other components
       await chrome.storage.local.set({ currentPaper });
 
-      // Store in IndexedDB if not already stored
+      // Store in IndexedDB via background worker if not already stored
       try {
-        const alreadyStored = await isPaperStored(currentPaper.url);
+        const alreadyStored = await isPaperStoredInDB(currentPaper.url);
         if (!alreadyStored) {
-          console.log('Storing paper in IndexedDB...');
-          await storePaper(currentPaper);
-          console.log('✓ Paper stored locally for offline access');
+          console.log('[Content] Storing paper in IndexedDB via background worker...');
+          // Extract full text in content script (where document is available)
+          const extractedContent = extractPageText();
+          const storeResult = await storePaperInDB(currentPaper, extractedContent.text);
+          if (storeResult.success) {
+            console.log('[Content] ✓ Paper stored locally for offline access');
+          } else {
+            console.error('[Content] Failed to store paper:', storeResult.error);
+          }
         } else {
-          console.log('Paper already stored in IndexedDB');
+          console.log('[Content] Paper already stored in IndexedDB');
         }
       } catch (dbError) {
-        console.warn('Failed to store paper in IndexedDB:', dbError);
+        console.warn('[Content] Failed to store paper in IndexedDB:', dbError);
         // Don't fail the whole detection if storage fails
       }
     } else {
@@ -53,24 +84,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           let storageError: string | undefined;
 
           if (currentPaper) {
+            console.log('[Content] Paper detected, preparing to store:', {
+              title: currentPaper.title,
+              url: currentPaper.url,
+              source: currentPaper.source
+            });
+
             try {
-              alreadyStored = await isPaperStored(currentPaper.url);
+              alreadyStored = await isPaperStoredInDB(currentPaper.url);
+              console.log('[Content] isPaperStored check result:', alreadyStored);
+
               if (!alreadyStored) {
-                console.log('Storing paper in IndexedDB...');
-                const storedPaper = await storePaper(currentPaper);
-                console.log('✓ Paper stored locally for offline access');
-                stored = true;
-                chunkCount = storedPaper.chunkCount;
+                console.log('[Content] Storing paper in IndexedDB via background worker...');
+                // Extract full text in content script (where document is available)
+                const extractedContent = extractPageText();
+                const storeResult = await storePaperInDB(currentPaper, extractedContent.text);
+
+                if (storeResult.success) {
+                  const storedPaper = storeResult.paper;
+                  console.log('[Content] ✓ Paper stored successfully!', {
+                    id: storedPaper.id,
+                    chunkCount: storedPaper.chunkCount,
+                    storedAt: new Date(storedPaper.storedAt).toLocaleString()
+                  });
+                  stored = true;
+                  chunkCount = storedPaper.chunkCount;
+                  alreadyStored = false;
+                } else {
+                  console.error('[Content] Failed to store paper:', storeResult.error);
+                  stored = false;
+                  storageError = storeResult.error;
+                }
               } else {
-                console.log('Paper already stored in IndexedDB');
-                // Get chunk count for already stored paper
-                const existingPaper = await (await import('../utils/dbService.ts')).getPaperByUrl(currentPaper.url);
+                console.log('[Content] Paper already stored, fetching existing data...');
+                const existingPaper = await getPaperByUrlFromDB(currentPaper.url);
+                console.log('[Content] Existing paper retrieved:', {
+                  id: existingPaper?.id,
+                  chunkCount: existingPaper?.chunkCount
+                });
                 stored = true;
                 chunkCount = existingPaper?.chunkCount || 0;
+                alreadyStored = true;
               }
             } catch (dbError) {
               // Capture detailed error message for debugging
-              console.error('Failed to store paper in IndexedDB:', dbError);
+              console.error('[Content] ❌ Failed to store paper in IndexedDB:', {
+                error: dbError,
+                stack: dbError instanceof Error ? dbError.stack : undefined,
+                paperUrl: currentPaper.url
+              });
               stored = false;
 
               // Extract error message
@@ -143,15 +205,21 @@ const observer = new MutationObserver((mutations) => {
           await chrome.storage.local.set({ currentPaper });
           console.log('Paper detected after page mutation:', currentPaper.title);
 
-          // Store in IndexedDB
+          // Store in IndexedDB via background worker
           try {
-            const alreadyStored = await isPaperStored(currentPaper.url);
+            const alreadyStored = await isPaperStoredInDB(currentPaper.url);
             if (!alreadyStored) {
-              await storePaper(currentPaper);
-              console.log('✓ Paper stored locally');
+              // Extract full text in content script (where document is available)
+              const extractedContent = extractPageText();
+              const storeResult = await storePaperInDB(currentPaper, extractedContent.text);
+              if (storeResult.success) {
+                console.log('[Content] ✓ Paper stored locally');
+              } else {
+                console.error('[Content] Failed to store paper:', storeResult.error);
+              }
             }
           } catch (dbError) {
-            console.warn('Failed to store paper in IndexedDB:', dbError);
+            console.warn('[Content] Failed to store paper in IndexedDB:', dbError);
           }
         }
       } catch (error) {

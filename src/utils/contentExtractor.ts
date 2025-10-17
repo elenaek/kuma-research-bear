@@ -217,19 +217,22 @@ export function chunkContent(
   }
 
   // Extract headings from the document for section context
+  // Only if document is available (content script context)
   const headingMap = new Map<number, string>();
-  const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  if (typeof document !== 'undefined') {
+    const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
 
-  headings.forEach(heading => {
-    const text = heading.textContent?.trim();
-    if (text) {
-      // Find approximate position in content
-      const position = content.indexOf(text);
-      if (position !== -1) {
-        headingMap.set(position, text);
+    headings.forEach(heading => {
+      const text = heading.textContent?.trim();
+      if (text) {
+        // Find approximate position in content
+        const position = content.indexOf(text);
+        if (position !== -1) {
+          headingMap.set(position, text);
+        }
       }
-    }
-  });
+    });
+  }
 
   // Split by sentences to avoid breaking mid-sentence
   const sentences = content.match(/[^.!?]+[.!?]+/g) || [content];

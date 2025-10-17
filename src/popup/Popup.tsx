@@ -93,9 +93,21 @@ export function Popup() {
       // Update status for AI extraction phase
       setDetectionStatus('🐻 Kuma is foraging for research papers...');
 
-      const response = await chrome.tabs.sendMessage(tab.id, {
-        type: MessageType.DETECT_PAPER,
-      });
+      let response;
+      try {
+        response = await chrome.tabs.sendMessage(tab.id, {
+          type: MessageType.DETECT_PAPER,
+        });
+      } catch (msgError: any) {
+        // Handle content script not ready
+        if (msgError.message?.includes('Receiving end does not exist')) {
+          setDetectionStatus('⚠️ Content script not ready. Please refresh the page and try again.');
+        } else {
+          setDetectionStatus(`❌ Detection failed: ${msgError.message || String(msgError)}`);
+        }
+        setTimeout(() => setDetectionStatus(null), 5000);
+        return;
+      }
 
       if (response.paper) {
         setPaper(response.paper);
