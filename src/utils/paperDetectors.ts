@@ -148,8 +148,19 @@ export async function detectPDFPaper(): Promise<ResearchPaper | null> {
     }
 
     // Extract the first few pages to get title/abstract
-    console.log('[PDF Detector] Extracting first 3 pages for metadata detection...');
-    const firstPagesText = await extractPDFPages(pdfUrl, 1, 3);
+    console.log('[PDF Detector] Extracting first 2 pages for metadata detection...');
+    const firstPagesText = await extractPDFPages(pdfUrl, 1, 2);
+
+    // Clean PDF text for AI processing
+    // Remove excessive whitespace, special characters, and truncate
+    const cleanedText = firstPagesText
+      .replace(/\s+/g, ' ')           // Normalize whitespace
+      .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
+      .replace(/[^\x20-\x7E\s]/g, '')  // Keep only printable ASCII
+      .trim()
+      .slice(0, 6000);                // Truncate to 6000 chars for AI
+
+    console.log(`[PDF Detector] Cleaned text: ${cleanedText.length} chars (from ${firstPagesText.length} original)`);
 
     // Try to detect arXiv ID from URL or content
     let arxivId: string | undefined;
@@ -169,9 +180,9 @@ export async function detectPDFPaper(): Promise<ResearchPaper | null> {
                      firstPagesText.match(/(10\.\d+\/[^\s]+)/);
     const doi = doiMatch ? doiMatch[1] : undefined;
 
-    // Use AI to extract structured metadata from the first pages
+    // Use AI to extract structured metadata from the cleaned text
     console.log('[PDF Detector] Using AI to extract paper metadata from PDF...');
-    const aiPaper = await aiService.extractPaperMetadata(firstPagesText);
+    const aiPaper = await aiService.extractPaperMetadata(cleanedText);
 
     if (aiPaper) {
       // Enhance with PDF-specific metadata
@@ -190,17 +201,60 @@ export async function detectPDFPaper(): Promise<ResearchPaper | null> {
       };
     }
 
-    // Fallback: Try to parse title from first page manually
+    // Fallback: Try to parse title/authors/abstract manually
+    console.log('[PDF Detector] AI extraction failed, trying heuristic extraction...');
     const lines = firstPagesText.split('\n').map(l => l.trim()).filter(Boolean);
+
+    // Find title: usually first long line (20-200 chars)
     const potentialTitle = lines.find(line => line.length > 20 && line.length < 200);
 
+    // Try to extract authors: look for common patterns
+    const authors: string[] = [];
+    const authorPatterns = [
+      /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)(?:\s*,\s*|\s+and\s+)/,  // "John Smith, Jane Doe"
+      /^by\s+(.+?)(?:\s*$)/i,  // "by John Smith"
+    ];
+
+    for (const line of lines.slice(0, 10)) { // Check first 10 lines
+      for (const pattern of authorPatterns) {
+        const match = line.match(pattern);
+        if (match && match[1]) {
+          // Split by common delimiters
+          const authorNames = match[1].split(/,|and/).map(n => n.trim()).filter(Boolean);
+          authors.push(...authorNames);
+        }
+      }
+
+      // Also check if line looks like "FirstName LastName"
+      if (/^[A-Z][a-z]+\s+[A-Z][a-z]+$/.test(line) && line.length < 50) {
+        if (!authors.includes(line)) {
+          authors.push(line);
+        }
+      }
+    }
+
+    // Try to extract abstract: find "Abstract" section
+    let abstract = '';
+    const abstractIndex = firstPagesText.toLowerCase().indexOf('abstract');
+    if (abstractIndex !== -1) {
+      // Get text after "Abstract" heading
+      const afterAbstract = firstPagesText.slice(abstractIndex + 8).trim();
+      // Take until we hit another section or ~500 chars
+      const nextSection = afterAbstract.search(/\n\s*\n[A-Z]/);
+      abstract = afterAbstract.slice(0, nextSection !== -1 ? nextSection : 500).trim();
+    }
+
     if (potentialTitle) {
-      console.log('[PDF Detector] Extracted title via heuristics:', potentialTitle);
+      console.log('[PDF Detector] Extracted via heuristics:', {
+        title: potentialTitle,
+        authors: authors.length,
+        abstractLength: abstract.length,
+      });
 
       return {
         title: potentialTitle,
-        authors: [],
-        abstract: '',
+        authors: authors.slice(0, 10), // Limit to 10 authors max
+        abstract,
         url: window.location.href,
         source: 'pdf',
         metadata: {
@@ -272,6 +326,19 @@ function isValidPaper(paper: ResearchPaper | null): boolean {
 }
 
 /**
+ * Relaxed validation for PDF papers
+ * PDFs often have extraction issues, so we're more lenient
+ * Only requires a valid title
+ */
+function isValidPDFPaper(paper: ResearchPaper | null): boolean {
+  if (!paper) return false;
+
+  // For PDFs, we only require a title
+  // Authors and abstract are optional since extraction is harder
+  return paper.title.length > 10;
+}
+
+/**
  * Main detector function - fast detection without AI
  * Used for automatic detection on page load/mutations
  * Only uses schema.org and site-specific detectors
@@ -320,7 +387,7 @@ export async function detectPaperWithAI(): Promise<ResearchPaper | null> {
     if (isPDFPage()) {
       console.log('PDF page detected, using PDF extraction...');
       const pdfPaper = await detectPDFPaper();
-      if (isValidPaper(pdfPaper)) {
+      if (isValidPDFPaper(pdfPaper)) {
         console.log('✓ Paper detected from PDF:', pdfPaper!.title);
         return pdfPaper;
       }

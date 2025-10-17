@@ -103,6 +103,32 @@ class ChromeAIService {
   }
 
   /**
+   * Fix malformed JSON by asking AI to correct it
+   * Used when initial JSON parsing fails
+   */
+  async fixMalformedJSON(malformedJson: string): Promise<string> {
+    const systemPrompt = `You are a JSON validator and fixer. Your job is to take malformed JSON and return valid, properly escaped JSON.`;
+
+    const input = `The following JSON has syntax errors (likely improperly escaped strings). Fix it and return ONLY valid JSON with properly escaped strings:
+
+${malformedJson}
+
+Important:
+- Escape all quotes in strings with \\"
+- Escape all newlines as \\n
+- Escape all backslashes as \\\\
+- Return ONLY the corrected JSON, no explanations or markdown`;
+
+    try {
+      const response = await this.prompt(input, systemPrompt);
+      return response.trim();
+    } catch (error) {
+      console.error('Failed to fix malformed JSON:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Explain a research paper abstract
    */
   async explainAbstract(abstract: string): Promise<ExplanationResult> {
@@ -222,8 +248,10 @@ while preserving the original meaning.`;
     }
 
     const url = window.location.href;
-    const maxRetries = 3;
-    const baseDelay = 1000; // 1 second base delay
+    // Use fewer retries for large content (likely PDFs)
+    const isProbablyPDF = content.length > 5000;
+    const maxRetries = isProbablyPDF ? 2 : 3;
+    const baseDelay = isProbablyPDF ? 5000 : 1000; // 5s for PDFs, 1s for HTML
 
     // Get current retry count for this URL
     const currentRetries = this.extractionRetries.get(url) || 0;
@@ -244,6 +272,11 @@ while preserving the original meaning.`;
 
     // Increment retry count
     this.extractionRetries.set(url, currentRetries + 1);
+
+    // Check content length and warn if too large
+    if (content.length > 10000) {
+      console.warn(`[AI] Content is very large (${content.length} chars). Consider pre-cleaning or truncating before calling AI.`);
+    }
 
     // Truncate content to ~2000 tokens max to stay within context limits
     const maxChars = 8000; // ~2000 tokens
@@ -288,8 +321,33 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
         jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
       }
 
-      // Parse the JSON
-      const metadata = JSON.parse(jsonStr);
+      // Parse the JSON (with AI self-fixing if needed)
+      let metadata;
+      try {
+        // First attempt: parse directly
+        metadata = JSON.parse(jsonStr);
+      } catch (parseError) {
+        console.warn('JSON parse failed, asking AI to fix...', parseError);
+
+        try {
+          // Ask AI to fix the malformed JSON
+          const fixedJson = await this.fixMalformedJSON(jsonStr);
+
+          // Remove markdown if AI added it
+          let cleanedFixed = fixedJson.trim();
+          if (cleanedFixed.startsWith('```')) {
+            cleanedFixed = cleanedFixed.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+          }
+
+          // Try parsing the fixed JSON
+          metadata = JSON.parse(cleanedFixed);
+          console.log('✓ AI successfully fixed malformed JSON');
+        } catch (fixError) {
+          // Both attempts failed
+          console.error('AI could not fix malformed JSON:', fixError);
+          throw parseError; // throw original error for retry logic
+        }
+      }
 
       // Validate required fields
       if (!metadata.title || !metadata.authors || !metadata.abstract) {
@@ -394,6 +452,84 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
       return {
         success: false,
         message: `Failed to initialize AI: ${error}`,
+      };
+    }
+  }
+
+  /**
+   * Reset AI after a crash
+   * Clears crashed sessions and retry counts, then attempts recovery
+   * Can be called without requiring Chrome restart
+   */
+  async resetAI(): Promise<{ success: boolean; message: string }> {
+    try {
+      console.log('[AI Reset] Attempting to reset crashed AI...');
+
+      // Step 1: Destroy any existing crashed session
+      this.destroySession();
+      console.log('[AI Reset] ✓ Destroyed crashed session');
+
+      // Step 2: Clear all retry counts
+      this.clearRetries();
+      console.log('[AI Reset] ✓ Cleared retry counts');
+
+      // Step 3: Clear cached capabilities
+      this.capabilities = null;
+      console.log('[AI Reset] ✓ Cleared capabilities cache');
+
+      // Step 4: Check current AI availability
+      const capabilities = await this.checkAvailability();
+      console.log(`[AI Reset] AI availability after reset: ${capabilities.availability}`);
+
+      if (capabilities.availability === 'available') {
+        // AI is now available - try to create a session
+        const created = await this.createSession({
+          systemPrompt: 'You are a helpful research assistant.',
+        });
+
+        if (created) {
+          console.log('[AI Reset] ✓ AI reset successful!');
+          return {
+            success: true,
+            message: 'AI reset successful! Kuma is back and ready to help.',
+          };
+        } else {
+          console.log('[AI Reset] ⚠️ AI available but session creation failed');
+          return {
+            success: false,
+            message: 'AI is available but session creation failed. Try again.',
+          };
+        }
+      } else if (capabilities.availability === 'downloadable') {
+        console.log('[AI Reset] AI needs to be downloaded');
+        return {
+          success: true,
+          message: 'AI reset complete. Click "Wake Kuma up" to initialize.',
+        };
+      } else if (capabilities.availability === 'downloading') {
+        console.log('[AI Reset] AI is downloading');
+        return {
+          success: true,
+          message: 'AI reset complete. Model is downloading...',
+        };
+      } else if (capabilities.availability === 'unavailable') {
+        console.log('[AI Reset] ❌ AI still unavailable after reset');
+        return {
+          success: false,
+          message: 'AI is still crashed. Chrome restart may be required.',
+        };
+      } else {
+        console.log('[AI Reset] ❌ AI not supported on this device');
+        return {
+          success: false,
+          message: 'Chrome AI is not available on this device.',
+        };
+      }
+    } catch (error) {
+      console.error('[AI Reset] Error during reset:', error);
+      return {
+        success: false,
+        message: `Reset failed: ${error}`,
       };
     }
   }

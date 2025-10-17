@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
-import { Search, Sparkles, PanelRight, Settings, Download, Loader, PawPrint } from 'lucide-preact';
+import { Search, Sparkles, PanelRight, Settings, Download, Loader, PawPrint, RefreshCw } from 'lucide-preact';
 import { MessageType, ResearchPaper, AIAvailability } from '../types/index.ts';
 
 export function Popup() {
@@ -9,6 +9,7 @@ export function Popup() {
   const [paper, setPaper] = useState<ResearchPaper | null>(null);
   const [isExplaining, setIsExplaining] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectionStatus, setDetectionStatus] = useState<string | null>(null);
 
@@ -45,6 +46,7 @@ export function Popup() {
     } catch (error) {
       setAiStatus('error');
       setStatusMessage('Error checking Kuma\'s status');
+      console.log('Kuma status check failed:', error);
       console.error('Kuma status check failed:', error);
     }
   }
@@ -75,6 +77,31 @@ export function Popup() {
     }
   }
 
+  async function handleResetAI() {
+    try {
+      setIsResetting(true);
+      setStatusMessage('Resetting AI...');
+
+      const response = await chrome.runtime.sendMessage({
+        type: MessageType.RESET_AI,
+      });
+
+      if (response.success) {
+        // Re-check AI status after successful reset
+        await checkAIStatus();
+        alert(`✓ ${response.message}`);
+      } else {
+        alert(`⚠️ ${response.message}`);
+        setStatusMessage(response.message || 'Reset failed');
+      }
+    } catch (error) {
+      console.error('AI reset failed:', error);
+      alert('❌ Failed to reset AI. Please try again or restart Chrome.');
+      setStatusMessage('Reset failed');
+    } finally {
+      setIsResetting(false);
+    }
+  }
 
   async function handleDetectPaper() {
     try {
@@ -234,22 +261,42 @@ export function Popup() {
           {aiStatus === 'downloading' && (
             <div class="mt-3 flex items-center gap-2 text-sm text-gray-600">
               <Loader size={16} class="animate-spin" />
-              <span>Please wait while AI model downloads...</span>
+              <span>Please wait while Kuma wakes up (AI model downloads)...</span>
             </div>
           )}
 
           {/* Error/Crashed Status */}
           {aiStatus === 'error' && aiAvailability === 'unavailable' && (
             <div class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs">
-              <p class="font-semibold text-yellow-800 mb-2">AI Model Crashed</p>
-              <p class="text-yellow-700 mb-2">Chrome's AI has crashed. To fix:</p>
+              <p class="font-semibold text-yellow-800 mb-2">Kuma full asleep again. (AI Model Crashed)</p>
+
+              {/* Try Reset First */}
+              <button
+                onClick={handleResetAI}
+                disabled={isResetting}
+                class="btn btn-primary w-full mb-3 text-xs hover:cursor-pointer"
+              >
+                {isResetting ? (
+                  <>
+                    <Loader size={14} class="animate-spin" />
+                    Kuma is waking up...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={14} />
+                    Try to wake Kuma up (Restart Extension)
+                  </>
+                )}
+              </button>
+
+              <p class="text-yellow-700 mb-2">If reset doesn't work, manually fix:</p>
               <ol class="list-decimal ml-4 text-yellow-700 space-y-1">
                 <li>Open: <code class="bg-yellow-100 px-1">chrome://flags/#optimization-guide-on-device-model</code></li>
                 <li>Set to "Enabled BypassPerfRequirement"</li>
                 <li>Restart Chrome completely</li>
                 <li>Reload this extension</li>
               </ol>
-              <p class="mt-2 text-yellow-600">Note: Extension still works using basic detection (arXiv, PubMed, etc.)</p>
+              <p class="mt-2 text-yellow-600">Note: Kuma still works using basic detection (arXiv, PubMed, etc.)</p>
             </div>
           )}
         </div>

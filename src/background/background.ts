@@ -35,6 +35,11 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         sendResponse(initResult);
         break;
 
+      case MessageType.RESET_AI:
+        const resetResult = await aiService.resetAI();
+        sendResponse(resetResult);
+        break;
+
       case MessageType.EXPLAIN_PAPER:
         const paper: ResearchPaper = message.payload.paper;
         const explanation = await aiService.explainAbstract(paper.abstract);

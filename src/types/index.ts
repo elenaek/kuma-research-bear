@@ -8,6 +8,7 @@ export enum MessageType {
   OPEN_SIDEPANEL = 'OPEN_SIDEPANEL',
   AI_STATUS = 'AI_STATUS',
   INITIALIZE_AI = 'INITIALIZE_AI',
+  RESET_AI = 'RESET_AI',
 
   // IndexedDB operations (handled by background worker)
   STORE_PAPER_IN_DB = 'STORE_PAPER_IN_DB',

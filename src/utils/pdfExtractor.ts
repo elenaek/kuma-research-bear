@@ -253,7 +253,7 @@ export async function extractPDFText(
 export async function extractPDFPages(
   pdfUrl: string,
   startPage: number = 1,
-  endPage: number = 3
+  endPage: number = 2
 ): Promise<string> {
   try {
     // Lazy load PDF.js library
@@ -285,10 +285,10 @@ export async function extractPDFPages(
  */
 export async function isScannedPDF(pdfUrl: string): Promise<boolean> {
   try {
-    // Extract first 3 pages
-    const firstPagesText = await extractPDFPages(pdfUrl, 1, 3);
+    // Extract first 2 pages
+    const firstPagesText = await extractPDFPages(pdfUrl, 1, 2);
 
-    // If we have less than 100 characters of text across 3 pages, likely scanned
+    // If we have less than 100 characters of text across 2 pages, likely scanned
     if (firstPagesText.length < 100) {
       return true;
     }
@@ -302,7 +302,7 @@ export async function isScannedPDF(pdfUrl: string): Promise<boolean> {
     const pageCount = pdfDocument.numPages;
 
     // Average characters per page
-    const avgCharsPerPage = firstPagesText.length / Math.min(3, pageCount);
+    const avgCharsPerPage = firstPagesText.length / Math.min(2, pageCount);
 
     // If less than 200 chars per page, likely scanned
     return avgCharsPerPage < 200;
