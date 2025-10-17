@@ -14,7 +14,8 @@
     "https://*.biorxiv.org/*",
     "https://scholar.google.com/*",
     "https://papers.ssrn.com/*",
-    "https://pubmed.ncbi.nlm.nih.gov/*"
+    "https://pubmed.ncbi.nlm.nih.gov/*",
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "src/popup/popup.html",
@@ -37,10 +38,13 @@
         "https://*.biorxiv.org/*",
         "https://scholar.google.com/*",
         "https://papers.ssrn.com/*",
-        "https://pubmed.ncbi.nlm.nih.gov/*"
+        "https://pubmed.ncbi.nlm.nih.gov/*",
+        "file:///*",
+        "<all_urls>"
       ],
       "js": ["src/content/content.ts"],
-      "css": ["src/content/content.css"]
+      "css": ["src/content/content.css"],
+      "match_about_blank": true
     }
   ],
   "side_panel": {
@@ -52,4 +56,10 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["pdf.worker.min.mjs"],
+      "matches": ["<all_urls>"]
+    }
+  ],
 }

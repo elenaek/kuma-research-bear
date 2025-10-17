@@ -1,6 +1,7 @@
 import { ResearchPaper, PaperSection } from '../types/index.ts';
 import { extractPageText, isPDFPage } from './contentExtractor.ts';
 import { aiService } from './aiService.ts';
+import { getPDFUrl, extractPDFText, extractPDFPages, isScannedPDF } from './pdfExtractor.ts';
 
 // Detector for arXiv papers
 export function detectArXivPaper(): ResearchPaper | null {
@@ -122,6 +123,104 @@ export function detectBioRxivPaper(): ResearchPaper | null {
   }
 }
 
+/**
+ * Detector for PDF research papers
+ * Extracts metadata from PDF and uses AI for title/abstract extraction
+ */
+export async function detectPDFPaper(): Promise<ResearchPaper | null> {
+  console.log('[PDF Detector] Starting PDF paper detection...');
+
+  try {
+    // Get the PDF URL
+    const pdfUrl = getPDFUrl();
+    if (!pdfUrl) {
+      console.log('[PDF Detector] Could not determine PDF URL');
+      return null;
+    }
+
+    console.log('[PDF Detector] PDF URL found:', pdfUrl);
+
+    // Check if it's a scanned PDF (no extractable text)
+    const isScanned = await isScannedPDF(pdfUrl);
+    if (isScanned) {
+      console.warn('[PDF Detector] This appears to be a scanned PDF with no extractable text');
+      return null;
+    }
+
+    // Extract the first few pages to get title/abstract
+    console.log('[PDF Detector] Extracting first 3 pages for metadata detection...');
+    const firstPagesText = await extractPDFPages(pdfUrl, 1, 3);
+
+    // Try to detect arXiv ID from URL or content
+    let arxivId: string | undefined;
+    const arxivMatch = pdfUrl.match(/arxiv\.org\/pdf\/(\d+\.\d+)/);
+    if (arxivMatch) {
+      arxivId = arxivMatch[1];
+    } else {
+      // Try to find arXiv ID in the PDF text
+      const arxivTextMatch = firstPagesText.match(/arXiv:(\d+\.\d+)/i);
+      if (arxivTextMatch) {
+        arxivId = arxivTextMatch[1];
+      }
+    }
+
+    // Try to detect DOI from content
+    const doiMatch = firstPagesText.match(/doi:\s*(10\.\d+\/[^\s]+)/i) ||
+                     firstPagesText.match(/(10\.\d+\/[^\s]+)/);
+    const doi = doiMatch ? doiMatch[1] : undefined;
+
+    // Use AI to extract structured metadata from the first pages
+    console.log('[PDF Detector] Using AI to extract paper metadata from PDF...');
+    const aiPaper = await aiService.extractPaperMetadata(firstPagesText);
+
+    if (aiPaper) {
+      // Enhance with PDF-specific metadata
+      return {
+        ...aiPaper,
+        url: window.location.href, // Use the current page URL
+        source: arxivId ? 'arxiv' : 'pdf',
+        metadata: {
+          ...aiPaper.metadata,
+          arxivId,
+          doi,
+          pdfUrl,
+          extractionMethod: 'pdf-ai',
+          extractionTimestamp: Date.now(),
+        },
+      };
+    }
+
+    // Fallback: Try to parse title from first page manually
+    const lines = firstPagesText.split('\n').map(l => l.trim()).filter(Boolean);
+    const potentialTitle = lines.find(line => line.length > 20 && line.length < 200);
+
+    if (potentialTitle) {
+      console.log('[PDF Detector] Extracted title via heuristics:', potentialTitle);
+
+      return {
+        title: potentialTitle,
+        authors: [],
+        abstract: '',
+        url: window.location.href,
+        source: 'pdf',
+        metadata: {
+          arxivId,
+          doi,
+          pdfUrl,
+          extractionMethod: 'pdf-heuristic',
+          extractionTimestamp: Date.now(),
+        },
+      };
+    }
+
+    console.log('[PDF Detector] Could not extract paper metadata from PDF');
+    return null;
+  } catch (error) {
+    console.error('[PDF Detector] Error detecting PDF paper:', error);
+    return null;
+  }
+}
+
 // Generic detector for papers with schema.org markup
 export function detectSchemaOrgPaper(): ResearchPaper | null {
   try {
@@ -215,12 +314,17 @@ export async function detectPaper(): Promise<ResearchPaper | null> {
 export async function detectPaperWithAI(): Promise<ResearchPaper | null> {
   console.log('Starting AI-first paper detection...');
 
-  // Strategy 1: Try AI extraction first (priority for manual detection)
+  // Strategy 1: Check if this is a PDF page and handle accordingly
   try {
     // Check if we're on a PDF page
     if (isPDFPage()) {
-      console.log('PDF detected, but PDF extraction not yet implemented');
-      // TODO: Implement PDF extraction in Phase 6
+      console.log('PDF page detected, using PDF extraction...');
+      const pdfPaper = await detectPDFPaper();
+      if (isValidPaper(pdfPaper)) {
+        console.log('✓ Paper detected from PDF:', pdfPaper!.title);
+        return pdfPaper;
+      }
+      console.log('Could not extract valid paper from PDF');
       return null;
     }
 

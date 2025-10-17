@@ -1,6 +1,50 @@
 import { MessageType, ResearchPaper } from '../types/index.ts';
 import { detectPaper, detectPaperWithAI } from '../utils/paperDetectors.ts';
-import { extractPageText } from '../utils/contentExtractor.ts';
+import { extractPageText, isPDFPage } from '../utils/contentExtractor.ts';
+import { getPDFUrl, extractPDFText } from '../utils/pdfExtractor.ts';
+
+/**
+ * Extract full text from the current page (HTML or PDF)
+ */
+async function extractFullText(): Promise<string> {
+  try {
+    // Check if this is a PDF page
+    if (isPDFPage()) {
+      console.log('[Content] PDF detected, extracting full PDF text...');
+      const pdfUrl = getPDFUrl();
+      if (!pdfUrl) {
+        console.error('[Content] Could not determine PDF URL');
+        return '';
+      }
+
+      try {
+        // Extract all text from the PDF (PDF.js is lazy-loaded here)
+        const pdfContent = await extractPDFText(pdfUrl, (progress) => {
+          console.log(`[Content] PDF extraction progress: ${progress.percentComplete}% (${progress.currentPage}/${progress.totalPages})`);
+        });
+
+        console.log('[Content] ✓ PDF text extracted:', {
+          pageCount: pdfContent.pageCount,
+          textLength: pdfContent.text.length,
+          wordCount: pdfContent.text.split(/\s+/).length,
+        });
+
+        return pdfContent.text;
+      } catch (pdfError) {
+        console.error('[Content] Failed to extract PDF text:', pdfError);
+        // Return empty string on PDF extraction failure
+        return '';
+      }
+    } else {
+      // Regular HTML page
+      const extracted = extractPageText();
+      return extracted.text;
+    }
+  } catch (error) {
+    console.error('[Content] Fatal error in extractFullText:', error);
+    return '';
+  }
+}
 
 // Helper functions to communicate with background worker for IndexedDB operations
 async function storePaperInDB(paper: ResearchPaper, fullText?: string): Promise<any> {
@@ -45,8 +89,8 @@ async function init() {
         if (!alreadyStored) {
           console.log('[Content] Storing paper in IndexedDB via background worker...');
           // Extract full text in content script (where document is available)
-          const extractedContent = extractPageText();
-          const storeResult = await storePaperInDB(currentPaper, extractedContent.text);
+          const fullText = await extractFullText();
+          const storeResult = await storePaperInDB(currentPaper, fullText);
           if (storeResult.success) {
             console.log('[Content] ✓ Paper stored locally for offline access');
           } else {
@@ -97,8 +141,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               if (!alreadyStored) {
                 console.log('[Content] Storing paper in IndexedDB via background worker...');
                 // Extract full text in content script (where document is available)
-                const extractedContent = extractPageText();
-                const storeResult = await storePaperInDB(currentPaper, extractedContent.text);
+                const fullText = await extractFullText();
+                const storeResult = await storePaperInDB(currentPaper, fullText);
 
                 if (storeResult.success) {
                   const storedPaper = storeResult.paper;
@@ -210,8 +254,8 @@ const observer = new MutationObserver((mutations) => {
             const alreadyStored = await isPaperStoredInDB(currentPaper.url);
             if (!alreadyStored) {
               // Extract full text in content script (where document is available)
-              const extractedContent = extractPageText();
-              const storeResult = await storePaperInDB(currentPaper, extractedContent.text);
+              const fullText = await extractFullText();
+              const storeResult = await storePaperInDB(currentPaper, fullText);
               if (storeResult.success) {
                 console.log('[Content] ✓ Paper stored locally');
               } else {
