@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
-import { Search, Sparkles, PanelRight, Settings, Download, Loader } from 'lucide-preact';
+import { Search, Sparkles, PanelRight, Settings, Download, Loader, PawPrint } from 'lucide-preact';
 import { MessageType, ResearchPaper, AIAvailability } from '../types/index.ts';
 
 export function Popup() {
@@ -15,7 +15,6 @@ export function Popup() {
   // Check AI availability on mount
   useEffect(() => {
     checkAIStatus();
-    checkCurrentPaper();
   }, []);
 
   async function checkAIStatus() {
@@ -29,31 +28,31 @@ export function Popup() {
 
       if (availability === 'available') {
         setAiStatus('ready');
-        setStatusMessage('AI Ready');
+        setStatusMessage('Kuma is ready to help you with your research!');
       } else if (availability === 'downloadable') {
         setAiStatus('needsInit');
-        setStatusMessage('AI needs initialization');
+        setStatusMessage('Kuma needs to be woken up');
       } else if (availability === 'downloading') {
         setAiStatus('downloading');
-        setStatusMessage('Downloading AI model...');
+        setStatusMessage('Kuma loading in...');
       } else if (availability === 'unavailable') {
         setAiStatus('error');
-        setStatusMessage('AI model crashed - needs reset');
+        setStatusMessage('Kuma fell asleep again. (Crashed - needs reset)');
       } else {
         setAiStatus('error');
-        setStatusMessage('AI not available on this device');
+        setStatusMessage('Kuma is missing from his cave. (Not available on this device)');
       }
     } catch (error) {
       setAiStatus('error');
-      setStatusMessage('Error checking AI status');
-      console.error('AI status check failed:', error);
+      setStatusMessage('Error checking Kuma\'s status');
+      console.error('Kuma status check failed:', error);
     }
   }
 
   async function handleInitializeAI() {
     try {
       setIsInitializing(true);
-      setStatusMessage('Initializing AI...');
+      setStatusMessage('Kuma is waking up...');
 
       const response = await chrome.runtime.sendMessage({
         type: MessageType.INITIALIZE_AI,
@@ -61,38 +60,21 @@ export function Popup() {
 
       if (response.success) {
         setAiStatus('ready');
-        setStatusMessage('AI Ready');
-        alert('AI initialized successfully! You can now use all features.');
+        setStatusMessage('Kuma is ready to help you with your research!');
+        alert('Kuma is here! You can now use all features.');
       } else {
-        alert(`Failed to initialize AI: ${response.message}`);
+        alert(`Kuma didn\'t come. (Failed to initialize AI: ${response.message})`);
         setStatusMessage(response.message || 'Initialization failed');
       }
     } catch (error) {
-      console.error('AI initialization failed:', error);
-      alert('Failed to initialize AI. Please try again.');
-      setStatusMessage('Initialization failed');
+      console.error('Kuma didn\'t come. (Initialization failed):', error);
+      alert(`Kuma didn\'t come. (Failed to initialize AI. Please try again.)`);
+      setStatusMessage('Kuma didn\'t come. (Initialization failed)');
     } finally {
       setIsInitializing(false);
     }
   }
 
-  async function checkCurrentPaper() {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab.id) return;
-
-      const response = await chrome.tabs.sendMessage(tab.id, {
-        type: MessageType.DETECT_PAPER,
-      });
-
-      if (response?.paper) {
-        setPaper(response.paper);
-      }
-    } catch (error) {
-      // Content script might not be loaded yet
-      console.log('Content script not ready:', error);
-    }
-  }
 
   async function handleDetectPaper() {
     try {
@@ -109,7 +91,7 @@ export function Popup() {
       }
 
       // Update status for AI extraction phase
-      setDetectionStatus('🤖 Using AI to detect paper...');
+      setDetectionStatus('🐻 Kuma is foraging for research papers...');
 
       const response = await chrome.tabs.sendMessage(tab.id, {
         type: MessageType.DETECT_PAPER,
@@ -122,15 +104,15 @@ export function Popup() {
 
         // Success message with source
         const source = response.paper.source.replace('-', ' ');
-        setDetectionStatus(`✅ Paper detected (${source})!`);
+        setDetectionStatus(`✅ Kuma found a research paper! (${source})`);
         setTimeout(() => setDetectionStatus(null), 4000);
       } else {
         setDetectionStatus('❌ No paper detected on this page');
         setTimeout(() => setDetectionStatus(null), 4000);
       }
     } catch (error) {
-      console.error('Paper detection failed:', error);
-      setDetectionStatus('❌ Detection failed - check console');
+      console.error('Kuma didn\'t find any papers. (Detection failed):', error);
+      setDetectionStatus('❌ Kuma didn\'t find any papers. (Detection failed)');
       setTimeout(() => setDetectionStatus(null), 4000);
     } finally {
       setIsDetecting(false);
@@ -142,7 +124,7 @@ export function Popup() {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
       if (!tab.id) {
-        alert('No active tab found');
+        alert('Kuma couldn\'t find the active tab. (No active tab found)');
         return;
       }
 
@@ -157,8 +139,8 @@ export function Popup() {
 
       setIsExplaining(false);
     } catch (error) {
-      console.error('Explanation failed:', error);
-      alert('Failed to explain paper');
+      console.error('Kuma had some trouble with the human tongue. (Explanation failed):', error);
+      alert('Kuma had some trouble with the human tongue. (Failed to explain paper)');
       setIsExplaining(false);
     }
   }
@@ -196,17 +178,17 @@ export function Popup() {
             <button
               onClick={handleInitializeAI}
               disabled={isInitializing}
-              class="btn btn-primary w-full mt-3"
+              class="btn btn-primary w-full mt-3 hover:cursor-pointer"
             >
               {isInitializing ? (
                 <>
                   <Loader size={16} class="animate-spin" />
-                  Initializing...
+                  Kuma is waking up...
                 </>
               ) : (
                 <>
-                  <Download size={16} />
-                  Initialize AI
+                  <PawPrint size={16} />
+                  Wake Kuma up
                 </>
               )}
             </button>
@@ -247,10 +229,10 @@ export function Popup() {
 
         {/* Detection Status */}
         {detectionStatus && (
-          <div class="card mb-4 bg-indigo-50 border-indigo-200">
+          <div class="card mb-4 bg-blue-50 border-blue-200">
             <div class="flex items-center gap-2">
-              {isDetecting && <Loader size={14} class="animate-spin text-indigo-600" />}
-              <p class="text-sm font-medium text-indigo-900">{detectionStatus}</p>
+              {isDetecting && <Loader size={14} class="animate-spin bg-gradient-to-br text-blue-500" />}
+              <p class="text-sm font-medium text-blue-900">{detectionStatus}</p>
             </div>
           </div>
         )}
@@ -260,8 +242,8 @@ export function Popup() {
           <button
             onClick={handleDetectPaper}
             disabled={aiStatus !== 'ready' || isDetecting}
-            class="btn btn-primary w-full"
-            title={aiStatus !== 'ready' ? 'Initialize AI first' : isDetecting ? 'Detection in progress...' : ''}
+            class="btn btn-primary w-full hover:cursor-pointer"
+            title={aiStatus !== 'ready' ? 'Wake Kuma up' : isDetecting ? 'Detection in progress...' : ''}
           >
             {isDetecting ? (
               <>
@@ -279,8 +261,8 @@ export function Popup() {
           <button
             onClick={handleExplainPaper}
             disabled={!paper || isExplaining || aiStatus !== 'ready'}
-            class="btn btn-secondary w-full"
-            title={aiStatus !== 'ready' ? 'Initialize AI first' : ''}
+            class="btn btn-secondary w-full hover:cursor-pointer"
+            title={aiStatus !== 'ready' ? 'Wake Kuma up' : ''}
           >
             <Sparkles size={16} />
             {isExplaining ? 'Explaining...' : 'Explain Paper'}
@@ -288,7 +270,7 @@ export function Popup() {
 
           <button
             onClick={handleOpenSidepanel}
-            class="btn btn-secondary w-full"
+            class="btn btn-secondary w-full hover:cursor-pointer"
           >
             <PanelRight size={16} />
             Open Sidepanel
@@ -297,7 +279,7 @@ export function Popup() {
 
         {/* Settings */}
         <div class="mt-4 flex justify-center">
-          <button class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1">
+          <button class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 hover:cursor-pointer">
             <Settings size={14} />
             Settings
           </button>

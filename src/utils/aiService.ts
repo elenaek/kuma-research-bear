@@ -1,4 +1,4 @@
-import { AICapabilities, AILanguageModelSession, AISessionOptions, ExplanationResult, SummaryResult, AIAvailability } from '../types/index.ts';
+import { AICapabilities, AILanguageModelSession, AISessionOptions, ExplanationResult, SummaryResult, AIAvailability, PaperAnalysisResult, MethodologyAnalysis, ConfounderAnalysis, ImplicationAnalysis, LimitationAnalysis } from '../types/index.ts';
 
 /**
  * Utility: Sleep for a specified duration
@@ -385,6 +385,196 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
         message: `Failed to initialize AI: ${error}`,
       };
     }
+  }
+
+  /**
+   * Analyze paper methodology
+   * Examines study design, data collection, sample size, and statistical methods
+   */
+  async analyzeMethodology(paperContent: string): Promise<MethodologyAnalysis> {
+    const systemPrompt = `You are a research methodology expert. Analyze research papers for their study design, methods, and rigor.`;
+
+    const input = `Analyze the methodology of this research paper and return ONLY valid JSON:
+{
+  "studyDesign": "brief description of study design (experimental, observational, etc.)",
+  "dataCollection": "how data was collected",
+  "sampleSize": "sample size and population details",
+  "statisticalMethods": "statistical analyses used",
+  "strengths": ["strength 1", "strength 2"],
+  "concerns": ["concern 1", "concern 2"]
+}
+
+Paper content:
+${paperContent.slice(0, 6000)}
+
+Return ONLY the JSON, no other text.`;
+
+    try {
+      this.destroySession();
+      const response = await this.prompt(input, systemPrompt);
+      let jsonStr = response.trim();
+
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      }
+
+      const analysis = JSON.parse(jsonStr);
+      return analysis;
+    } catch (error) {
+      console.error('Methodology analysis failed:', error);
+      return {
+        studyDesign: 'Unable to analyze',
+        dataCollection: 'Unable to analyze',
+        sampleSize: 'Unable to analyze',
+        statisticalMethods: 'Unable to analyze',
+        strengths: ['Analysis failed'],
+        concerns: ['Could not complete analysis'],
+      };
+    }
+  }
+
+  /**
+   * Identify confounders and biases
+   * Looks for potential confounding variables and methodological biases
+   */
+  async identifyConfounders(paperContent: string): Promise<ConfounderAnalysis> {
+    const systemPrompt = `You are a research quality expert specializing in identifying biases and confounding variables.`;
+
+    const input = `Identify potential confounders and biases in this research paper and return ONLY valid JSON:
+{
+  "identified": ["confounder 1", "confounder 2"],
+  "biases": ["bias 1", "bias 2"],
+  "controlMeasures": ["control 1", "control 2"]
+}
+
+Paper content:
+${paperContent.slice(0, 6000)}
+
+Return ONLY the JSON, no other text.`;
+
+    try {
+      this.destroySession();
+      const response = await this.prompt(input, systemPrompt);
+      let jsonStr = response.trim();
+
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      }
+
+      const analysis = JSON.parse(jsonStr);
+      return analysis;
+    } catch (error) {
+      console.error('Confounder analysis failed:', error);
+      return {
+        identified: ['Analysis failed'],
+        biases: ['Could not analyze'],
+        controlMeasures: ['Unable to determine'],
+      };
+    }
+  }
+
+  /**
+   * Analyze implications and applications
+   * Identifies real-world applications and significance
+   */
+  async analyzeImplications(paperContent: string): Promise<ImplicationAnalysis> {
+    const systemPrompt = `You are a research impact expert who identifies practical applications and significance of research.`;
+
+    const input = `Analyze the implications of this research paper and return ONLY valid JSON:
+{
+  "realWorldApplications": ["application 1", "application 2"],
+  "significance": "overall significance of the research",
+  "futureResearch": ["future direction 1", "future direction 2"]
+}
+
+Paper content:
+${paperContent.slice(0, 6000)}
+
+Return ONLY the JSON, no other text.`;
+
+    try {
+      this.destroySession();
+      const response = await this.prompt(input, systemPrompt);
+      let jsonStr = response.trim();
+
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      }
+
+      const analysis = JSON.parse(jsonStr);
+      return analysis;
+    } catch (error) {
+      console.error('Implications analysis failed:', error);
+      return {
+        realWorldApplications: ['Analysis failed'],
+        significance: 'Could not analyze',
+        futureResearch: ['Unable to determine'],
+      };
+    }
+  }
+
+  /**
+   * Identify limitations
+   * Extracts and explains study limitations and constraints
+   */
+  async identifyLimitations(paperContent: string): Promise<LimitationAnalysis> {
+    const systemPrompt = `You are a research critique expert who identifies limitations and constraints in studies.`;
+
+    const input = `Identify the limitations of this research paper and return ONLY valid JSON:
+{
+  "studyLimitations": ["limitation 1", "limitation 2"],
+  "generalizability": "assessment of how generalizable findings are",
+  "recommendations": ["recommendation 1", "recommendation 2"]
+}
+
+Paper content:
+${paperContent.slice(0, 6000)}
+
+Return ONLY the JSON, no other text.`;
+
+    try {
+      this.destroySession();
+      const response = await this.prompt(input, systemPrompt);
+      let jsonStr = response.trim();
+
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      }
+
+      const analysis = JSON.parse(jsonStr);
+      return analysis;
+    } catch (error) {
+      console.error('Limitations analysis failed:', error);
+      return {
+        studyLimitations: ['Analysis failed'],
+        generalizability: 'Could not analyze',
+        recommendations: ['Unable to determine'],
+      };
+    }
+  }
+
+  /**
+   * Generate complete paper analysis
+   * Combines all analysis methods for comprehensive evaluation
+   */
+  async analyzePaper(paperContent: string): Promise<PaperAnalysisResult> {
+    console.log('Starting comprehensive paper analysis...');
+
+    // Run all analyses
+    const [methodology, confounders, implications, limitations] = await Promise.all([
+      this.analyzeMethodology(paperContent),
+      this.identifyConfounders(paperContent),
+      this.analyzeImplications(paperContent),
+      this.identifyLimitations(paperContent),
+    ]);
+
+    return {
+      methodology,
+      confounders,
+      implications,
+      limitations,
+      timestamp: Date.now(),
+    };
   }
 
   /**

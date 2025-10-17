@@ -13,6 +13,7 @@ export enum MessageType {
   GET_ALL_PAPERS = 'GET_ALL_PAPERS',
   DELETE_PAPER = 'DELETE_PAPER',
   CHECK_PAPER_STORED = 'CHECK_PAPER_STORED',
+  ANALYZE_PAPER = 'ANALYZE_PAPER',
 }
 
 export interface Message {
@@ -149,4 +150,40 @@ export interface ContentChunk {
   endChar: number;
   tokenCount: number;
   embedding?: number[]; // Future: for semantic search
+}
+
+// Paper Analysis types
+export interface MethodologyAnalysis {
+  studyDesign: string;
+  dataCollection: string;
+  sampleSize: string;
+  statisticalMethods: string;
+  strengths: string[];
+  concerns: string[];
+}
+
+export interface ConfounderAnalysis {
+  identified: string[];
+  biases: string[];
+  controlMeasures: string[];
+}
+
+export interface ImplicationAnalysis {
+  realWorldApplications: string[];
+  significance: string;
+  futureResearch: string[];
+}
+
+export interface LimitationAnalysis {
+  studyLimitations: string[];
+  generaliz ability: string;
+  recommendations: string[];
+}
+
+export interface PaperAnalysisResult {
+  methodology: MethodologyAnalysis;
+  confounders: ConfounderAnalysis;
+  implications: ImplicationAnalysis;
+  limitations: LimitationAnalysis;
+  timestamp: number;
 }

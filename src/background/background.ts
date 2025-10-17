@@ -1,5 +1,6 @@
-import { MessageType, ResearchPaper, ExplanationResult } from '../types/index.ts';
+import { MessageType, ResearchPaper, ExplanationResult, PaperAnalysisResult } from '../types/index.ts';
 import { aiService } from '../utils/aiService.ts';
+import { getPaperByUrl, getPaperChunks } from '../utils/dbService.ts';
 
 // Handle extension installation
 chrome.runtime.onInstalled.addListener(() => {
@@ -69,6 +70,52 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         const { title, abstract } = message.payload;
         const summaryResult = await aiService.generateSummary(title, abstract);
         sendResponse({ success: true, summary: summaryResult });
+        break;
+
+      case MessageType.ANALYZE_PAPER:
+        try {
+          const paperUrl = message.payload.url;
+
+          // Retrieve paper from IndexedDB
+          const storedPaper = await getPaperByUrl(paperUrl);
+
+          if (!storedPaper) {
+            sendResponse({
+              success: false,
+              error: 'Paper not found in storage. Please store the paper first.'
+            });
+            break;
+          }
+
+          console.log(`Analyzing paper: ${storedPaper.title}`);
+
+          // Get paper chunks for comprehensive analysis
+          const chunks = await getPaperChunks(storedPaper.id);
+
+          // Use fullText for analysis (more complete than abstract)
+          const paperContent = storedPaper.fullText || storedPaper.abstract;
+
+          // Run comprehensive analysis
+          const analysis: PaperAnalysisResult = await aiService.analyzePaper(paperContent);
+
+          // Store analysis result
+          await chrome.storage.local.set({
+            lastAnalysis: {
+              paper: storedPaper,
+              analysis,
+              timestamp: Date.now(),
+            },
+          });
+
+          console.log('✓ Paper analysis complete');
+          sendResponse({ success: true, analysis });
+        } catch (analysisError) {
+          console.error('Error analyzing paper:', analysisError);
+          sendResponse({
+            success: false,
+            error: `Analysis failed: ${String(analysisError)}`
+          });
+        }
         break;
 
       case MessageType.OPEN_SIDEPANEL:

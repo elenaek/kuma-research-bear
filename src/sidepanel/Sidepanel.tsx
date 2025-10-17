@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'preact/hooks';
-import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock } from 'lucide-preact';
-import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper } from '../types/index.ts';
+import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader } from 'lucide-preact';
+import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult } from '../types/index.ts';
 import { getPaperByUrl } from '../utils/dbService.ts';
 
 type ViewState = 'loading' | 'empty' | 'content';
-type TabType = 'summary' | 'explanation' | 'original';
+type TabType = 'summary' | 'explanation' | 'original' | 'analysis';
 
 interface ExplanationData {
   paper: ResearchPaper;
@@ -19,13 +19,15 @@ export function Sidepanel() {
   const [copied, setCopied] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [storedPaper, setStoredPaper] = useState<StoredPaper | null>(null);
+  const [analysis, setAnalysis] = useState<PaperAnalysisResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
     loadExplanation();
 
     // Listen for storage changes
     const listener = (changes: any, namespace: string) => {
-      if (namespace === 'local' && changes.lastExplanation) {
+      if (namespace === 'local' && (changes.lastExplanation || changes.lastAnalysis)) {
         loadExplanation();
       }
     };
@@ -39,7 +41,7 @@ export function Sidepanel() {
 
   async function loadExplanation() {
     try {
-      const result = await chrome.storage.local.get(['lastExplanation']);
+      const result = await chrome.storage.local.get(['lastExplanation', 'lastAnalysis']);
 
       if (!result.lastExplanation) {
         setViewState('empty');
@@ -48,10 +50,21 @@ export function Sidepanel() {
 
       setData(result.lastExplanation);
 
+      // Load analysis if available
+      if (result.lastAnalysis) {
+        setAnalysis(result.lastAnalysis.analysis);
+      }
+
       // Check if paper is stored in IndexedDB
       try {
         const stored = await getPaperByUrl(result.lastExplanation.paper.url);
         setStoredPaper(stored);
+
+        // Auto-trigger analysis if paper is stored and no analysis exists yet
+        if (stored && (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.lastExplanation.paper.url)) {
+          console.log('Paper is stored, triggering automatic analysis...');
+          triggerAnalysis(result.lastExplanation.paper.url);
+        }
       } catch (dbError) {
         console.warn('Could not check paper storage status:', dbError);
       }
@@ -60,6 +73,29 @@ export function Sidepanel() {
     } catch (error) {
       console.error('Error loading explanation:', error);
       setViewState('empty');
+    }
+  }
+
+  async function triggerAnalysis(paperUrl: string) {
+    try {
+      setIsAnalyzing(true);
+      console.log('Starting paper analysis for:', paperUrl);
+
+      const response = await chrome.runtime.sendMessage({
+        type: 'ANALYZE_PAPER',
+        payload: { url: paperUrl },
+      });
+
+      if (response.success) {
+        console.log('✓ Paper analysis completed successfully');
+        // Analysis will be loaded automatically via storage change listener
+      } else {
+        console.error('Analysis failed:', response.error);
+      }
+    } catch (error) {
+      console.error('Error triggering analysis:', error);
+    } finally {
+      setIsAnalyzing(false);
     }
   }
 
@@ -326,6 +362,18 @@ Source: ${paper.url}
               Explanation
             </button>
             <button
+              onClick={() => setActiveTab('analysis')}
+              class={`px-4 py-2 font-medium transition-colors border-b-2 flex items-center gap-2 ${
+                activeTab === 'analysis'
+                  ? 'border-bear-600 text-bear-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-800'
+              } ${!analysis && !isAnalyzing ? 'opacity-50' : ''}`}
+              title={isAnalyzing ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : ''}
+            >
+              <span>Analysis</span>
+              {isAnalyzing && <Loader size={14} class="animate-spin" />}
+            </button>
+            <button
               onClick={() => setActiveTab('original')}
               class={`px-4 py-2 font-medium transition-colors border-b-2 ${
                 activeTab === 'original'
@@ -367,6 +415,215 @@ Source: ${paper.url}
                   {data?.explanation.explanation}
                 </div>
               </div>
+            )}
+
+            {activeTab === 'analysis' && (
+              <>
+                {/* Loading State */}
+                {isAnalyzing && !analysis && (
+                  <div class="card">
+                    <div class="flex flex-col items-center justify-center gap-4 py-12">
+                      <Loader size={32} class="animate-spin text-bear-600" />
+                      <div class="text-center">
+                        <p class="text-base font-medium text-gray-900 mb-2">Analyzing Paper...</p>
+                        <p class="text-sm text-gray-600">
+                          Evaluating methodology, identifying confounders, analyzing implications, and assessing limitations.
+                        </p>
+                        <p class="text-xs text-gray-500 mt-2">This may take 20-30 seconds</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Analysis Results */}
+                {analysis && (
+                  <>
+                    {/* Methodology Analysis */}
+                    <div class="card">
+                  <div class="flex items-center gap-2 mb-3">
+                    <FileText size={18} class="text-bear-600" />
+                    <h3 class="text-base font-semibold text-gray-900">Methodology</h3>
+                  </div>
+
+                  <div class="space-y-3">
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Study Design</p>
+                      <p class="text-sm text-gray-600">{analysis.methodology.studyDesign}</p>
+                    </div>
+
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Data Collection</p>
+                      <p class="text-sm text-gray-600">{analysis.methodology.dataCollection}</p>
+                    </div>
+
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Sample Size</p>
+                      <p class="text-sm text-gray-600">{analysis.methodology.sampleSize}</p>
+                    </div>
+
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Statistical Methods</p>
+                      <p class="text-sm text-gray-600">{analysis.methodology.statisticalMethods}</p>
+                    </div>
+
+                    <div>
+                      <p class="text-sm font-medium text-green-700 mb-1 flex items-center gap-1">
+                        <CheckCircle size={14} />
+                        Strengths
+                      </p>
+                      <ul class="space-y-1">
+                        {analysis.methodology.strengths.map((strength, idx) => (
+                          <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                            <span class="text-green-600">•</span>
+                            <span>{strength}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <p class="text-sm font-medium text-yellow-700 mb-1 flex items-center gap-1">
+                        <AlertCircle size={14} />
+                        Concerns
+                      </p>
+                      <ul class="space-y-1">
+                        {analysis.methodology.concerns.map((concern, idx) => (
+                          <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                            <span class="text-yellow-600">•</span>
+                            <span>{concern}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Confounders & Biases */}
+                <div class="card">
+                  <div class="flex items-center gap-2 mb-3">
+                    <AlertTriangle size={18} class="text-orange-600" />
+                    <h3 class="text-base font-semibold text-gray-900">Confounders & Biases</h3>
+                  </div>
+
+                  <div class="space-y-3">
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Identified Confounders</p>
+                      <ul class="space-y-1">
+                        {analysis.confounders.identified.map((item, idx) => (
+                          <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                            <span class="text-orange-600">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Potential Biases</p>
+                      <ul class="space-y-1">
+                        {analysis.confounders.biases.map((bias, idx) => (
+                          <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                            <span class="text-red-600">•</span>
+                            <span>{bias}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Control Measures</p>
+                      <ul class="space-y-1">
+                        {analysis.confounders.controlMeasures.map((measure, idx) => (
+                          <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                            <span class="text-blue-600">•</span>
+                            <span>{measure}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Implications */}
+                <div class="card">
+                  <div class="flex items-center gap-2 mb-3">
+                    <TrendingUp size={18} class="text-blue-600" />
+                    <h3 class="text-base font-semibold text-gray-900">Implications</h3>
+                  </div>
+
+                  <div class="space-y-3">
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Significance</p>
+                      <p class="text-sm text-gray-600">{analysis.implications.significance}</p>
+                    </div>
+
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Real-World Applications</p>
+                      <ul class="space-y-1">
+                        {analysis.implications.realWorldApplications.map((app, idx) => (
+                          <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                            <span class="text-blue-600">•</span>
+                            <span>{app}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Future Research Directions</p>
+                      <ul class="space-y-1">
+                        {analysis.implications.futureResearch.map((research, idx) => (
+                          <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                            <span class="text-purple-600">•</span>
+                            <span>{research}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Limitations */}
+                <div class="card">
+                  <div class="flex items-center gap-2 mb-3">
+                    <AlertCircle size={18} class="text-red-600" />
+                    <h3 class="text-base font-semibold text-gray-900">Limitations</h3>
+                  </div>
+
+                  <div class="space-y-3">
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Study Limitations</p>
+                      <ul class="space-y-1">
+                        {analysis.limitations.studyLimitations.map((limitation, idx) => (
+                          <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                            <span class="text-red-600">•</span>
+                            <span>{limitation}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Generalizability</p>
+                      <p class="text-sm text-gray-600">{analysis.limitations.generalizability}</p>
+                    </div>
+
+                    <div>
+                      <p class="text-sm font-medium text-gray-700 mb-1">Recommendations</p>
+                      <ul class="space-y-1">
+                        {analysis.limitations.recommendations.map((rec, idx) => (
+                          <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                            <span class="text-green-600">•</span>
+                            <span>{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+              </>
             )}
 
             {activeTab === 'original' && (
