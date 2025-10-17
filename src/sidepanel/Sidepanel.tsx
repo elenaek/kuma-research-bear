@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
-import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download } from 'lucide-preact';
-import { ResearchPaper, ExplanationResult, SummaryResult } from '../types/index.ts';
+import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock } from 'lucide-preact';
+import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper } from '../types/index.ts';
+import { getPaperByUrl } from '../utils/dbService.ts';
 
 type ViewState = 'loading' | 'empty' | 'content';
 type TabType = 'summary' | 'explanation' | 'original';
@@ -17,6 +18,7 @@ export function Sidepanel() {
   const [data, setData] = useState<ExplanationData | null>(null);
   const [copied, setCopied] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [storedPaper, setStoredPaper] = useState<StoredPaper | null>(null);
 
   useEffect(() => {
     loadExplanation();
@@ -45,6 +47,15 @@ export function Sidepanel() {
       }
 
       setData(result.lastExplanation);
+
+      // Check if paper is stored in IndexedDB
+      try {
+        const stored = await getPaperByUrl(result.lastExplanation.paper.url);
+        setStoredPaper(stored);
+      } catch (dbError) {
+        console.warn('Could not check paper storage status:', dbError);
+      }
+
       setViewState('content');
     } catch (error) {
       console.error('Error loading explanation:', error);
@@ -156,84 +167,112 @@ Source: ${paper.url}
         <div class="max-w-4xl mx-auto p-6">
           {/* Paper Info - Enhanced Title Card */}
           <div class="card mb-6">
-            {/* Title and Source Badge */}
+            {/* Title and Badges */}
             <div class="flex items-start justify-between gap-4 mb-3">
               <h2 class="text-lg font-semibold text-gray-900 flex-1">{data?.paper.title}</h2>
-              <span class="px-2 py-1 text-xs font-medium rounded-full bg-bear-100 text-bear-700 capitalize shrink-0">
-                {data?.paper.source.replace('-', ' ')}
-              </span>
+              <div class="flex gap-2 shrink-0">
+                <span class="px-2 py-1 text-xs font-medium rounded-full bg-bear-100 text-bear-700 capitalize">
+                  {data?.paper.source.replace('-', ' ')}
+                </span>
+                {storedPaper && (
+                  <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 flex items-center gap-1">
+                    <Database size={12} />
+                    Stored
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Authors */}
             <p class="text-sm text-gray-600 mb-4">{data?.paper.authors.join(', ')}</p>
 
             {/* Metadata Grid */}
-            {data?.paper.metadata && (
+            {(data?.paper.metadata || storedPaper) && (
               <div class="grid grid-cols-1 gap-2 mb-4 pb-4 border-b border-gray-200">
-                {/* Publication Date */}
-                {data.paper.metadata.publishDate && (
-                  <div class="flex items-center gap-2 text-sm text-gray-700">
-                    <Calendar size={14} class="text-gray-400" />
-                    <span class="font-medium">Published:</span>
-                    <span>{new Date(data.paper.metadata.publishDate).toLocaleDateString()}</span>
-                  </div>
+                {/* Storage Info */}
+                {storedPaper && (
+                  <>
+                    <div class="flex items-center gap-2 text-sm text-gray-700">
+                      <Clock size={14} class="text-gray-400" />
+                      <span class="font-medium">Stored:</span>
+                      <span>{new Date(storedPaper.storedAt).toLocaleString()}</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm text-gray-700">
+                      <Database size={14} class="text-gray-400" />
+                      <span class="font-medium">Chunks:</span>
+                      <span>{storedPaper.chunkCount} content chunks for Q&A</span>
+                    </div>
+                  </>
                 )}
 
-                {/* Journal/Venue */}
-                {(data.paper.metadata.journal || data.paper.metadata.venue) && (
-                  <div class="flex items-center gap-2 text-sm text-gray-700">
-                    <BookOpen size={14} class="text-gray-400" />
-                    <span class="font-medium">Published in:</span>
-                    <span>{data.paper.metadata.journal || data.paper.metadata.venue}</span>
-                  </div>
-                )}
+                {data?.paper.metadata && (
+                  <>
+                    {/* Publication Date */}
+                    {data.paper.metadata.publishDate && (
+                      <div class="flex items-center gap-2 text-sm text-gray-700">
+                        <Calendar size={14} class="text-gray-400" />
+                        <span class="font-medium">Published:</span>
+                        <span>{new Date(data.paper.metadata.publishDate).toLocaleDateString()}</span>
+                      </div>
+                    )}
 
-                {/* DOI */}
-                {data.paper.metadata.doi && (
-                  <div class="flex items-center gap-2 text-sm text-gray-700">
-                    <Hash size={14} class="text-gray-400" />
-                    <span class="font-medium">DOI:</span>
-                    <a
-                      href={`https://doi.org/${data.paper.metadata.doi}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="text-bear-600 hover:text-bear-700 hover:underline"
-                    >
-                      {data.paper.metadata.doi}
-                    </a>
-                  </div>
-                )}
+                    {/* Journal/Venue */}
+                    {(data.paper.metadata.journal || data.paper.metadata.venue) && (
+                      <div class="flex items-center gap-2 text-sm text-gray-700">
+                        <BookOpen size={14} class="text-gray-400" />
+                        <span class="font-medium">Published in:</span>
+                        <span>{data.paper.metadata.journal || data.paper.metadata.venue}</span>
+                      </div>
+                    )}
 
-                {/* arXiv ID */}
-                {data.paper.metadata.arxivId && (
-                  <div class="flex items-center gap-2 text-sm text-gray-700">
-                    <Hash size={14} class="text-gray-400" />
-                    <span class="font-medium">arXiv:</span>
-                    <a
-                      href={`https://arxiv.org/abs/${data.paper.metadata.arxivId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="text-bear-600 hover:text-bear-700 hover:underline"
-                    >
-                      {data.paper.metadata.arxivId}
-                    </a>
-                  </div>
-                )}
+                    {/* DOI */}
+                    {data.paper.metadata.doi && (
+                      <div class="flex items-center gap-2 text-sm text-gray-700">
+                        <Hash size={14} class="text-gray-400" />
+                        <span class="font-medium">DOI:</span>
+                        <a
+                          href={`https://doi.org/${data.paper.metadata.doi}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="text-bear-600 hover:text-bear-700 hover:underline"
+                        >
+                          {data.paper.metadata.doi}
+                        </a>
+                      </div>
+                    )}
 
-                {/* PubMed IDs */}
-                {data.paper.metadata.pmid && (
-                  <div class="flex items-center gap-2 text-sm text-gray-700">
-                    <Hash size={14} class="text-gray-400" />
-                    <span class="font-medium">PMID:</span>
-                    <a
-                      href={`https://pubmed.ncbi.nlm.nih.gov/${data.paper.metadata.pmid}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="text-bear-600 hover:text-bear-700 hover:underline"
-                    >
-                      {data.paper.metadata.pmid}
-                    </a>
-                  </div>
+                    {/* arXiv ID */}
+                    {data.paper.metadata.arxivId && (
+                      <div class="flex items-center gap-2 text-sm text-gray-700">
+                        <Hash size={14} class="text-gray-400" />
+                        <span class="font-medium">arXiv:</span>
+                        <a
+                          href={`https://arxiv.org/abs/${data.paper.metadata.arxivId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="text-bear-600 hover:text-bear-700 hover:underline"
+                        >
+                          {data.paper.metadata.arxivId}
+                        </a>
+                      </div>
+                    )}
+
+                    {/* PubMed IDs */}
+                    {data.paper.metadata.pmid && (
+                      <div class="flex items-center gap-2 text-sm text-gray-700">
+                        <Hash size={14} class="text-gray-400" />
+                        <span class="font-medium">PMID:</span>
+                        <a
+                          href={`https://pubmed.ncbi.nlm.nih.gov/${data.paper.metadata.pmid}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="text-bear-600 hover:text-bear-700 hover:underline"
+                        >
+                          {data.paper.metadata.pmid}
+                        </a>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

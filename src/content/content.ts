@@ -1,5 +1,6 @@
 import { MessageType, ResearchPaper } from '../types/index.ts';
 import { detectPaper, detectPaperWithAI } from '../utils/paperDetectors.ts';
+import { storePaper, isPaperStored } from '../utils/dbService.ts';
 
 let currentPaper: ResearchPaper | null = null;
 
@@ -12,6 +13,21 @@ async function init() {
       console.log('Research paper detected:', currentPaper.title);
       // Store in chrome storage for access by other components
       await chrome.storage.local.set({ currentPaper });
+
+      // Store in IndexedDB if not already stored
+      try {
+        const alreadyStored = await isPaperStored(currentPaper.url);
+        if (!alreadyStored) {
+          console.log('Storing paper in IndexedDB...');
+          await storePaper(currentPaper);
+          console.log('✓ Paper stored locally for offline access');
+        } else {
+          console.log('Paper already stored in IndexedDB');
+        }
+      } catch (dbError) {
+        console.warn('Failed to store paper in IndexedDB:', dbError);
+        // Don't fail the whole detection if storage fails
+      }
     } else {
       console.log('No research paper detected on this page');
     }
@@ -29,6 +45,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         case MessageType.DETECT_PAPER:
           // Manual detection uses AI-first approach
           currentPaper = await detectPaperWithAI();
+
+          // Store in IndexedDB if detected
+          if (currentPaper) {
+            try {
+              const alreadyStored = await isPaperStored(currentPaper.url);
+              if (!alreadyStored) {
+                console.log('Storing paper in IndexedDB...');
+                await storePaper(currentPaper);
+                console.log('✓ Paper stored locally for offline access');
+              }
+            } catch (dbError) {
+              console.warn('Failed to store paper in IndexedDB:', dbError);
+            }
+          }
+
           sendResponse({ paper: currentPaper });
           break;
 
@@ -83,6 +114,17 @@ const observer = new MutationObserver((mutations) => {
         if (currentPaper) {
           await chrome.storage.local.set({ currentPaper });
           console.log('Paper detected after page mutation:', currentPaper.title);
+
+          // Store in IndexedDB
+          try {
+            const alreadyStored = await isPaperStored(currentPaper.url);
+            if (!alreadyStored) {
+              await storePaper(currentPaper);
+              console.log('✓ Paper stored locally');
+            }
+          } catch (dbError) {
+            console.warn('Failed to store paper in IndexedDB:', dbError);
+          }
         }
       } catch (error) {
         console.error('Error detecting paper after mutation:', error);

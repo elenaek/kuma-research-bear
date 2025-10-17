@@ -8,6 +8,11 @@ export enum MessageType {
   OPEN_SIDEPANEL = 'OPEN_SIDEPANEL',
   AI_STATUS = 'AI_STATUS',
   INITIALIZE_AI = 'INITIALIZE_AI',
+  STORE_PAPER = 'STORE_PAPER',
+  GET_STORED_PAPER = 'GET_STORED_PAPER',
+  GET_ALL_PAPERS = 'GET_ALL_PAPERS',
+  DELETE_PAPER = 'DELETE_PAPER',
+  CHECK_PAPER_STORED = 'CHECK_PAPER_STORED',
 }
 
 export interface Message {
@@ -123,4 +128,25 @@ export interface SavedExplanation {
   paperId: string;
   paperTitle: string;
   explanation: ExplanationResult;
+}
+
+// IndexedDB Storage types
+export interface StoredPaper extends ResearchPaper {
+  id: string; // URL hash or unique ID
+  fullText: string; // Complete extracted text
+  chunkCount: number;
+  storedAt: number;
+  lastAccessedAt: number;
+}
+
+export interface ContentChunk {
+  id: string; // chunk_paperID_index
+  paperId: string;
+  content: string;
+  index: number; // Position in paper
+  section?: string; // Section heading if available
+  startChar: number;
+  endChar: number;
+  tokenCount: number;
+  embedding?: number[]; // Future: for semantic search
 }

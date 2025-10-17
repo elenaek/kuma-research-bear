@@ -173,11 +173,12 @@ function isValidPaper(paper: ResearchPaper | null): boolean {
 }
 
 /**
- * Main detector function - uses AI-powered extraction
- * Falls back to site-specific detectors if AI fails
+ * Main detector function - fast detection without AI
+ * Used for automatic detection on page load/mutations
+ * Only uses schema.org and site-specific detectors
  */
 export async function detectPaper(): Promise<ResearchPaper | null> {
-  console.log('Starting paper detection...');
+  console.log('Starting automatic paper detection (no AI)...');
 
   // Strategy 1: Try schema.org structured data (fast and reliable)
   const schemaPaper = detectSchemaOrgPaper();
@@ -201,39 +202,9 @@ export async function detectPaper(): Promise<ResearchPaper | null> {
     }
   }
 
-  // Strategy 3: AI-powered extraction (works everywhere, but slower)
-  try {
-    console.log('Attempting AI-powered extraction...');
-
-    // Check if we're on a PDF page
-    if (isPDFPage()) {
-      console.log('PDF detected, but PDF extraction not yet implemented');
-      // TODO: Implement PDF extraction in Phase 6
-      return null;
-    }
-
-    // Extract page text
-    const extracted = extractPageText();
-
-    if (extracted.text.length < 100) {
-      console.log('Not enough content for AI extraction');
-      return null;
-    }
-
-    // Use AI to extract metadata
-    const aiPaper = await aiService.extractPaperMetadata(extracted.text);
-
-    if (isValidPaper(aiPaper)) {
-      console.log('Paper detected via AI extraction:', aiPaper!.title);
-      return aiPaper;
-    }
-
-    console.log('AI extraction failed validation');
-    return null;
-  } catch (error) {
-    console.error('Error in AI extraction:', error);
-    return null;
-  }
+  // No paper detected with non-AI methods
+  console.log('No paper detected automatically. Use "Detect Paper" button to try AI extraction.');
+  return null;
 }
 
 /**

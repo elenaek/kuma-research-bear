@@ -9,6 +9,8 @@ export function Popup() {
   const [paper, setPaper] = useState<ResearchPaper | null>(null);
   const [isExplaining, setIsExplaining] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [detectionStatus, setDetectionStatus] = useState<string | null>(null);
 
   // Check AI availability on mount
   useEffect(() => {
@@ -94,12 +96,20 @@ export function Popup() {
 
   async function handleDetectPaper() {
     try {
+      setIsDetecting(true);
+      setDetectionStatus('Checking for paper...');
+
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
       if (!tab.id) {
-        alert('No active tab found');
+        setDetectionStatus('❌ No active tab found');
+        setTimeout(() => setDetectionStatus(null), 3000);
+        setIsDetecting(false);
         return;
       }
+
+      // Update status for AI extraction phase
+      setDetectionStatus('🤖 Using AI to detect paper...');
 
       const response = await chrome.tabs.sendMessage(tab.id, {
         type: MessageType.DETECT_PAPER,
@@ -109,12 +119,21 @@ export function Popup() {
         setPaper(response.paper);
         // Store current paper in storage
         await chrome.storage.local.set({ currentPaper: response.paper });
+
+        // Success message with source
+        const source = response.paper.source.replace('-', ' ');
+        setDetectionStatus(`✅ Paper detected (${source})!`);
+        setTimeout(() => setDetectionStatus(null), 4000);
       } else {
-        alert('No research paper detected on this page');
+        setDetectionStatus('❌ No paper detected on this page');
+        setTimeout(() => setDetectionStatus(null), 4000);
       }
     } catch (error) {
       console.error('Paper detection failed:', error);
-      alert('Failed to detect paper. Make sure you\'re on a research paper page.');
+      setDetectionStatus('❌ Detection failed - check console');
+      setTimeout(() => setDetectionStatus(null), 4000);
+    } finally {
+      setIsDetecting(false);
     }
   }
 
@@ -226,16 +245,35 @@ export function Popup() {
           </div>
         )}
 
+        {/* Detection Status */}
+        {detectionStatus && (
+          <div class="card mb-4 bg-indigo-50 border-indigo-200">
+            <div class="flex items-center gap-2">
+              {isDetecting && <Loader size={14} class="animate-spin text-indigo-600" />}
+              <p class="text-sm font-medium text-indigo-900">{detectionStatus}</p>
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
         <div class="space-y-2">
           <button
             onClick={handleDetectPaper}
-            disabled={aiStatus !== 'ready'}
+            disabled={aiStatus !== 'ready' || isDetecting}
             class="btn btn-primary w-full"
-            title={aiStatus !== 'ready' ? 'Initialize AI first' : ''}
+            title={aiStatus !== 'ready' ? 'Initialize AI first' : isDetecting ? 'Detection in progress...' : ''}
           >
-            <Search size={16} />
-            Detect Paper
+            {isDetecting ? (
+              <>
+                <Loader size={16} class="animate-spin" />
+                Detecting...
+              </>
+            ) : (
+              <>
+                <Search size={16} />
+                Detect Paper
+              </>
+            )}
           </button>
 
           <button

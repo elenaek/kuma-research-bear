@@ -195,6 +195,7 @@ export function extractSection(sectionName: string): string | null {
 /**
  * Chunk content into manageable pieces with overlap
  * Uses sliding window approach for better context preservation
+ * Enhanced to preserve section context from headings
  */
 export function chunkContent(
   content: string,
@@ -215,15 +216,40 @@ export function chunkContent(
     ];
   }
 
+  // Extract headings from the document for section context
+  const headingMap = new Map<number, string>();
+  const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+
+  headings.forEach(heading => {
+    const text = heading.textContent?.trim();
+    if (text) {
+      // Find approximate position in content
+      const position = content.indexOf(text);
+      if (position !== -1) {
+        headingMap.set(position, text);
+      }
+    }
+  });
+
   // Split by sentences to avoid breaking mid-sentence
   const sentences = content.match(/[^.!?]+[.!?]+/g) || [content];
 
   let currentChunk = '';
   let currentStartIndex = 0;
   let chunkIndex = 0;
+  let currentHeading: string | undefined;
 
   for (let i = 0; i < sentences.length; i++) {
     const sentence = sentences[i];
+
+    // Check if we're at a new section
+    const sentenceStart = currentStartIndex + currentChunk.length;
+    for (const [pos, heading] of headingMap.entries()) {
+      if (Math.abs(pos - sentenceStart) < 50) {
+        currentHeading = heading;
+        break;
+      }
+    }
 
     // If adding this sentence would exceed chunk size, save current chunk
     if (currentChunk.length + sentence.length > chunkSize && currentChunk.length > 0) {
@@ -232,6 +258,7 @@ export function chunkContent(
         content: currentChunk.trim(),
         startIndex: currentStartIndex,
         endIndex: currentStartIndex + currentChunk.length,
+        heading: currentHeading,
       });
 
       chunkIndex++;
@@ -264,6 +291,7 @@ export function chunkContent(
       content: currentChunk.trim(),
       startIndex: currentStartIndex,
       endIndex: currentStartIndex + currentChunk.length,
+      heading: currentHeading,
     });
   }
 
