@@ -199,7 +199,7 @@ export function Popup() {
           </div>
 
           <h1 class="text-2xl font-bold text-gray-800">Kuma the Research Bear</h1>
-          <p class="text-sm text-gray-600">AI-Powered Paper Explainer</p>
+          <p class="text-sm text-gray-600 pt-2 font-light">AI-Powered Bear that helps you understand research papers</p>
         </header>
 
         {/* AI Status */}
@@ -314,12 +314,12 @@ export function Popup() {
         </div>
 
         {/* Settings */}
-        <div class="mt-4 flex justify-center">
+        {/* <div class="mt-4 flex justify-center">
           <button class="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 hover:cursor-pointer">
             <Settings size={14} />
             Settings
           </button>
-        </div>
+        </div> */}
       </div>
     </div>
   );

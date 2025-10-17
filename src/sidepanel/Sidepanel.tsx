@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
-import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader } from 'lucide-preact';
+import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader, PawPrint } from 'lucide-preact';
 import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, MessageType } from '../types/index.ts';
 import { MarkdownRenderer } from '../components/MarkdownRenderer.tsx';
 
@@ -412,7 +412,7 @@ Source: ${paper.url}
         <header class="bg-white border-b border-gray-200 px-6 py-4">
           <div class="flex items-center justify-between">
             <div>
-              <h1 class="text-xl font-bold text-gray-800">Kuma the Research Bear</h1>
+              <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2"><PawPrint size={20} class="text-gray-400" /> Kuma the Research Bear</h1>
               <p class="text-sm text-gray-600">
                 {isCheckingStorage ? 'Checking paper storage...' : 'Paper stored and ready for analysis'}
               </p>
@@ -502,7 +502,7 @@ Source: ${paper.url}
                   <div>
                     <p class="font-medium text-gray-900 text-sm mb-1">Q&A System</p>
                     <p class="text-xs text-gray-600">
-                      Ask questions and get AI-powered answers from {storedPaper?.chunkCount} content chunks
+                      Ask Kuma questions and get AI-powered answers from {storedPaper?.chunkCount} content chunks
                     </p>
                   </div>
                 </div>
@@ -677,8 +677,8 @@ Source: ${paper.url}
       <header class="bg-white border-b border-gray-200 px-6 py-4">
         <div class="flex items-center justify-between">
           <div>
-            <h1 class="text-xl font-bold text-gray-800">Kuma the Research Bear</h1>
-            <p class="text-sm text-gray-600">Kuma the Research Bear - Paper Explanations</p>
+            <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2"><PawPrint size={20} class="text-gray-400" /> Kuma</h1>
+            <p class="text-sm text-gray-600">A bear that helps you understand research papers </p>
           </div>
           <button
             onClick={() => setShowDebug(!showDebug)}
