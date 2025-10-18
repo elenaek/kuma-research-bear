@@ -1,3 +1,5 @@
+import { JSONSchema } from "../utils/typeToSchema";
+
 // Message types for communication between extension components
 export enum MessageType {
   DETECT_PAPER = 'DETECT_PAPER',
@@ -111,7 +113,7 @@ export interface AISessionOptions {
 }
 
 export interface AILanguageModelSession {
-  prompt: (input: string) => Promise<string>;
+  prompt: (input: string, options?: { responseConstraint?: JSONSchema }) => Promise<string>;
   promptStreaming: (input: string) => ReadableStream;
   destroy: () => void;
 }
@@ -166,6 +168,7 @@ export interface ContentChunk {
 
 // Paper Analysis types
 export interface MethodologyAnalysis {
+  studyType: string;
   studyDesign: string;
   dataCollection: string;
   sampleSize: string;
@@ -188,8 +191,7 @@ export interface ImplicationAnalysis {
 
 export interface LimitationAnalysis {
   studyLimitations: string[];
-  generaliz ability: string;
-  recommendations: string[];
+  generalizability: string;
 }
 
 export interface PaperAnalysisResult {

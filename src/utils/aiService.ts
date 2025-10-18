@@ -1,4 +1,24 @@
-import { AICapabilities, AILanguageModelSession, AISessionOptions, ExplanationResult, SummaryResult, AIAvailability, PaperAnalysisResult, MethodologyAnalysis, ConfounderAnalysis, ImplicationAnalysis, LimitationAnalysis, QuestionAnswer } from '../types/index.ts';
+import { 
+  AICapabilities, 
+  AILanguageModelSession, 
+  AISessionOptions, 
+  ExplanationResult, 
+  SummaryResult, 
+  AIAvailability, 
+  PaperAnalysisResult, 
+  MethodologyAnalysis, 
+  ConfounderAnalysis, 
+  ImplicationAnalysis, 
+  LimitationAnalysis, 
+  QuestionAnswer 
+} from '../types/index.ts';
+import { JSONSchema } from '../utils/typeToSchema.ts';
+import { 
+  limitationAnalysisSchema, 
+  implicationAnalysisSchema, 
+  methodologyAnalysisSchema, 
+  confounderAnalysisSchema 
+} from '../schemas/analysisSchemas.ts';
 
 /**
  * Utility: Sleep for a specified duration
@@ -81,7 +101,7 @@ class ChromeAIService {
   /**
    * Prompt the AI model
    */
-  async prompt(input: string, systemPrompt?: string): Promise<string> {
+  async prompt(input: string, systemPrompt?: string, responseConstraint?: JSONSchema): Promise<string> {
     try {
       if (!this.session) {
         const created = await this.createSession({ systemPrompt });
@@ -94,7 +114,7 @@ class ChromeAIService {
         throw new Error('No active AI session');
       }
 
-      const response = await this.session.prompt(input);
+      const response = await this.session.prompt(input, { responseConstraint });
       return response;
     } catch (error) {
       console.error('Error prompting AI:', error);
@@ -541,36 +561,18 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
   async analyzeMethodology(paperContent: string): Promise<MethodologyAnalysis> {
     const systemPrompt = `You are a research methodology expert. Analyze research papers for their study design, methods, and rigor.`;
 
-    const input = `Analyze the methodology of this research paper and return ONLY valid JSON:
-{
-  "studyDesign": "detailed description of study design (experimental, observational, etc.) - Max 25 words",
-  "studyType": "type of study (e.g. randomized controlled trial, cohort study, case-control study, etc.)",
-  "dataCollection": "how data was collected",
-  "sampleSize": "sample size and population details",
-  "statisticalMethods": "statistical analyses used",
-  "strengths": ["strength 1", "strength 2"],
-  "concerns": ["concern 1", "concern 2"]
-}
-
+    const input = `Analyze the methodology of this research paper.
 Paper content:
-${paperContent.slice(0, 6000)}
-
-Return ONLY the JSON, no other text.`;
+${paperContent.slice(0, 6000)}`;
 
     try {
       this.destroySession();
-      const response = await this.prompt(input, systemPrompt);
-      let jsonStr = response.trim();
-
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-      }
-
-      const analysis = JSON.parse(jsonStr);
-      return analysis;
+      const response = await this.prompt(input, systemPrompt, methodologyAnalysisSchema);
+      return JSON.parse(response);
     } catch (error) {
       console.error('Methodology analysis failed:', error);
       return {
+        studyType: 'Unable to analyze',
         studyDesign: 'Unable to analyze',
         dataCollection: 'Unable to analyze',
         sampleSize: 'Unable to analyze',
@@ -588,29 +590,15 @@ Return ONLY the JSON, no other text.`;
   async identifyConfounders(paperContent: string): Promise<ConfounderAnalysis> {
     const systemPrompt = `You are a research quality expert specializing in identifying biases and confounding variables.`;
 
-    const input = `Identify potential confounders and biases in this research paper and return ONLY valid JSON:
-{
-  "identified": ["confounder 1", "confounder 2"],
-  "biases": ["bias 1", "bias 2"],
-  "controlMeasures": ["control 1", "control 2"]
-}
+    const input = `Identify potential confounders and biases in this research paper.
 
 Paper content:
-${paperContent.slice(0, 6000)}
-
-Return ONLY the JSON, no other text.`;
+${paperContent.slice(0, 6000)}`;
 
     try {
       this.destroySession();
-      const response = await this.prompt(input, systemPrompt);
-      let jsonStr = response.trim();
-
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-      }
-
-      const analysis = JSON.parse(jsonStr);
-      return analysis;
+      const response = await this.prompt(input, systemPrompt, confounderAnalysisSchema);
+      return JSON.parse(response);
     } catch (error) {
       console.error('Confounder analysis failed:', error);
       return {
@@ -628,29 +616,14 @@ Return ONLY the JSON, no other text.`;
   async analyzeImplications(paperContent: string): Promise<ImplicationAnalysis> {
     const systemPrompt = `You are a research impact expert who identifies practical applications and significance of research.`;
 
-    const input = `Analyze the implications of this research paper and return ONLY valid JSON:
-{
-  "realWorldApplications": ["application 1", "application 2"],
-  "significance": "overall significance of the research",
-  "futureResearch": ["future direction 1", "future direction 2"]
-}
-
+    const input = `Analyze the implications of this research paper.
 Paper content:
-${paperContent.slice(0, 6000)}
-
-Return ONLY the JSON, no other text.`;
+${paperContent.slice(0, 6000)}`;
 
     try {
       this.destroySession();
-      const response = await this.prompt(input, systemPrompt);
-      let jsonStr = response.trim();
-
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-      }
-
-      const analysis = JSON.parse(jsonStr);
-      return analysis;
+      const response = await this.prompt(input, systemPrompt, implicationAnalysisSchema);
+      return JSON.parse(response);
     } catch (error) {
       console.error('Implications analysis failed:', error);
       return {
@@ -668,35 +641,20 @@ Return ONLY the JSON, no other text.`;
   async identifyLimitations(paperContent: string): Promise<LimitationAnalysis> {
     const systemPrompt = `You are a research critique expert who identifies limitations and constraints in studies.`;
 
-    const input = `Identify the limitations of this research paper and return ONLY valid JSON:
-{
-  "studyLimitations": ["limitation 1", "limitation 2"],
-  "generalizability": "assessment of how generalizable findings are",
-  "recommendations": ["recommendation 1", "recommendation 2"]
-}
+    const input = `Identify the limitations of this research paper.
 
 Paper content:
-${paperContent.slice(0, 6000)}
-
-Return ONLY the JSON, no other text.`;
+${paperContent.slice(0, 6000)}`;
 
     try {
       this.destroySession();
-      const response = await this.prompt(input, systemPrompt);
-      let jsonStr = response.trim();
-
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-      }
-
-      const analysis = JSON.parse(jsonStr);
-      return analysis;
+      const response = await this.prompt(input, systemPrompt, limitationAnalysisSchema);
+      return JSON.parse(response);
     } catch (error) {
       console.error('Limitations analysis failed:', error);
       return {
         studyLimitations: ['Analysis failed'],
         generalizability: 'Could not analyze',
-        recommendations: ['Unable to determine'],
       };
     }
   }
