@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
-import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader, PawPrint } from 'lucide-preact';
+import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader, PawPrint, ChevronLeft, ChevronRight, Trash2, Settings, ChevronDown, ChevronUp } from 'lucide-preact';
 import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, MessageType } from '../types/index.ts';
 import { MarkdownRenderer } from '../components/MarkdownRenderer.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
@@ -21,6 +21,57 @@ async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
   }
 }
 
+// Helper function to get all papers from IndexedDB
+async function getAllPapers(): Promise<StoredPaper[]> {
+  console.log('[Sidepanel] Requesting all papers from background worker');
+  const response = await chrome.runtime.sendMessage({
+    type: MessageType.GET_ALL_PAPERS_FROM_DB,
+    payload: {},
+  });
+
+  if (response.success) {
+    console.log('[Sidepanel] Retrieved', response.papers.length, 'papers');
+    return response.papers || [];
+  } else {
+    console.error('[Sidepanel] Failed to get all papers:', response.error);
+    return [];
+  }
+}
+
+// Helper function to update Q&A history for a paper
+async function updatePaperQAHistory(paperId: string, qaHistory: QuestionAnswer[]): Promise<boolean> {
+  console.log('[Sidepanel] Updating Q&A history for paper:', paperId);
+  const response = await chrome.runtime.sendMessage({
+    type: MessageType.UPDATE_PAPER_QA_HISTORY,
+    payload: { paperId, qaHistory },
+  });
+
+  if (response.success) {
+    console.log('[Sidepanel] Q&A history updated successfully');
+    return true;
+  } else {
+    console.error('[Sidepanel] Failed to update Q&A history:', response.error);
+    return false;
+  }
+}
+
+// Helper function to delete a paper
+async function deletePaperFromDB(paperId: string): Promise<boolean> {
+  console.log('[Sidepanel] Deleting paper:', paperId);
+  const response = await chrome.runtime.sendMessage({
+    type: MessageType.DELETE_PAPER_FROM_DB,
+    payload: { paperId },
+  });
+
+  if (response.success) {
+    console.log('[Sidepanel] Paper deleted successfully');
+    return true;
+  } else {
+    console.error('[Sidepanel] Failed to delete paper:', response.error);
+    return false;
+  }
+}
+
 type ViewState = 'loading' | 'empty' | 'content' | 'stored-only';
 type TabType = 'summary' | 'explanation' | 'qa' | 'analysis' | 'original';
 
@@ -36,15 +87,29 @@ export function Sidepanel() {
   const [data, setData] = useState<ExplanationData | null>(null);
   const [copied, setCopied] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
-  const [storedPaper, setStoredPaper] = useState<StoredPaper | null>(null);
   const [analysis, setAnalysis] = useState<PaperAnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCheckingStorage, setIsCheckingStorage] = useState(false);
+  const [isExplainingInBackground, setIsExplainingInBackground] = useState(false);
+
+  // Multi-paper carousel state
+  const [allPapers, setAllPapers] = useState<StoredPaper[]>([]);
+  const [currentPaperIndex, setCurrentPaperIndex] = useState<number>(0);
+  const [storedPaper, setStoredPaper] = useState<StoredPaper | null>(null);
 
   // Q&A state
   const [question, setQuestion] = useState('');
   const [isAsking, setIsAsking] = useState(false);
   const [qaHistory, setQaHistory] = useState<QuestionAnswer[]>([]);
+
+  // Deletion state
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Delete all state
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [showManageSection, setShowManageSection] = useState(false);
 
   // Debug state
   const [showDebug, setShowDebug] = useState(false);
@@ -54,17 +119,49 @@ export function Sidepanel() {
     loadExplanation();
 
     // Listen for storage changes
-    const listener = (changes: any, namespace: string) => {
-      if (namespace === 'local' && (changes.lastExplanation || changes.lastAnalysis || changes.currentPaper)) {
-        console.log('Storage changed, reloading explanation...', changes);
-        loadExplanation();
+    const storageListener = (changes: any, namespace: string) => {
+      if (namespace === 'local') {
+        // Handle explanation progress flag
+        if (changes.isExplaining) {
+          const isExplaining = changes.isExplaining.newValue || false;
+          console.log('[Sidepanel] Explanation status changed:', isExplaining);
+          setIsExplainingInBackground(isExplaining);
+        }
+
+        // Reload on data changes
+        if (changes.lastExplanation || changes.lastAnalysis || changes.currentPaper) {
+          console.log('Storage changed, reloading explanation...', changes);
+          loadExplanation();
+        }
       }
     };
 
-    chrome.storage.onChanged.addListener(listener);
+    // Listen for operation state changes from background
+    const messageListener = (message: any) => {
+      if (message.type === MessageType.OPERATION_STATE_CHANGED) {
+        const state = message.payload?.state;
+        if (!state) return;
+
+        console.log('[Sidepanel] Operation state changed:', state);
+
+        // Update banner states
+        setIsExplainingInBackground(state.isExplaining);
+        setIsAnalyzing(state.isAnalyzing);
+
+        // If operation completed (all flags false), reload to get latest data
+        if (!state.isDetecting && !state.isExplaining && !state.isAnalyzing && !state.error) {
+          console.log('[Sidepanel] Operation completed, reloading...');
+          setTimeout(() => loadExplanation(), 500);
+        }
+      }
+    };
+
+    chrome.storage.onChanged.addListener(storageListener);
+    chrome.runtime.onMessage.addListener(messageListener);
 
     return () => {
-      chrome.storage.onChanged.removeListener(listener);
+      chrome.storage.onChanged.removeListener(storageListener);
+      chrome.runtime.onMessage.removeListener(messageListener);
     };
   }, []);
 
@@ -155,7 +252,40 @@ export function Sidepanel() {
 
   async function loadExplanation() {
     try {
-      const result = await chrome.storage.local.get(['lastExplanation', 'lastAnalysis', 'currentPaper']);
+      // Load all papers from IndexedDB
+      const papers = await getAllPapers();
+      setAllPapers(papers);
+      console.log('[Sidepanel] Loaded', papers.length, 'papers from IndexedDB');
+
+      // Query current operation state from background
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab?.id) {
+          const stateResponse = await chrome.runtime.sendMessage({
+            type: MessageType.GET_OPERATION_STATE,
+            payload: { tabId: tab.id },
+          });
+
+          if (stateResponse.success && stateResponse.state) {
+            const state = stateResponse.state;
+            console.log('[Sidepanel] Loaded operation state:', state);
+
+            // Update banner states based on current operation
+            setIsExplainingInBackground(state.isExplaining);
+            setIsAnalyzing(state.isAnalyzing);
+          }
+        }
+      } catch (stateError) {
+        console.warn('[Sidepanel] Could not load operation state:', stateError);
+      }
+
+      const result = await chrome.storage.local.get(['lastExplanation', 'lastAnalysis', 'currentPaper', 'isExplaining']);
+
+      // Also check old isExplaining flag for backwards compatibility
+      if (result.isExplaining) {
+        console.log('[Sidepanel] Explanation in progress (legacy flag)');
+        setIsExplainingInBackground(true);
+      }
 
       // Collect debug info
       await collectDebugInfo();
@@ -288,8 +418,14 @@ export function Sidepanel() {
       if (response.success) {
         console.log('✓ Question answered successfully');
         // Add to history
-        setQaHistory([response.answer, ...qaHistory]);
+        const newHistory = [response.answer, ...qaHistory];
+        setQaHistory(newHistory);
         setQuestion(''); // Clear input
+
+        // Save Q&A history to database
+        if (storedPaper) {
+          await updatePaperQAHistory(storedPaper.id, newHistory);
+        }
       } else {
         console.error('Question answering failed:', response.error);
         alert(`Failed to answer question: ${response.error}`);
@@ -374,6 +510,181 @@ Source: ${paper.url}
     await loadExplanation();
   }
 
+  // Paper navigation and management functions
+  async function switchToPaper(index: number) {
+    if (index < 0 || index >= allPapers.length) return;
+
+    console.log(`[Sidepanel] Switching to paper at index ${index}`);
+
+    // Save current paper's Q&A history before switching
+    if (storedPaper && qaHistory.length > 0) {
+      await updatePaperQAHistory(storedPaper.id, qaHistory);
+    }
+
+    // Switch to new paper
+    setCurrentPaperIndex(index);
+    const newPaper = allPapers[index];
+    setStoredPaper(newPaper);
+
+    // Load Q&A history for new paper
+    setQaHistory(newPaper.qaHistory || []);
+
+    // Try to load explanation and analysis for this paper
+    const result = await chrome.storage.local.get(['lastExplanation', 'lastAnalysis']);
+
+    if (result.lastExplanation?.paper?.url === newPaper.url) {
+      setData(result.lastExplanation);
+      setActiveTab('summary');
+      setViewState('content');
+    } else {
+      // No explanation for this paper, show stored-only view
+      setData({
+        paper: newPaper,
+        explanation: { originalText: '', explanation: '', timestamp: 0 },
+        summary: { summary: '', keyPoints: [], timestamp: 0 }
+      });
+      setActiveTab('analysis');
+      setViewState('stored-only');
+    }
+
+    if (result.lastAnalysis?.paper?.url === newPaper.url) {
+      setAnalysis(result.lastAnalysis.analysis);
+    } else {
+      setAnalysis(null);
+      // Trigger analysis for this paper
+      triggerAnalysis(newPaper.url);
+    }
+  }
+
+  async function handleDeletePaper() {
+    if (!storedPaper || !showDeleteConfirm) {
+      setShowDeleteConfirm(true);
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      const success = await deletePaperFromDB(storedPaper.id);
+
+      if (success) {
+        console.log('[Sidepanel] Paper deleted successfully');
+
+        // Remove from allPapers array
+        const newAllPapers = allPapers.filter((_, idx) => idx !== currentPaperIndex);
+        setAllPapers(newAllPapers);
+
+        // Handle switching to another paper
+        if (newAllPapers.length === 0) {
+          // No papers left
+          setStoredPaper(null);
+          setViewState('empty');
+          setQaHistory([]);
+        } else {
+          // Switch to previous paper, or first if we deleted the first
+          const newIndex = Math.max(0, currentPaperIndex - 1);
+          setCurrentPaperIndex(newIndex);
+          await switchToPaper(newIndex);
+        }
+      } else {
+        alert('Failed to delete paper. Please try again.');
+      }
+    } catch (error) {
+      console.error('[Sidepanel] Error deleting paper:', error);
+      alert('Failed to delete paper. Please try again.');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
+  function handlePrevPaper() {
+    if (currentPaperIndex > 0) {
+      switchToPaper(currentPaperIndex - 1);
+    }
+  }
+
+  function handleNextPaper() {
+    if (currentPaperIndex < allPapers.length - 1) {
+      switchToPaper(currentPaperIndex + 1);
+    }
+  }
+
+  async function handleDeleteAllPapers() {
+    if (!showDeleteAllConfirm) {
+      setShowDeleteAllConfirm(true);
+      return;
+    }
+
+    try {
+      setIsDeletingAll(true);
+      console.log('[Sidepanel] Deleting all papers:', allPapers.length);
+
+      // Delete all papers one by one
+      let successCount = 0;
+      for (const paper of allPapers) {
+        const success = await deletePaperFromDB(paper.id);
+        if (success) {
+          successCount++;
+        }
+      }
+
+      console.log(`[Sidepanel] Deleted ${successCount}/${allPapers.length} papers`);
+
+      // Clear all state
+      setAllPapers([]);
+      setCurrentPaperIndex(0);
+      setStoredPaper(null);
+      setData(null);
+      setAnalysis(null);
+      setQaHistory([]);
+      setViewState('empty');
+
+      // Clear Chrome storage
+      await chrome.storage.local.remove(['lastExplanation', 'lastAnalysis', 'currentPaper']);
+      console.log('[Sidepanel] Cleared Chrome storage');
+
+      if (successCount < allPapers.length) {
+        alert(`Deleted ${successCount} out of ${allPapers.length} papers. Some papers could not be deleted.`);
+      }
+    } catch (error) {
+      console.error('[Sidepanel] Error deleting all papers:', error);
+      alert('Failed to delete all papers. Please try again.');
+    } finally {
+      setIsDeletingAll(false);
+      setShowDeleteAllConfirm(false);
+      setShowManageSection(false);
+    }
+  }
+
+  async function handleClearAllStorage() {
+    if (!confirm('Clear all Chrome storage? This will remove any ghost papers and reset the sidepanel to a clean state.')) {
+      return;
+    }
+
+    try {
+      console.log('[Sidepanel] Clearing all Chrome storage...');
+
+      // Clear Chrome storage
+      await chrome.storage.local.remove(['lastExplanation', 'lastAnalysis', 'currentPaper']);
+      console.log('[Sidepanel] ✓ Chrome storage cleared');
+
+      // Reset all component state
+      setData(null);
+      setAnalysis(null);
+      setQaHistory([]);
+      setStoredPaper(null);
+      setViewState('empty');
+
+      // Reload to verify everything is cleared
+      await loadExplanation();
+
+      alert('Chrome storage cleared successfully. If you still see ghost papers, try reloading the extension.');
+    } catch (error) {
+      console.error('[Sidepanel] Error clearing storage:', error);
+      alert('Failed to clear storage. Please try again.');
+    }
+  }
+
   if (viewState === 'loading') {
     return (
       <div class="h-screen flex items-center justify-center bg-gray-50">
@@ -413,9 +724,9 @@ Source: ${paper.url}
         <header class="bg-white border-b border-gray-200 px-6 py-4">
           <div class="flex items-center justify-between">
             <div>
-              <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2"><PawPrint size={20} class="text-gray-400" /> Kuma the Research Bear</h1>
+              <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2"><PawPrint size={20} class="text-gray-400" /> Kuma</h1>
               <p class="text-sm text-gray-600">
-                {isCheckingStorage ? 'Checking paper storage...' : 'Paper stored and ready for analysis'}
+                {isCheckingStorage ? 'Kuma is checking paper storage...' : 'Kuma found the paper stored and is ready for analysis'}
               </p>
             </div>
             <button
@@ -432,6 +743,84 @@ Source: ${paper.url}
         {/* Content */}
         <div class="flex-1 overflow-auto">
           <div class="max-w-4xl mx-auto p-6">
+              {/* Paper Navigation Bar */}
+              {allPapers.length > 1 && (
+              <div class="card mb-4 bg-gray-50">
+                <div class="flex items-center justify-between gap-3">
+                  {/* Previous Button */}
+                  <button
+                    onClick={handlePrevPaper}
+                    disabled={currentPaperIndex === 0}
+                    class="btn btn-secondary px-3 py-2 disabled:opacity-30 hover:cursor-pointer"
+                    title="Previous Paper"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+
+                  {/* Dropdown Selector */}
+                  <select
+                    value={currentPaperIndex}
+                    onChange={(e) => switchToPaper(parseInt((e.target as HTMLSelectElement).value))}
+                    class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {allPapers.map((paper, idx) => (
+                      <option key={paper.id} value={idx}>
+                        {paper.title.substring(0, 60)}{paper.title.length > 60 ? '...' : ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Paper Counter */}
+                  <span class="text-sm text-gray-600 whitespace-nowrap">
+                    {currentPaperIndex + 1} of {allPapers.length}
+                  </span>
+
+                  {/* Next Button */}
+                  <button
+                    onClick={handleNextPaper}
+                    disabled={currentPaperIndex === allPapers.length - 1}
+                    class="btn btn-secondary px-3 py-2 disabled:opacity-30 hover:cursor-pointer"
+                    title="Next Paper"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+
+                  {/* Delete Button */}
+                  <button
+                    onClick={handleDeletePaper}
+                    disabled={isDeleting}
+                    class="btn btn-secondary px-3 py-2 text-red-600 hover:bg-red-50 hover:cursor-pointer"
+                    title="Delete Paper"
+                  >
+                    {isDeleting ? <Loader size={16} class="animate-spin" /> : <Trash2 size={16} />}
+                  </button>
+                </div>
+
+                {/* Delete Confirmation */}
+                {showDeleteConfirm && (
+                  <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p class="text-sm text-red-800 mb-2">
+                      Delete "{storedPaper?.title}"? This will remove all data including Q&A history.
+                    </p>
+                    <div class="flex gap-2">
+                      <button
+                        onClick={handleDeletePaper}
+                        class="btn btn-secondary text-red-600 hover:bg-red-100 px-3 py-1 text-sm"
+                      >
+                        Confirm Delete
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteConfirm(false)}
+                        class="btn btn-secondary px-3 py-1 text-sm"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Storage Checking Banner */}
             {isCheckingStorage && (
               <div class="card mb-4 bg-blue-50 border-blue-200">
@@ -440,6 +829,20 @@ Source: ${paper.url}
                   <div>
                     <p class="text-sm font-medium text-blue-900">Checking paper storage...</p>
                     <p class="text-xs text-blue-700">Retrying with exponential backoff (up to 5 attempts)</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Explanation In Progress Banner */}
+            {isExplainingInBackground && (
+              <div class="card mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300">
+                <div class="flex items-center gap-3">
+                  <Loader size={24} class="animate-spin text-blue-600" />
+                  <div class="flex-1">
+                    <p class="text-base font-semibold text-blue-900 mb-1">🐻 Kuma is explaining the paper...</p>
+                    <p class="text-sm text-blue-700">Generating summary and simplified explanation</p>
+                    <p class="text-xs text-blue-600 mt-1">This usually takes 10-20 seconds</p>
                   </div>
                 </div>
               </div>
@@ -482,6 +885,7 @@ Source: ${paper.url}
                 View Original Paper
               </a>
             </div>
+
 
             {/* Available Features */}
             <div class="card mb-6">
@@ -666,6 +1070,79 @@ Source: ${paper.url}
                 </div>
               )}
             </div>
+
+            {/* Manage Papers Section */}
+            {allPapers.length > 0 && (
+              <div class="card mt-6">
+                <button
+                  onClick={() => setShowManageSection(!showManageSection)}
+                  class="w-full flex items-center justify-between text-left hover:cursor-pointer"
+                >
+                  <div class="flex items-center gap-2">
+                    <Settings size={18} class="text-gray-600" />
+                    <h3 class="text-base font-semibold text-gray-900 hover:cursor-pointer">Manage Papers</h3>
+                  </div>
+                  {showManageSection ? <ChevronUp size={18} class="text-gray-600" /> : <ChevronDown size={18} class="text-gray-600" />}
+                </button>
+
+                {showManageSection && (
+                  <div class="mt-4 pt-4 border-t border-gray-200">
+                    <p class="text-sm text-gray-600 mb-3">
+                      {allPapers.length} paper{allPapers.length !== 1 ? 's' : ''} stored in your library
+                    </p>
+
+                    <div class="flex items-center gap-3">
+                      <button
+                        onClick={handleDeleteAllPapers}
+                        disabled={isDeletingAll}
+                        class="btn btn-secondary px-4 py-2 text-red-600 hover:bg-red-50 hover:cursor-pointer flex items-center gap-2"
+                        title="Delete all papers and their data"
+                      >
+                        {isDeletingAll ? (
+                          <>
+                            <Loader size={16} class="animate-spin" />
+                            <span>Deleting all...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 size={16} />
+                            <span>Delete All Papers</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Delete All Confirmation */}
+                    {showDeleteAllConfirm && (
+                      <div class="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                        <p class="text-sm font-semibold text-red-900 mb-2">
+                          Delete all {allPapers.length} papers?
+                        </p>
+                        <p class="text-xs text-red-800 mb-3">
+                          This will permanently delete all papers, chunks, and Q&A history. This action cannot be undone.
+                        </p>
+                        <div class="flex gap-2">
+                          <button
+                            onClick={handleDeleteAllPapers}
+                            disabled={isDeletingAll}
+                            class="btn btn-secondary text-red-600 hover:bg-red-100 px-4 py-2 text-sm hover:cursor-pointer"
+                          >
+                            {isDeletingAll ? 'Deleting...' : 'Delete All'}
+                          </button>
+                          <button
+                            onClick={() => setShowDeleteAllConfirm(false)}
+                            disabled={isDeletingAll}
+                            class="btn btn-secondary px-4 py-2 text-sm"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -698,12 +1175,21 @@ Source: ${paper.url}
             <div class="card mb-6 bg-gray-900 text-gray-100 font-mono text-xs">
               <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-bold text-yellow-400">🔍 Debug Information</h3>
-                <button
-                  onClick={collectDebugInfo}
-                  class="text-xs px-2 py-1 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-400"
-                >
-                  Refresh
-                </button>
+                <div class="flex gap-2">
+                  <button
+                    onClick={collectDebugInfo}
+                    class="text-xs px-2 py-1 bg-yellow-500 text-gray-900 rounded hover:bg-yellow-400"
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    onClick={handleClearAllStorage}
+                    class="text-xs px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                    title="Clear all Chrome storage (useful for removing ghost papers)"
+                  >
+                    Clear All Storage
+                  </button>
+                </div>
               </div>
 
               <div class="space-y-3">
@@ -744,6 +1230,98 @@ Source: ${paper.url}
                   {debugInfo.sidepanelState.hasStoredPaper && (
                     <p class="text-green-300">✅ Paper is properly loaded</p>
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Paper Navigation Bar */}
+          {allPapers.length > 1 && (
+            <div class="card mb-4 bg-gray-50">
+              <div class="flex items-center justify-between gap-3">
+                {/* Previous Button */}
+                <button
+                  onClick={handlePrevPaper}
+                  disabled={currentPaperIndex === 0}
+                  class="btn btn-secondary px-3 py-2 disabled:opacity-30 hover:cursor-pointer"
+                  title="Previous Paper"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+
+                {/* Dropdown Selector */}
+                <select
+                  value={currentPaperIndex}
+                  onChange={(e) => switchToPaper(parseInt((e.target as HTMLSelectElement).value))}
+                  class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {allPapers.map((paper, idx) => (
+                    <option key={paper.id} value={idx}>
+                      {paper.title.substring(0, 60)}{paper.title.length > 60 ? '...' : ''}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Paper Counter */}
+                <span class="text-sm text-gray-600 whitespace-nowrap">
+                  {currentPaperIndex + 1} of {allPapers.length}
+                </span>
+
+                {/* Next Button */}
+                <button
+                  onClick={handleNextPaper}
+                  disabled={currentPaperIndex === allPapers.length - 1}
+                  class="btn btn-secondary px-3 py-2 disabled:opacity-30 hover:cursor-pointer"
+                  title="Next Paper"
+                >
+                  <ChevronRight size={16} />
+                </button>
+
+                {/* Delete Button */}
+                <button
+                  onClick={handleDeletePaper}
+                  disabled={isDeleting}
+                  class="btn btn-secondary px-3 py-2 text-red-600 hover:bg-red-50 hover:cursor-pointer"
+                  title="Delete Paper"
+                >
+                  {isDeleting ? <Loader size={16} class="animate-spin" /> : <Trash2 size={16} />}
+                </button>
+              </div>
+
+              {/* Delete Confirmation */}
+              {showDeleteConfirm && (
+                <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p class="text-sm text-red-800 mb-2">
+                    Delete "{storedPaper?.title}"? This will remove all data including Q&A history.
+                  </p>
+                  <div class="flex gap-2">
+                    <button
+                      onClick={handleDeletePaper}
+                      class="btn btn-secondary text-red-600 hover:bg-red-100 px-3 py-1 text-sm hover:cursor-pointer"
+                    >
+                      Confirm Delete
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      class="btn btn-secondary px-3 py-1 text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Explanation In Progress Banner */}
+          {isExplainingInBackground && (
+            <div class="card mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300">
+              <div class="flex items-center gap-3">
+                <Loader size={24} class="animate-spin text-blue-600" />
+                <div class="flex-1">
+                  <p class="text-base font-semibold text-blue-900 mb-1">🐻 Kuma is explaining the paper...</p>
+                  <p class="text-sm text-blue-700">Generating summary and simplified explanation</p>
+                  <p class="text-xs text-blue-600 mt-1">This usually takes 10-20 seconds</p>
                 </div>
               </div>
             </div>
@@ -1351,6 +1929,79 @@ Source: ${paper.url}
               </div>
             )}
           </div>
+
+          {/* Manage Papers Section */}
+          {allPapers.length > 0 && (
+            <div class="card mt-6">
+              <button
+                onClick={() => setShowManageSection(!showManageSection)}
+                class="w-full flex items-center justify-between text-left hover:cursor-pointer"
+              >
+                <div class="flex items-center gap-2">
+                  <Settings size={18} class="text-gray-600" />
+                  <h3 class="text-base font-semibold text-gray-900 hover:cursor-pointer">Manage Papers</h3>
+                </div>
+                {showManageSection ? <ChevronUp size={18} class="text-gray-600" /> : <ChevronDown size={18} class="text-gray-600" />}
+              </button>
+
+              {showManageSection && (
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                  <p class="text-sm text-gray-600 mb-3">
+                    {allPapers.length} paper{allPapers.length !== 1 ? 's' : ''} stored in your library
+                  </p>
+
+                  <div class="flex items-center gap-3">
+                    <button
+                      onClick={handleDeleteAllPapers}
+                      disabled={isDeletingAll}
+                      class="btn btn-secondary px-4 py-2 text-red-600 hover:bg-red-50 hover:cursor-pointer flex items-center gap-2"
+                      title="Delete all papers and their data"
+                    >
+                      {isDeletingAll ? (
+                        <>
+                          <Loader size={16} class="animate-spin" />
+                          <span>Deleting all...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 size={16} />
+                          <span>Delete All Papers</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Delete All Confirmation */}
+                  {showDeleteAllConfirm && (
+                    <div class="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <p class="text-sm font-semibold text-red-900 mb-2">
+                        Delete all {allPapers.length} papers?
+                      </p>
+                      <p class="text-xs text-red-800 mb-3">
+                        This will permanently delete all papers, chunks, and Q&A history. This action cannot be undone.
+                      </p>
+                      <div class="flex gap-2">
+                        <button
+                          onClick={handleDeleteAllPapers}
+                          disabled={isDeletingAll}
+                          class="btn btn-secondary text-red-600 hover:bg-red-100 px-4 py-2 text-sm hover:cursor-pointer"
+                        >
+                          {isDeletingAll ? 'Deleting...' : 'Delete All'}
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteAllConfirm(false)}
+                          disabled={isDeletingAll}
+                          class="btn btn-secondary px-4 py-2 text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Actions */}
           <div class="flex gap-3 mt-6">

@@ -67,7 +67,7 @@ function generatePaperId(url: string): string {
 /**
  * Store a research paper with its full content
  */
-export async function storePaper(paper: ResearchPaper, fullText?: string): Promise<StoredPaper> {
+export async function storePaper(paper: ResearchPaper, fullText?: string, qaHistory?: any[]): Promise<StoredPaper> {
   console.log('[IndexedDB] storePaper called:', {
     title: paper.title,
     url: paper.url,
@@ -115,6 +115,7 @@ export async function storePaper(paper: ResearchPaper, fullText?: string): Promi
       chunkCount: contentChunks.length,
       storedAt: Date.now(),
       lastAccessedAt: Date.now(),
+      qaHistory: qaHistory || [],
     };
 
     // Store paper
@@ -332,6 +333,51 @@ export async function deletePaper(paperId: string): Promise<boolean> {
   } catch (error) {
     db.close();
     console.error('Error deleting paper:', error);
+    return false;
+  }
+}
+
+/**
+ * Update Q&A history for a paper
+ */
+export async function updatePaperQAHistory(paperId: string, qaHistory: any[]): Promise<boolean> {
+  const db = await initDB();
+
+  try {
+    // Get the paper first
+    const transaction = db.transaction([PAPERS_STORE], 'readonly');
+    const store = transaction.objectStore(PAPERS_STORE);
+
+    const paper = await new Promise<StoredPaper | null>((resolve) => {
+      const request = store.get(paperId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+
+    if (!paper) {
+      console.error('Paper not found for Q&A history update:', paperId);
+      db.close();
+      return false;
+    }
+
+    // Update the paper with new Q&A history
+    paper.qaHistory = qaHistory;
+    paper.lastAccessedAt = Date.now();
+
+    const updateTransaction = db.transaction([PAPERS_STORE], 'readwrite');
+    const updateStore = updateTransaction.objectStore(PAPERS_STORE);
+    await new Promise<void>((resolve, reject) => {
+      const request = updateStore.put(paper);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to update Q&A history'));
+    });
+
+    console.log(`✓ Updated Q&A history for paper: ${paper.title}`);
+    db.close();
+    return true;
+  } catch (error) {
+    db.close();
+    console.error('Error updating Q&A history:', error);
     return false;
   }
 }

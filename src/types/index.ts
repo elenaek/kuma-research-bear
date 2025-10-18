@@ -28,6 +28,12 @@ export enum MessageType {
 
   ANALYZE_PAPER = 'ANALYZE_PAPER',
   ASK_QUESTION = 'ASK_QUESTION',
+  UPDATE_PAPER_QA_HISTORY = 'UPDATE_PAPER_QA_HISTORY',
+
+  // Background operation state management
+  GET_OPERATION_STATE = 'GET_OPERATION_STATE',
+  START_DETECT_AND_EXPLAIN = 'START_DETECT_AND_EXPLAIN',
+  OPERATION_STATE_CHANGED = 'OPERATION_STATE_CHANGED',
 }
 
 export interface Message {
@@ -152,6 +158,7 @@ export interface StoredPaper extends ResearchPaper {
   chunkCount: number;
   storedAt: number;
   lastAccessedAt: number;
+  qaHistory?: QuestionAnswer[]; // Q&A history for this paper
 }
 
 export interface ContentChunk {
@@ -213,4 +220,18 @@ export interface QuestionAnswer {
 export interface QAHistoryItem extends QuestionAnswer {
   paperId: string;
   paperTitle: string;
+}
+
+// Background operation state (per-tab tracking)
+export interface OperationState {
+  tabId: number;
+  isDetecting: boolean;
+  isExplaining: boolean;
+  isAnalyzing: boolean;
+  currentPaper: ResearchPaper | null;
+  error: string | null;
+  detectionProgress: string;
+  explanationProgress: string;
+  analysisProgress: string;
+  lastUpdated: number;
 }

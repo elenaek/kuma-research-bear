@@ -1,6 +1,44 @@
-import { MessageType, ResearchPaper, ExplanationResult, PaperAnalysisResult, QuestionAnswer } from '../types/index.ts';
+import { MessageType, ResearchPaper, ExplanationResult, PaperAnalysisResult, QuestionAnswer, OperationState } from '../types/index.ts';
 import { aiService } from '../utils/aiService.ts';
 import { getPaperByUrl, getPaperChunks, getRelevantChunks } from '../utils/dbService.ts';
+
+// Persistent operation state tracking (per-tab)
+const operationStates = new Map<number, OperationState>();
+
+// Helper to get or create operation state for a tab
+function getOperationState(tabId: number): OperationState {
+  if (!operationStates.has(tabId)) {
+    operationStates.set(tabId, {
+      tabId,
+      isDetecting: false,
+      isExplaining: false,
+      isAnalyzing: false,
+      currentPaper: null,
+      error: null,
+      detectionProgress: '',
+      explanationProgress: '',
+      analysisProgress: '',
+      lastUpdated: Date.now(),
+    });
+  }
+  return operationStates.get(tabId)!;
+}
+
+// Helper to update state and broadcast changes
+function updateOperationState(tabId: number, updates: Partial<OperationState>) {
+  const state = getOperationState(tabId);
+  Object.assign(state, updates, { lastUpdated: Date.now() });
+
+  // Broadcast state change to any listeners (sidepanel, popup)
+  chrome.runtime.sendMessage({
+    type: MessageType.OPERATION_STATE_CHANGED,
+    payload: { state },
+  }).catch(() => {
+    // No listeners, that's ok
+  });
+
+  console.log('[Background] Operation state updated:', state);
+}
 
 // Handle extension installation
 chrome.runtime.onInstalled.addListener(() => {
@@ -41,21 +79,31 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         break;
 
       case MessageType.EXPLAIN_PAPER:
-        const paper: ResearchPaper = message.payload.paper;
-        const explanation = await aiService.explainAbstract(paper.abstract);
-        const summary = await aiService.generateSummary(paper.title, paper.abstract);
+        try {
+          // Set flag to indicate explanation is in progress
+          await chrome.storage.local.set({ isExplaining: true });
 
-        // Store the explanation
-        await chrome.storage.local.set({
-          lastExplanation: {
-            paper,
-            explanation,
-            summary,
-            timestamp: Date.now(),
-          },
-        });
+          const paper: ResearchPaper = message.payload.paper;
+          const explanation = await aiService.explainAbstract(paper.abstract);
+          const summary = await aiService.generateSummary(paper.title, paper.abstract);
 
-        sendResponse({ success: true, explanation, summary });
+          // Store the explanation
+          await chrome.storage.local.set({
+            lastExplanation: {
+              paper,
+              explanation,
+              summary,
+              timestamp: Date.now(),
+            },
+            isExplaining: false, // Clear flag when done
+          });
+
+          sendResponse({ success: true, explanation, summary });
+        } catch (explainError) {
+          // Clear flag on error
+          await chrome.storage.local.set({ isExplaining: false });
+          throw explainError;
+        }
         break;
 
       case MessageType.EXPLAIN_SECTION:
@@ -253,6 +301,152 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
           sendResponse({ success: false, error: String(dbError) });
         }
         break;
+
+      case MessageType.UPDATE_PAPER_QA_HISTORY:
+        try {
+          console.log('[Background] Updating Q&A history for paper:', message.payload.paperId);
+          const updated = await (await import('../utils/dbService.ts')).updatePaperQAHistory(
+            message.payload.paperId,
+            message.payload.qaHistory
+          );
+          console.log('[Background] Q&A history update result:', updated);
+          sendResponse({ success: updated });
+        } catch (dbError) {
+          console.error('[Background] Failed to update Q&A history:', dbError);
+          sendResponse({ success: false, error: String(dbError) });
+        }
+        break;
+
+      case MessageType.GET_OPERATION_STATE:
+        try {
+          const tabId = message.payload?.tabId || sender.tab?.id;
+          if (!tabId) {
+            sendResponse({ success: false, error: 'No tab ID provided' });
+            break;
+          }
+          const state = getOperationState(tabId);
+          console.log('[Background] Returning operation state for tab', tabId, state);
+          sendResponse({ success: true, state });
+        } catch (error) {
+          console.error('[Background] Error getting operation state:', error);
+          sendResponse({ success: false, error: String(error) });
+        }
+        break;
+
+      case MessageType.START_DETECT_AND_EXPLAIN:
+        (async () => {
+          const tabId = message.payload?.tabId || sender.tab?.id;
+          if (!tabId) {
+            sendResponse({ success: false, error: 'No tab ID provided' });
+            return;
+          }
+
+          try {
+            console.log('[Background] Starting detect and explain flow for tab', tabId);
+
+            // Phase 1: Detection
+            updateOperationState(tabId, {
+              isDetecting: true,
+              detectionProgress: 'Detecting paper...',
+              error: null,
+            });
+
+            const detectResponse = await chrome.tabs.sendMessage(tabId, {
+              type: MessageType.DETECT_PAPER,
+            });
+
+            if (!detectResponse.paper) {
+              updateOperationState(tabId, {
+                isDetecting: false,
+                detectionProgress: '',
+                error: 'No paper detected on this page',
+              });
+              sendResponse({ success: false, error: 'No paper detected' });
+              return;
+            }
+
+            // Update state with detected paper
+            updateOperationState(tabId, {
+              isDetecting: false,
+              detectionProgress: 'Paper detected!',
+              currentPaper: detectResponse.paper,
+            });
+
+            // Phase 2: Explanation
+            updateOperationState(tabId, {
+              isExplaining: true,
+              explanationProgress: 'Generating explanation...',
+            });
+
+            const explanation = await aiService.explainAbstract(detectResponse.paper.abstract);
+            const summary = await aiService.generateSummary(detectResponse.paper.title, detectResponse.paper.abstract);
+
+            // Store explanation
+            await chrome.storage.local.set({
+              lastExplanation: {
+                paper: detectResponse.paper,
+                explanation,
+                summary,
+                timestamp: Date.now(),
+              },
+              currentPaper: detectResponse.paper,
+            });
+
+            updateOperationState(tabId, {
+              isExplaining: false,
+              explanationProgress: 'Explanation complete!',
+            });
+
+            // Phase 3: Analysis (auto-trigger)
+            updateOperationState(tabId, {
+              isAnalyzing: true,
+              analysisProgress: 'Analyzing paper...',
+            });
+
+            const paperUrl = detectResponse.paper.url;
+            const storedPaper = await getPaperByUrl(paperUrl);
+
+            if (storedPaper) {
+              const paperContent = storedPaper.fullText || storedPaper.abstract;
+              const analysis: PaperAnalysisResult = await aiService.analyzePaper(paperContent);
+
+              // Store analysis
+              await chrome.storage.local.set({
+                lastAnalysis: {
+                  paper: storedPaper,
+                  analysis,
+                  timestamp: Date.now(),
+                },
+              });
+
+              updateOperationState(tabId, {
+                isAnalyzing: false,
+                analysisProgress: 'Analysis complete!',
+              });
+            } else {
+              updateOperationState(tabId, {
+                isAnalyzing: false,
+                analysisProgress: '',
+                error: 'Paper not found for analysis',
+              });
+            }
+
+            sendResponse({ success: true, paper: detectResponse.paper });
+          } catch (flowError) {
+            console.error('[Background] Error in detect and explain flow:', flowError);
+            updateOperationState(tabId, {
+              isDetecting: false,
+              isExplaining: false,
+              isAnalyzing: false,
+              detectionProgress: '',
+              explanationProgress: '',
+              analysisProgress: '',
+              error: String(flowError),
+            });
+            sendResponse({ success: false, error: String(flowError) });
+          }
+        })();
+        return true; // Keep channel open for async response
 
       default:
         sendResponse({ success: false, error: 'Unknown message type' });

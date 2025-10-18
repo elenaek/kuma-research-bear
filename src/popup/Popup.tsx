@@ -13,10 +13,82 @@ export function Popup() {
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectionStatus, setDetectionStatus] = useState<string | null>(null);
 
-  // Check AI availability on mount
+  // Check AI availability and operation state on mount
   useEffect(() => {
     checkAIStatus();
+    checkOperationState();
+
+    // Listen for operation state changes from background
+    const listener = (message: any) => {
+      if (message.type === MessageType.OPERATION_STATE_CHANGED) {
+        const state = message.payload?.state;
+        if (!state) return;
+
+        console.log('[Popup] Operation state changed:', state);
+
+        // Update UI based on state changes
+        setIsDetecting(state.isDetecting);
+
+        if (state.isDetecting) {
+          setDetectionStatus(state.detectionProgress || 'Detecting paper...');
+        } else if (state.isExplaining) {
+          setDetectionStatus(state.explanationProgress || '🐻 Kuma is explaining the paper...');
+        } else if (state.isAnalyzing) {
+          setDetectionStatus(state.analysisProgress || '🐻 Kuma is analyzing the paper...');
+        } else if (state.error) {
+          setDetectionStatus(`❌ ${state.error}`);
+        } else {
+          // All done
+          setDetectionStatus('✅ Complete!');
+          setTimeout(() => setDetectionStatus(null), 3000);
+        }
+
+        if (state.currentPaper) {
+          setPaper(state.currentPaper);
+        }
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(listener);
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(listener);
+    };
   }, []);
+
+  async function checkOperationState() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab.id) return;
+
+      const response = await chrome.runtime.sendMessage({
+        type: MessageType.GET_OPERATION_STATE,
+        payload: { tabId: tab.id },
+      });
+
+      if (response.success && response.state) {
+        const state = response.state;
+        console.log('[Popup] Loaded operation state:', state);
+
+        // Update UI based on current state
+        if (state.isDetecting) {
+          setIsDetecting(true);
+          setDetectionStatus(state.detectionProgress || 'Detecting paper...');
+        }
+        if (state.isExplaining) {
+          setDetectionStatus('🐻 Kuma is explaining the paper...');
+        }
+        if (state.currentPaper) {
+          setPaper(state.currentPaper);
+        }
+        if (state.error) {
+          setDetectionStatus(`❌ ${state.error}`);
+        }
+      }
+    } catch (error) {
+      console.error('[Popup] Failed to check operation state:', error);
+    }
+  }
 
   async function checkAIStatus() {
     try {
@@ -106,7 +178,7 @@ export function Popup() {
   async function handleDetectPaper() {
     try {
       setIsDetecting(true);
-      setDetectionStatus('Checking for paper...');
+      setDetectionStatus('🐻 Kuma is foraging for research papers...');
 
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -117,58 +189,32 @@ export function Popup() {
         return;
       }
 
-      // Update status for AI extraction phase
-      setDetectionStatus('🐻 Kuma is foraging for research papers...');
+      // Call background service to orchestrate the full flow
+      // This will persist even if popup closes
+      const response = await chrome.runtime.sendMessage({
+        type: MessageType.START_DETECT_AND_EXPLAIN,
+        payload: { tabId: tab.id },
+      });
 
-      let response;
-      try {
-        response = await chrome.tabs.sendMessage(tab.id, {
-          type: MessageType.DETECT_PAPER,
-        });
-      } catch (msgError: any) {
-        // Handle content script not ready
-        if (msgError.message?.includes('Receiving end does not exist')) {
-          setDetectionStatus('⚠️ Content script not ready. Please refresh the page and try again.');
-        } else {
-          setDetectionStatus(`❌ Detection failed: ${msgError.message || String(msgError)}`);
-        }
+      // Response will come back after detection completes
+      // But explanation/analysis will continue in background
+      if (!response.success) {
+        setDetectionStatus(`❌ ${response.error || 'Detection failed'}`);
         setTimeout(() => setDetectionStatus(null), 5000);
-        return;
+        setIsDetecting(false);
       }
-
-      if (response.paper) {
-        setPaper(response.paper);
-        // Store current paper in storage
-        await chrome.storage.local.set({ currentPaper: response.paper });
-
-        // Show storage status based on response
-        const source = response.paper.source.replace('-', ' ');
-
-        if (response.stored) {
-          if (response.alreadyStored) {
-            // Paper was already stored
-            setDetectionStatus(`✅ Paper found (already stored with ${response.chunkCount} chunks)`);
-          } else {
-            // Newly stored paper
-            setDetectionStatus(`✅ Paper found and stored! (${response.chunkCount} chunks ready for Q&A)`);
-          }
-        } else {
-          // Paper found but storage failed - show specific error
-          console.log(response);
-          const errorMsg = response.storageError || 'Unknown error';
-          setDetectionStatus(`⚠️ Storage failed: ${errorMsg}`);
-        }
-
-        setTimeout(() => setDetectionStatus(null), 5000);
-      } else {
-        setDetectionStatus('❌ No paper detected on this page');
-        setTimeout(() => setDetectionStatus(null), 4000);
-      }
-    } catch (error) {
+      // If successful, state updates will come via OPERATION_STATE_CHANGED listener
+    } catch (error: any) {
       console.error('Kuma didn\'t find any papers. (Detection failed):', error);
-      setDetectionStatus('❌ Kuma didn\'t find any papers. (Detection failed)');
-      setTimeout(() => setDetectionStatus(null), 4000);
-    } finally {
+
+      // Handle content script not ready
+      if (error.message?.includes('Receiving end does not exist')) {
+        setDetectionStatus('⚠️ Content script not ready. Please refresh the page and try again.');
+      } else {
+        setDetectionStatus(`❌ Detection failed: ${error.message || String(error)}`);
+      }
+
+      setTimeout(() => setDetectionStatus(null), 5000);
       setIsDetecting(false);
     }
   }
@@ -326,22 +372,23 @@ export function Popup() {
             onClick={handleDetectPaper}
             disabled={aiStatus !== 'ready' || isDetecting}
             class="btn btn-primary w-full hover:cursor-pointer"
-            title={aiStatus !== 'ready' ? 'Wake Kuma up' : isDetecting ? 'Detection in progress...' : ''}
+            title={aiStatus !== 'ready' ? 'Wake Kuma up' : isDetecting ? 'Detecting and explaining...' : 'Detect paper and automatically generate explanation'}
           >
             {isDetecting ? (
               <>
                 <Loader size={16} class="animate-spin" />
-                Detecting...
+                Detecting & Explaining...
               </>
             ) : (
               <>
                 <Search size={16} />
-                Detect Paper
+                Detect & Explain Paper
               </>
             )}
           </button>
 
-          <button
+          {/* Explain Paper button removed - explanation now happens automatically after detection */}
+          {/* <button
             onClick={handleExplainPaper}
             disabled={!paper || isExplaining || aiStatus !== 'ready'}
             class="btn btn-secondary w-full hover:cursor-pointer"
@@ -349,7 +396,7 @@ export function Popup() {
           >
             <Sparkles size={16} />
             {isExplaining ? 'Explaining...' : 'Explain Paper'}
-          </button>
+          </button> */}
 
           <button
             onClick={handleOpenSidepanel}
