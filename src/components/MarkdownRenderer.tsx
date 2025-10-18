@@ -95,7 +95,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
  * }
  *
  * .markdown-content code {
- *   @apply px-1.5 py-0.5 bg-gray-100 text-bear-700 rounded text-sm font-mono;
+ *   @apply px-1.5 py-0.5 bg-gray-100 text-blue-700 rounded text-sm font-mono;
  * }
  *
  * .markdown-content pre {
@@ -119,7 +119,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
  * }
  *
  * .markdown-content a {
- *   @apply text-bear-600 hover:text-bear-700 underline;
+ *   @apply text-blue-600 hover:text-blue-700 underline;
  * }
  *
  * .markdown-content blockquote {

@@ -378,7 +378,7 @@ Source: ${paper.url}
     return (
       <div class="h-screen flex items-center justify-center bg-gray-50">
         <div class="text-center">
-          <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-bear-600 mb-4" />
+          <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600 mb-4" />
           {isCheckingStorage ? (
             <div>
               <p class="text-gray-600 font-medium">Checking paper storage...</p>
@@ -476,7 +476,7 @@ Source: ${paper.url}
                 href={data?.paper.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                class="inline-flex items-center gap-1 text-sm text-bear-600 hover:text-bear-700 font-medium"
+                class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-700 font-medium"
               >
                 <ExternalLink size={14} />
                 View Original Paper
@@ -526,7 +526,7 @@ Source: ${paper.url}
                 onClick={() => setActiveTab('analysis')}
                 class={`px-4 py-2 font-medium transition-colors border-b-2 flex items-center gap-2 ${
                   activeTab === 'analysis'
-                    ? 'border-bear-600 text-bear-600'
+                    ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-600 hover:text-gray-800'
                 }`}
               >
@@ -537,7 +537,7 @@ Source: ${paper.url}
                 onClick={() => setActiveTab('qa')}
                 class={`px-4 py-2 font-medium transition-colors border-b-2 ${
                   activeTab === 'qa'
-                    ? 'border-bear-600 text-bear-600'
+                    ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-600 hover:text-gray-800'
                 }`}
               >
@@ -547,7 +547,7 @@ Source: ${paper.url}
                 onClick={() => setActiveTab('original')}
                 class={`px-4 py-2 font-medium transition-colors border-b-2 ${
                   activeTab === 'original'
-                    ? 'border-bear-600 text-bear-600'
+                    ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-600 hover:text-gray-800'
                 }`}
               >
@@ -563,7 +563,7 @@ Source: ${paper.url}
                   {isAnalyzing && !analysis && (
                     <div class="card">
                       <div class="flex flex-col items-center justify-center gap-4 py-12">
-                        <Loader size={32} class="animate-spin text-bear-600" />
+                        <Loader size={32} class="animate-spin text-blue-600" />
                         <div class="text-center">
                           <p class="text-base font-medium text-gray-900 mb-2">Analyzing Paper...</p>
                           <p class="text-sm text-gray-600">
@@ -598,7 +598,7 @@ Source: ${paper.url}
                         onKeyPress={(e) => e.key === 'Enter' && !isAsking && handleAskQuestion()}
                         placeholder="Ask anything about this paper..."
                         disabled={isAsking}
-                        class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bear-500 focus:border-transparent disabled:bg-gray-100"
+                        class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
                       />
                       <button
                         onClick={handleAskQuestion}
@@ -634,7 +634,7 @@ Source: ${paper.url}
                               <p class="text-xs font-medium text-gray-600 mb-1">Sources:</p>
                               <div class="flex flex-wrap gap-1">
                                 {qa.sources.map((source, sIdx) => (
-                                  <span key={sIdx} class="px-2 py-0.5 text-xs rounded bg-bear-100 text-bear-700">
+                                  <span key={sIdx} class="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700">
                                     {source}
                                   </span>
                                 ))}
@@ -755,7 +755,7 @@ Source: ${paper.url}
             <div class="flex items-start justify-between gap-4 mb-3">
               <h2 class="text-lg font-semibold text-gray-900 flex-1">{data?.paper.title}</h2>
               <div class="flex gap-2 shrink-0">
-                <span class="px-2 py-1 text-xs font-medium rounded-full bg-bear-100 text-bear-700 capitalize">
+                <span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 capitalize">
                   {data?.paper.source.replace('-', ' ')}
                 </span>
                 {storedPaper && (
@@ -818,7 +818,7 @@ Source: ${paper.url}
                           href={`https://doi.org/${data.paper.metadata.doi}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          class="text-bear-600 hover:text-bear-700 hover:underline"
+                          class="text-gray-600 hover:text-gray-700 hover:underline"
                         >
                           {data.paper.metadata.doi}
                         </a>
@@ -834,7 +834,7 @@ Source: ${paper.url}
                           href={`https://arxiv.org/abs/${data.paper.metadata.arxivId}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          class="text-bear-600 hover:text-bear-700 hover:underline"
+                          class="text-gray-600 hover:text-gray-700 hover:underline"
                         >
                           {data.paper.metadata.arxivId}
                         </a>
@@ -850,7 +850,7 @@ Source: ${paper.url}
                           href={`https://pubmed.ncbi.nlm.nih.gov/${data.paper.metadata.pmid}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          class="text-bear-600 hover:text-bear-700 hover:underline"
+                          class="text-gray-600 hover:text-gray-700 hover:underline"
                         >
                           {data.paper.metadata.pmid}
                         </a>
@@ -867,7 +867,7 @@ Source: ${paper.url}
                 href={data?.paper.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                class="inline-flex items-center gap-1 text-sm text-bear-600 hover:text-bear-700 font-medium"
+                class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-700 font-medium"
               >
                 <ExternalLink size={14} />
                 View Original
@@ -878,7 +878,7 @@ Source: ${paper.url}
                   href={data.paper.metadata.pdfUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="inline-flex items-center gap-1 text-sm text-bear-600 hover:text-bear-700 font-medium"
+                  class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-700 font-medium"
                 >
                   <Download size={14} />
                   Download PDF
@@ -893,7 +893,7 @@ Source: ${paper.url}
               onClick={() => setActiveTab('summary')}
               class={`px-4 py-2 font-medium transition-colors border-b-2 ${
                 activeTab === 'summary'
-                  ? 'border-bear-600 text-bear-600'
+                  ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-600 hover:text-gray-800'
               }`}
             >
@@ -903,7 +903,7 @@ Source: ${paper.url}
               onClick={() => setActiveTab('explanation')}
               class={`px-4 py-2 font-medium transition-colors border-b-2 ${
                 activeTab === 'explanation'
-                  ? 'border-bear-600 text-bear-600'
+                  ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-600 hover:text-gray-800'
               }`}
             >
@@ -913,7 +913,7 @@ Source: ${paper.url}
               onClick={() => setActiveTab('analysis')}
               class={`px-4 py-2 font-medium transition-colors border-b-2 flex items-center gap-2 ${
                 activeTab === 'analysis'
-                  ? 'border-bear-600 text-bear-600'
+                  ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-600 hover:text-gray-800'
               } ${!analysis && !isAnalyzing ? 'opacity-50' : ''}`}
               title={isAnalyzing ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : ''}
@@ -925,7 +925,7 @@ Source: ${paper.url}
               onClick={() => setActiveTab('qa')}
               class={`px-4 py-2 font-medium transition-colors border-b-2 ${
                 activeTab === 'qa'
-                  ? 'border-bear-600 text-bear-600'
+                  ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-600 hover:text-gray-800'
               } ${!storedPaper ? 'opacity-50' : ''}`}
               title={!storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper'}
@@ -936,7 +936,7 @@ Source: ${paper.url}
               onClick={() => setActiveTab('original')}
               class={`px-4 py-2 font-medium transition-colors border-b-2 ${
                 activeTab === 'original'
-                  ? 'border-bear-600 text-bear-600'
+                  ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-600 hover:text-gray-800'
               }`}
             >
@@ -958,7 +958,7 @@ Source: ${paper.url}
                   <ul class="space-y-2">
                     {data?.summary.keyPoints.map((point, index) => (
                       <li key={index} class="flex gap-2 text-gray-700">
-                        <span class="text-bear-600 font-bold">•</span>
+                        <span class="text-blue-600 font-bold">•</span>
                         <MarkdownRenderer content={point} />
                       </li>
                     ))}
@@ -980,7 +980,7 @@ Source: ${paper.url}
                 {isAnalyzing && !analysis && (
                   <div class="card">
                     <div class="flex flex-col items-center justify-center gap-4 py-12">
-                      <Loader size={32} class="animate-spin text-bear-600" />
+                      <Loader size={32} class="animate-spin text-blue-600" />
                       <div class="text-center">
                         <p class="text-base font-medium text-gray-900 mb-2">Analyzing Paper...</p>
                         <p class="text-sm text-gray-600">
@@ -998,7 +998,7 @@ Source: ${paper.url}
                     {/* Methodology Analysis */}
                     <div class="card">
                   <div class="flex items-center gap-2 mb-3">
-                    <FileText size={18} class="text-bear-600" />
+                    <FileText size={18} class="text-blue-600" />
                     <h3 class="text-base font-semibold text-gray-900">Methodology</h3>
                   </div>
 
@@ -1090,9 +1090,9 @@ Source: ${paper.url}
                         Identified Confounders
                         <Tooltip text="Variables that may influence both the independent and dependent variables, potentially distorting results" />
                       </p>
-                      <ul class="space-y-1">
+                      <ul class="space-y-3">
                         {analysis.confounders.identified.map((item, idx) => (
-                          <li key={idx} class="flex flex-col gap-1 text-sm text-gray-600">
+                          <li key={idx} class="flex flex-col gap-2 text-sm text-gray-600">
                             <span class="font-medium text-gray-600">{item.name}</span>
                             <span class="text-gray-500 text-xs">{item.explanation}</span>
                           </li>
@@ -1105,9 +1105,9 @@ Source: ${paper.url}
                         Potential Biases
                         <Tooltip text="Systematic errors or tendencies that could skew the study results in a particular direction" />
                       </p>
-                      <ul class="space-y-1">
+                      <ul class="space-y-3">
                         {analysis.confounders.biases.map((bias, idx) => (
-                          <li key={idx} class="flex flex-col gap-1 text-sm text-gray-600">
+                          <li key={idx} class="flex flex-col gap-2 text-sm text-gray-600">
                             <span class="font-medium text-gray-600">{bias.name}</span>
                             <span class="text-gray-500 text-xs">{bias.explanation}</span>
                           </li>
@@ -1120,9 +1120,9 @@ Source: ${paper.url}
                         Control Measures
                         <Tooltip text="Strategies implemented by researchers to minimize or account for confounders and biases" />
                       </p>
-                      <ul class="space-y-1">
+                      <ul class="space-y-3">
                         {analysis.confounders.controlMeasures.map((controlMeasure, idx) => (
-                          <li key={idx} class="flex flex-col gap-1 text-sm text-gray-600">
+                          <li key={idx} class="flex flex-col gap-2 text-sm text-gray-600">
                             <span class="font-medium text-gray-600">{controlMeasure.name}</span>
                             <span class="text-gray-500 text-xs">{controlMeasure.explanation}</span>
                           </li>
@@ -1153,7 +1153,7 @@ Source: ${paper.url}
                         Possible Real-World Applications
                         <Tooltip text="What the research findings may be applied to in the real world" />
                       </p>
-                      <ul class="space-y-1">
+                      <ul class="space-y-3">
                         {analysis.implications.realWorldApplications.map((app, idx) => (
                           <li key={idx} class="flex gap-2 text-sm text-gray-600">
                             <span class="text-blue-600">•</span>
@@ -1168,7 +1168,7 @@ Source: ${paper.url}
                         What could be Investigated Further
                         <Tooltip text="Suggested areas for further investigation to build upon or address gaps in this research" />
                       </p>
-                      <ul class="space-y-1">
+                      <ul class="space-y-3">
                         {analysis.implications.futureResearch.map((research, idx) => (
                           <li key={idx} class="flex gap-2 text-sm text-gray-600">
                             <span class="text-purple-600">•</span>
@@ -1193,7 +1193,7 @@ Source: ${paper.url}
                         Study Limitations
                         <Tooltip text="Constraints and boundaries that may affect the validity or scope of the research findings" />
                       </p>
-                      <ul class="space-y-1">
+                      <ul class="space-y-3">
                         {analysis.limitations.studyLimitations.map((limitation, idx) => (
                           <li key={idx} class="flex gap-2 text-sm text-gray-600">
                             <span class="text-red-600">•</span>
@@ -1317,7 +1317,7 @@ Source: ${paper.url}
                               {qa.sources.map((source, sIdx) => (
                                 <span
                                   key={sIdx}
-                                  class="px-2 py-0.5 text-xs rounded bg-bear-100 text-bear-700"
+                                  class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700"
                                 >
                                   {source}
                                 </span>
