@@ -243,3 +243,73 @@ export const limitationAnalysisSchema: JSONSchema = {
   required: ['studyLimitations', 'generalizability'],
   additionalProperties: false,
 };
+
+/**
+ * Schema for GlossaryResult
+ * Corresponds to: src/types/index.ts - GlossaryResult interface
+ */
+export const glossarySchema: JSONSchema = {
+  type: 'object',
+  properties: {
+    terms: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          acronym: {
+            type: 'string',
+            description: 'The acronym, initialism, technical abbreviation, or key term (e.g., RCT, CI, FDA)',
+            maxLength: 20,
+          },
+          longForm: {
+            type: 'string',
+            description: 'The full expanded form of the acronym, initialism, technical abbreviation, or key term',
+            maxLength: 100,
+          },
+          definition: {
+            type: 'string',
+            description: 'Clear, concise definition of what this term means',
+          },
+          studyContext: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                context: {
+                  type: 'string',
+                  description: 'How this term is used in a specific context in this paper',
+                  maxLength: 200
+                },
+                sections: {
+                  type: 'array',
+                  items: {
+                    type: 'string',
+                    description: 'Section name or number where this context applies'
+                  },
+                  description: 'Paper sections where this context is found',
+                  minItems: 1,
+                }
+              },
+              required: ['context', 'sections'],
+              additionalProperties: false
+            },
+            description: 'Different contexts where this term appears with their sections',
+            minItems: 1,
+            maxItems: 5
+          },
+          analogy: {
+            type: 'string',
+            description: 'A simple analogy to help understand the concept',
+            maxLength: 150,
+          }
+        },
+        required: ['acronym', 'longForm', 'definition', 'studyContext', 'analogy'],
+        additionalProperties: false,
+      },
+      description: 'List of glossary terms found in the paper',
+      minItems: 1
+    }
+  },
+  required: ['terms'],
+  additionalProperties: false,
+};

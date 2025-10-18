@@ -29,6 +29,7 @@ export enum MessageType {
   ANALYZE_PAPER = 'ANALYZE_PAPER',
   ASK_QUESTION = 'ASK_QUESTION',
   UPDATE_PAPER_QA_HISTORY = 'UPDATE_PAPER_QA_HISTORY',
+  GENERATE_GLOSSARY = 'GENERATE_GLOSSARY',
 
   // Background operation state management
   GET_OPERATION_STATE = 'GET_OPERATION_STATE',
@@ -162,6 +163,7 @@ export interface StoredPaper extends ResearchPaper {
   explanation?: ExplanationResult; // Stored explanation for this paper
   summary?: SummaryResult; // Stored summary for this paper
   analysis?: PaperAnalysisResult; // Stored analysis for this paper
+  glossary?: GlossaryResult; // Stored glossary for this paper
 }
 
 export interface ContentChunk {
@@ -209,6 +211,25 @@ export interface PaperAnalysisResult {
   confounders: ConfounderAnalysis;
   implications: ImplicationAnalysis;
   limitations: LimitationAnalysis;
+  timestamp: number;
+}
+
+// Glossary types
+export interface StudyContext {
+  context: string;        // The actual context description
+  sections: string[];     // Array of section names/numbers where this applies
+}
+
+export interface GlossaryTerm {
+  acronym: string;
+  longForm: string;
+  definition: string;
+  studyContext: StudyContext[];  // Changed from string to StudyContext[]
+  analogy: string;
+}
+
+export interface GlossaryResult {
+  terms: GlossaryTerm[];
   timestamp: number;
 }
 

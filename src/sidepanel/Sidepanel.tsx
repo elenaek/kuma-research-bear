@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader, PawPrint, ChevronLeft, ChevronRight, Trash2, Settings, ChevronDown, ChevronUp } from 'lucide-preact';
-import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, MessageType } from '../types/index.ts';
+import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, MessageType, GlossaryResult } from '../types/index.ts';
 import { MarkdownRenderer } from '../components/MarkdownRenderer.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
+import { GlossaryList } from '../components/GlossaryCard.tsx';
 
 // Debounce utility
 function useDebounce<T extends (...args: any[]) => any>(
@@ -104,7 +105,7 @@ async function deletePaperFromDB(paperId: string): Promise<boolean> {
 }
 
 type ViewState = 'loading' | 'empty' | 'content' | 'stored-only';
-type TabType = 'summary' | 'explanation' | 'qa' | 'analysis' | 'original';
+type TabType = 'summary' | 'explanation' | 'qa' | 'analysis' | 'glossary' | 'original';
 
 interface ExplanationData {
   paper: ResearchPaper;
@@ -120,6 +121,8 @@ export function Sidepanel() {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [analysis, setAnalysis] = useState<PaperAnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [glossary, setGlossary] = useState<GlossaryResult | null>(null);
+  const [isGeneratingGlossary, setIsGeneratingGlossary] = useState(false);
   const [isCheckingStorage, setIsCheckingStorage] = useState(false);
   const [isExplainingInBackground, setIsExplainingInBackground] = useState(false);
 
@@ -396,10 +399,22 @@ export function Sidepanel() {
             setAnalysis(result.lastAnalysis.analysis);
           }
 
+          // Load glossary from StoredPaper
+          if (stored.glossary) {
+            console.log('[Sidepanel] Loading glossary from StoredPaper');
+            setGlossary(stored.glossary);
+          }
+
           // Auto-trigger analysis if paper is stored and no analysis exists yet (only if not already analyzing)
           if (!stored.analysis && !isAnalyzing && (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.lastExplanation.paper.url)) {
             console.log('[Sidepanel] Paper is stored, triggering automatic analysis...');
             triggerAnalysis(result.lastExplanation.paper.url);
+          }
+
+          // Auto-trigger glossary generation if paper is stored and no glossary exists yet
+          if (!stored.glossary && !isGeneratingGlossary) {
+            console.log('[Sidepanel] Paper is stored, triggering automatic glossary generation...');
+            triggerGlossaryGeneration(result.lastExplanation.paper.url);
           }
         } else {
           console.log('[Sidepanel] Paper not stored, Q&A disabled');
@@ -475,6 +490,68 @@ export function Sidepanel() {
       }, 3000);
     } finally {
       setIsAnalyzing(false);
+    }
+  }
+
+  async function triggerGlossaryGeneration(paperUrl: string) {
+    // Guard: Don't retrigger if already generating
+    if (isGeneratingGlossary) {
+      console.log('[Sidepanel] Glossary generation already in progress, skipping');
+      setOperationQueueMessage('Glossary generation already in progress');
+      setHasQueuedOperations(true);
+      setTimeout(() => {
+        setHasQueuedOperations(false);
+        setOperationQueueMessage('');
+      }, 3000);
+      return;
+    }
+
+    try {
+      setIsGeneratingGlossary(true);
+      console.log('Starting glossary generation for:', paperUrl);
+
+      const response = await chrome.runtime.sendMessage({
+        type: MessageType.GENERATE_GLOSSARY,
+        payload: { url: paperUrl },
+      });
+
+      if (response.success) {
+        console.log('✓ Glossary generated successfully');
+        setGlossary(response.glossary);
+
+        // Update storedPaper and allPapers to reflect the new glossary
+        // This prevents the glossary from being cleared when switchToPaper is called
+        if (storedPaper) {
+          const updatedPaper = { ...storedPaper, glossary: response.glossary };
+          setStoredPaper(updatedPaper);
+
+          // Update the paper in allPapers array
+          const updatedAllPapers = [...allPapers];
+          updatedAllPapers[currentPaperIndex] = updatedPaper;
+          setAllPapers(updatedAllPapers);
+
+          console.log('[Sidepanel] Updated storedPaper and allPapers with new glossary');
+        }
+      } else {
+        console.error('Glossary generation failed:', response.error);
+        // Show error to user
+        setOperationQueueMessage(`Glossary generation failed: ${response.error}`);
+        setHasQueuedOperations(true);
+        setTimeout(() => {
+          setHasQueuedOperations(false);
+          setOperationQueueMessage('');
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('Error triggering glossary generation:', error);
+      setOperationQueueMessage('Failed to generate glossary');
+      setHasQueuedOperations(true);
+      setTimeout(() => {
+        setHasQueuedOperations(false);
+        setOperationQueueMessage('');
+      }, 3000);
+    } finally {
+      setIsGeneratingGlossary(false);
     }
   }
 
@@ -661,6 +738,17 @@ Source: ${paper.url}
       setAnalysis(null);
       // Trigger analysis for this paper
       triggerAnalysis(newPaper.url);
+    }
+
+    // Load glossary from StoredPaper
+    if (newPaper.glossary) {
+      console.log('[Sidepanel] Loading glossary for paper:', newPaper.title);
+      setGlossary(newPaper.glossary);
+    } else {
+      console.log('[Sidepanel] No glossary found, triggering generation');
+      setGlossary(null);
+      // Trigger glossary generation for this paper
+      triggerGlossaryGeneration(newPaper.url);
     }
   }
 
@@ -1056,6 +1144,17 @@ Source: ${paper.url}
                 Q&A
               </button>
               <button
+                onClick={() => setActiveTab('glossary')}
+                class={`px-4 py-2 font-medium transition-colors border-b-2 flex items-center gap-2 ${
+                  activeTab === 'glossary'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                <span>Glossary</span>
+                {isGeneratingGlossary && <Loader size={14} class="animate-spin" />}
+              </button>
+              <button
                 onClick={() => setActiveTab('original')}
                 class={`px-4 py-2 font-medium transition-colors border-b-2 ${
                   activeTab === 'original'
@@ -1169,6 +1268,19 @@ Source: ${paper.url}
               )}
 
               {/* Abstract Tab */}
+              {activeTab === 'glossary' && (
+                <div class="card">
+                  {glossary ? (
+                    <GlossaryList terms={glossary.terms} />
+                  ) : (
+                    <div class="text-center py-8">
+                      <BookOpen size={48} class="text-gray-300 mx-auto mb-4" />
+                      <p class="text-gray-500">No glossary available for this stored paper</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {activeTab === 'original' && (
                 <div class="card">
                   <h3 class="text-base font-semibold text-gray-900 mb-3">Original Abstract</h3>
@@ -1277,7 +1389,7 @@ Source: ${paper.url}
 
       {/* Content */}
       <div class="flex-1 overflow-auto">
-        <div class="max-w-4xl mx-auto p-6">
+        <div class="max-w-4xl mx-auto p-6 pt-2">
           {/* Debug Panel */}
           {showDebug && debugInfo && (
             <div class="card mb-6 bg-gray-900 text-gray-100 font-mono text-xs">
@@ -1416,6 +1528,79 @@ Source: ${paper.url}
                       Cancel
                     </button>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Manage Papers Section */}
+          {allPapers.length > 0 && (
+            <div class="card mt-1 mb-6">
+              <button
+                onClick={() => setShowManageSection(!showManageSection)}
+                class="w-full flex items-center justify-between text-left hover:cursor-pointer"
+              >
+                <div class="flex items-center gap-2">
+                  <Settings size={18} class="text-gray-600" />
+                  <h3 class="text-base font-semibold text-gray-900 hover:cursor-pointer">Manage Papers</h3>
+                </div>
+                {showManageSection ? <ChevronUp size={18} class="text-gray-600" /> : <ChevronDown size={18} class="text-gray-600" />}
+              </button>
+
+              {showManageSection && (
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                  <p class="text-sm text-gray-600 mb-3">
+                    {allPapers.length} paper{allPapers.length !== 1 ? 's' : ''} stored in your library
+                  </p>
+
+                  <div class="flex items-center gap-3">
+                    <button
+                      onClick={handleDeleteAllPapers}
+                      disabled={isDeletingAll}
+                      class="btn btn-secondary px-4 py-2 text-red-600 hover:bg-red-50 hover:cursor-pointer flex items-center gap-2"
+                      title="Delete all papers and their data"
+                    >
+                      {isDeletingAll ? (
+                        <>
+                          <Loader size={16} class="animate-spin" />
+                          <span>Deleting all...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 size={16} />
+                          <span>Delete All Papers</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Delete All Confirmation */}
+                  {showDeleteAllConfirm && (
+                    <div class="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                      <p class="text-sm font-semibold text-red-900 mb-2">
+                        Delete all {allPapers.length} papers?
+                      </p>
+                      <p class="text-xs text-red-800 mb-3">
+                        This will permanently delete all papers, chunks, and Q&A history. This action cannot be undone.
+                      </p>
+                      <div class="flex gap-2">
+                        <button
+                          onClick={handleDeleteAllPapers}
+                          disabled={isDeletingAll}
+                          class="btn btn-secondary text-red-600 hover:bg-red-100 px-4 py-2 text-sm hover:cursor-pointer"
+                        >
+                          {isDeletingAll ? 'Deleting...' : 'Delete All'}
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteAllConfirm(false)}
+                          disabled={isDeletingAll}
+                          class="btn btn-secondary px-4 py-2 text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1629,6 +1814,18 @@ Source: ${paper.url}
               title={!storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper'}
             >
               Q&A
+            </button>
+            <button
+              onClick={() => setActiveTab('glossary')}
+              class={`px-4 py-2 font-medium transition-colors border-b-2 flex items-center gap-2 ${
+                activeTab === 'glossary'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-600 hover:text-gray-800'
+              } ${!glossary && !isGeneratingGlossary ? 'opacity-50' : ''}`}
+              title={isGeneratingGlossary ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : ''}
+            >
+              <span>Glossary</span>
+              {isGeneratingGlossary && <Loader size={14} class="animate-spin" />}
             </button>
             <button
               onClick={() => setActiveTab('original')}
@@ -2040,6 +2237,28 @@ Source: ${paper.url}
               </>
             )}
 
+            {/* Glossary Tab */}
+            {activeTab === 'glossary' && (
+              <div class="card">
+                {glossary ? (
+                  <GlossaryList terms={glossary.terms} />
+                ) : isGeneratingGlossary ? (
+                  <div class="text-center py-8">
+                    <Loader size={32} class="text-blue-600 mx-auto mb-3 animate-spin" />
+                    <p class="text-gray-600">Generating glossary of terms...</p>
+                  </div>
+                ) : (
+                  <div class="text-center py-8">
+                    <BookOpen size={48} class="text-gray-300 mx-auto mb-4" />
+                    <p class="text-gray-500 mb-2">No glossary available yet</p>
+                    <p class="text-sm text-gray-400">
+                      The glossary will be generated when the paper is stored
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTab === 'original' && (
               <div class="card">
                 <h3 class="text-base font-semibold text-gray-900 mb-3">Original Abstract</h3>
@@ -2049,79 +2268,6 @@ Source: ${paper.url}
               </div>
             )}
           </div>
-
-          {/* Manage Papers Section */}
-          {allPapers.length > 0 && (
-            <div class="card mt-6">
-              <button
-                onClick={() => setShowManageSection(!showManageSection)}
-                class="w-full flex items-center justify-between text-left hover:cursor-pointer"
-              >
-                <div class="flex items-center gap-2">
-                  <Settings size={18} class="text-gray-600" />
-                  <h3 class="text-base font-semibold text-gray-900 hover:cursor-pointer">Manage Papers</h3>
-                </div>
-                {showManageSection ? <ChevronUp size={18} class="text-gray-600" /> : <ChevronDown size={18} class="text-gray-600" />}
-              </button>
-
-              {showManageSection && (
-                <div class="mt-4 pt-4 border-t border-gray-200">
-                  <p class="text-sm text-gray-600 mb-3">
-                    {allPapers.length} paper{allPapers.length !== 1 ? 's' : ''} stored in your library
-                  </p>
-
-                  <div class="flex items-center gap-3">
-                    <button
-                      onClick={handleDeleteAllPapers}
-                      disabled={isDeletingAll}
-                      class="btn btn-secondary px-4 py-2 text-red-600 hover:bg-red-50 hover:cursor-pointer flex items-center gap-2"
-                      title="Delete all papers and their data"
-                    >
-                      {isDeletingAll ? (
-                        <>
-                          <Loader size={16} class="animate-spin" />
-                          <span>Deleting all...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Trash2 size={16} />
-                          <span>Delete All Papers</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Delete All Confirmation */}
-                  {showDeleteAllConfirm && (
-                    <div class="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                      <p class="text-sm font-semibold text-red-900 mb-2">
-                        Delete all {allPapers.length} papers?
-                      </p>
-                      <p class="text-xs text-red-800 mb-3">
-                        This will permanently delete all papers, chunks, and Q&A history. This action cannot be undone.
-                      </p>
-                      <div class="flex gap-2">
-                        <button
-                          onClick={handleDeleteAllPapers}
-                          disabled={isDeletingAll}
-                          class="btn btn-secondary text-red-600 hover:bg-red-100 px-4 py-2 text-sm hover:cursor-pointer"
-                        >
-                          {isDeletingAll ? 'Deleting...' : 'Delete All'}
-                        </button>
-                        <button
-                          onClick={() => setShowDeleteAllConfirm(false)}
-                          disabled={isDeletingAll}
-                          class="btn btn-secondary px-4 py-2 text-sm"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Actions */}
           <div class="flex gap-3 mt-6">

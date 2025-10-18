@@ -442,6 +442,84 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         }
         break;
 
+      case MessageType.GENERATE_GLOSSARY:
+        try {
+          const paperUrl = message.payload.url;
+          // Use tab ID from payload or sender for context
+          const tabId = message.payload.tabId || sender.tab?.id;
+          const glossaryContextId = tabId ? `tab-${tabId}-glossary` : 'default-glossary';
+
+          // Check for existing active request
+          const requestKey = getRequestKey(tabId, 'glossary', paperUrl);
+          if (activeRequests.has(requestKey)) {
+            console.log(`[Background] Reusing existing glossary request for ${requestKey}`);
+            const existingGlossary = await activeRequests.get(requestKey);
+            sendResponse({ success: true, glossary: existingGlossary });
+            break;
+          }
+
+          // Create new glossary generation promise
+          const glossaryPromise = (async () => {
+            // Retrieve paper from IndexedDB
+            const storedPaper = await getPaperByUrl(paperUrl);
+
+            if (!storedPaper) {
+              throw new Error('Paper not found in storage. Please store the paper first.');
+            }
+
+            console.log(`Generating glossary for paper: ${storedPaper.title} with context: ${glossaryContextId}`);
+
+            // Use fullText for glossary generation (more complete than abstract)
+            const paperContent = storedPaper.fullText || storedPaper.abstract;
+
+            // Generate glossary with context ID
+            const glossary = await aiService.generateGlossary(paperContent, storedPaper.title, glossaryContextId);
+
+            return glossary;
+          })();
+
+          // Store the promise for deduplication
+          activeRequests.set(requestKey, glossaryPromise);
+
+          try {
+            const glossary = await glossaryPromise;
+
+            // Get the stored paper for storage operations
+            const storedPaper = await getPaperByUrl(paperUrl);
+
+            if (storedPaper) {
+              // Store in IndexedDB with the paper
+              try {
+                const { updatePaperGlossary } = await import('../utils/dbService.ts');
+                await updatePaperGlossary(storedPaper.id, glossary);
+                console.log('[Background] ✓ Glossary stored in IndexedDB');
+              } catch (dbError) {
+                console.warn('[Background] Failed to store glossary in IndexedDB:', dbError);
+                // Don't fail the whole operation if IndexedDB update fails
+              }
+            }
+
+            console.log('✓ Glossary generation complete');
+            sendResponse({ success: true, glossary });
+          } catch (glossaryError) {
+            console.error('Error generating glossary:', glossaryError);
+            sendResponse({
+              success: false,
+              error: `Glossary generation failed: ${String(glossaryError)}`
+            });
+          } finally {
+            // Clean up the active request
+            activeRequests.delete(requestKey);
+          }
+        } catch (error) {
+          console.error('Error in glossary generation setup:', error);
+          sendResponse({
+            success: false,
+            error: `Glossary generation failed: ${String(error)}`
+          });
+        }
+        break;
+
       case MessageType.ASK_QUESTION:
         try {
           const { paperUrl, question } = message.payload;

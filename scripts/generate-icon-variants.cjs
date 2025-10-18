@@ -8,7 +8,7 @@ const VARIANTS = {
   detecting: { color: '#3B82F6', label: 'Detecting' },    // Blue
   explaining: { color: '#9c6640', label: 'Explaining' },  // Brown
   analyzing: { color: '#F97316', label: 'Analyzing' },     // Orange
-  stored: { color: '#047857', label: 'Stored' }           // Dark Green
+  stored: { color: '#13bd2a', label: 'Stored' }           // Green
 };
 
 // Indicator dot position and size relative to icon size

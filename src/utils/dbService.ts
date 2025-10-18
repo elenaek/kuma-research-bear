@@ -478,6 +478,51 @@ export async function updatePaperAnalysis(paperId: string, analysis: any): Promi
 }
 
 /**
+ * Update glossary for a paper
+ */
+export async function updatePaperGlossary(paperId: string, glossary: any): Promise<boolean> {
+  const db = await initDB();
+
+  try {
+    // Get the paper first
+    const transaction = db.transaction([PAPERS_STORE], 'readonly');
+    const store = transaction.objectStore(PAPERS_STORE);
+
+    const paper = await new Promise<StoredPaper | null>((resolve) => {
+      const request = store.get(paperId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+
+    if (!paper) {
+      console.error('Paper not found for glossary update:', paperId);
+      db.close();
+      return false;
+    }
+
+    // Update the paper with glossary
+    paper.glossary = glossary;
+    paper.lastAccessedAt = Date.now();
+
+    const updateTransaction = db.transaction([PAPERS_STORE], 'readwrite');
+    const updateStore = updateTransaction.objectStore(PAPERS_STORE);
+    await new Promise<void>((resolve, reject) => {
+      const request = updateStore.put(paper);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to update glossary'));
+    });
+
+    console.log(`✓ Updated glossary for paper: ${paper.title}`);
+    db.close();
+    return true;
+  } catch (error) {
+    db.close();
+    console.error('Error updating glossary:', error);
+    return false;
+  }
+}
+
+/**
  * Search papers by title or content (simple full-text search)
  */
 export async function searchPapers(query: string): Promise<StoredPaper[]> {

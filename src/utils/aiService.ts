@@ -1,23 +1,27 @@
-import { 
-  AICapabilities, 
-  AILanguageModelSession, 
-  AISessionOptions, 
-  ExplanationResult, 
-  SummaryResult, 
-  AIAvailability, 
-  PaperAnalysisResult, 
-  MethodologyAnalysis, 
-  ConfounderAnalysis, 
-  ImplicationAnalysis, 
-  LimitationAnalysis, 
-  QuestionAnswer 
+import {
+  AICapabilities,
+  AILanguageModelSession,
+  AISessionOptions,
+  ExplanationResult,
+  SummaryResult,
+  AIAvailability,
+  PaperAnalysisResult,
+  MethodologyAnalysis,
+  ConfounderAnalysis,
+  ImplicationAnalysis,
+  LimitationAnalysis,
+  QuestionAnswer,
+  GlossaryResult,
+  GlossaryTerm,
+  StudyContext
 } from '../types/index.ts';
 import { JSONSchema } from '../utils/typeToSchema.ts';
-import { 
-  limitationAnalysisSchema, 
-  implicationAnalysisSchema, 
-  methodologyAnalysisSchema, 
-  confounderAnalysisSchema 
+import {
+  limitationAnalysisSchema,
+  implicationAnalysisSchema,
+  methodologyAnalysisSchema,
+  confounderAnalysisSchema,
+  glossarySchema
 } from '../schemas/analysisSchemas.ts';
 
 /**
@@ -41,7 +45,7 @@ class ChromeAIService {
   private extractionRetries: Map<string, number> = new Map(); // Track retries per URL
 
   // Configuration
-  private readonly MAX_CONCURRENT_SESSIONS = 10;
+  private readonly MAX_CONCURRENT_SESSIONS = 30;
   private readonly SESSION_IDLE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
   private readonly CLEANUP_INTERVAL = 60 * 1000; // Check every minute
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -236,7 +240,7 @@ class ChromeAIService {
     input: string,
     systemPrompt?: string,
     responseConstraint?: JSONSchema,
-    contextId: string = 'default'
+    contextId: string = 'default',
   ): Promise<string> {
     try {
       // Get or create session for this context
@@ -919,6 +923,134 @@ Use markdown formatting for better readability:
         question,
         answer: 'Sorry, I encountered an error while trying to answer this question. Please try again.',
         sources: [],
+        timestamp: Date.now(),
+      };
+    }
+  }
+
+  /**
+   * Generate a glossary of acronyms and technical terms from a research paper
+   */
+  async generateGlossary(
+    paperContent: string,
+    paperTitle: string,
+    contextId: string = 'glossary'
+  ): Promise<GlossaryResult> {
+    console.log('Generating glossary of terms and acronyms...');
+
+    const maxChars = 20000; // ~5000tokens
+    const truncatedContent = paperContent.slice(0, maxChars);
+
+//     const systemPrompt = `You are a research paper terminology expert who creates comprehensive glossaries.
+// Extract acronyms, initialisms, and key technical terms from research papers.
+// Provide clear definitions and helpful analogies for each term.`;
+
+//     const input = `Extract all acronyms, initialisms, and important technical abbreviations from this research paper and create a glossary.
+
+// For each acronym/term, provide:
+// 1. The acronym/initialism (e.g., "RCT", "CI", "FDA")
+// 2. The full expanded form
+// 3. A clear definition
+// 4. An array of study contexts with sections - for each context, specify:
+//    - context: how the term is used (string)
+//    - sections: array of section names where this usage appears (array of strings)
+// 5. An analogy to help understand the term
+
+// Focus on terms that are critical to understanding the paper.
+// Paper Title: ${paperTitle}
+
+// Paper Content:
+// ${truncatedContent}.`;
+    const systemPrompt = `You are a research paper terminology expert who creates comprehensive glossaries.
+    Extract acronyms, initialisms, and key technical terms from research papers.
+    Provide clear definitions and helpful analogies for each term.
+`;
+
+    const input = `Extract all UNIQUE acronyms, initialisms, and important technical abbreviations from this research paper and create a glossary.
+
+For each key acronym/initialisms/technical terms, provide:
+1. The acronym/initialism/technical term (e.g., "RCT", "CI", "FDA")
+2. The full expanded form
+3. A clear definition
+4. An array of study contexts with sections - for each context, specify:
+   - context: how the term is used (string)
+   - sections: array of section names where this usage appears (array of strings)
+5. A simple analogy to help understand it
+
+If the same context appears in multiple sections, include all sections in the array.
+Focus on terms that are critical to understanding the paper.
+
+Paper Title: ${paperTitle}
+
+Paper Content:
+${truncatedContent}`;
+    try {
+      console.log('[Glossary] Attempting to generate glossary with schema validation...');
+      const response = await this.prompt(input, systemPrompt, glossarySchema, contextId);
+      console.log('[Glossary] AI response received, length:', response.length);
+      console.log('[Glossary] Raw response preview:', response.substring(0, 500));
+
+      const glossary = JSON.parse(response);
+      console.log('[Glossary] JSON parsed successfully');
+      console.log('[Glossary] Glossary object:', glossary);
+      console.log('[Glossary] Number of terms:', glossary.terms?.length || 0);
+
+      // Ensure terms array exists
+      if (!glossary.terms) {
+        console.warn('[Glossary] No terms array in response, initializing empty array');
+        glossary.terms = [];
+      } else {
+        console.log('[Glossary] First term sample:', glossary.terms[0]);
+      }
+
+      // Deduplicate terms by acronym (case-insensitive)
+      const uniqueTermsMap = new Map<string, GlossaryTerm>();
+      for (const term of glossary.terms) {
+        const key = term.acronym.toUpperCase().trim();
+
+        if (!uniqueTermsMap.has(key)) {
+          // Normalize the acronym (trim whitespace)
+          term.acronym = term.acronym.trim();
+          uniqueTermsMap.set(key, term);
+        } else {
+          // Merge study contexts by appending unique ones
+          const existing = uniqueTermsMap.get(key)!;
+          for (const newContext of term.studyContext) {
+            // Check if this context already exists (based on similar context text)
+            const existingContext = existing.studyContext.find(
+              ec => ec.context.toLowerCase() === newContext.context.toLowerCase()
+            );
+
+            if (existingContext) {
+              // Merge sections for the same context
+              for (const section of newContext.sections) {
+                if (!existingContext.sections.includes(section)) {
+                  existingContext.sections.push(section);
+                }
+              }
+            } else {
+              // Add new context
+              existing.studyContext.push(newContext);
+            }
+          }
+        }
+      }
+
+      // Convert back to array and sort alphabetically
+      const uniqueTerms = Array.from(uniqueTermsMap.values());
+      uniqueTerms.sort((a: GlossaryTerm, b: GlossaryTerm) =>
+        a.acronym.localeCompare(b.acronym)
+      );
+
+      return {
+        terms: uniqueTerms,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      console.error('Glossary generation failed:', error);
+      // Return empty glossary on error
+      return {
+        terms: [],
         timestamp: Date.now(),
       };
     }

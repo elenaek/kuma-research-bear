@@ -154,7 +154,7 @@ body {
 }
 
 .markdown-content ul {
-  @apply list-disc list-inside space-y-1 ml-4;
+  @apply list-disc space-y-1 ml-4;
 }
 
 .markdown-content ol {
