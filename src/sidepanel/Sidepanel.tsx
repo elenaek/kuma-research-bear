@@ -834,7 +834,7 @@ Source: ${paper.url}
             <div>
               <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2"><PawPrint size={20} class="text-gray-400" /> Kuma</h1>
               <p class="text-sm text-gray-600">
-                {isCheckingStorage ? 'Kuma is checking paper storage...' : 'Kuma found the paper stored and is ready for analysis'}
+                {isCheckingStorage ? '🐻 Kuma is checking paper storage...' : '🐻 Kuma found the paper stored and is ready for analysis'}
               </p>
             </div>
             <button
@@ -935,7 +935,7 @@ Source: ${paper.url}
                 <div class="flex items-center gap-3">
                   <Loader size={20} class="animate-spin text-blue-600" />
                   <div>
-                    <p class="text-sm font-medium text-blue-900">Checking paper storage...</p>
+                    <p class="text-sm font-medium text-blue-900">🐻 Kuma is checking paper storage...</p>
                     <p class="text-xs text-blue-700">Retrying with exponential backoff (up to 5 attempts)</p>
                   </div>
                 </div>
@@ -948,7 +948,7 @@ Source: ${paper.url}
                 <div class="flex items-center gap-3">
                   <Loader size={24} class="animate-spin text-blue-600" />
                   <div class="flex-1">
-                    <p class="text-base font-semibold text-blue-900 mb-1">🐻 Kuma is explaining the paper...</p>
+                    <p class="text-base font-semibold text-blue-900 mb-1">🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)</p>
                     <p class="text-sm text-blue-700">Generating summary and simplified explanation</p>
                     <p class="text-xs text-blue-600 mt-1">This usually takes 10-20 seconds</p>
                   </div>

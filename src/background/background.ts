@@ -435,7 +435,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
             // Phase 1: Detection
             updateOperationState(tabId, {
               isDetecting: true,
-              detectionProgress: 'Detecting paper...',
+              detectionProgress: '🐻 Kuma is foraging for research papers... (Detecting paper)',
               error: null,
             });
 
@@ -445,25 +445,26 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
             if (!detectResponse.paper) {
               updateOperationState(tabId, {
-                isDetecting: false,
+                isDetecting: true,
                 detectionProgress: '',
-                error: 'No paper detected on this page',
+                error: '🐻 Kuma didn\'t find any research papers. (No paper detected on this page)',
               });
-              sendResponse({ success: false, error: 'No paper detected' });
+              sendResponse({ success: false, error: '🐻 Kuma didn\'t find any research papers. (No paper detected)' });
               return;
             }
 
             // Update state with detected paper
             updateOperationState(tabId, {
-              isDetecting: false,
-              detectionProgress: 'Paper detected!',
+              isDetecting: true,
+              detectionProgress: '🐻 Kuma found a research paper! (Paper detected!)',
               currentPaper: detectResponse.paper,
             });
 
             // Phase 2: Explanation
             updateOperationState(tabId, {
+              isDetecting: false,
               isExplaining: true,
-              explanationProgress: 'Generating explanation...',
+              explanationProgress: '🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)',
             });
 
             // Use tab ID for context
@@ -496,14 +497,17 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
             }
 
             updateOperationState(tabId, {
-              isExplaining: false,
-              explanationProgress: 'Explanation complete!',
+              isDetecting: false,
+              isExplaining: true,
+              explanationProgress: '🐻 Kuma has finished explaining the research paper! (Explanation complete!)',
             });
 
             // Phase 3: Analysis (auto-trigger)
             updateOperationState(tabId, {
+              isDetecting: false,
+              isExplaining: false,
               isAnalyzing: true,
-              analysisProgress: 'Analyzing paper...',
+              analysisProgress: '🐻 Kuma is deeply analyzing the research paper... (Analyzing paper)',
             });
 
             const paperUrl = detectResponse.paper.url;
@@ -534,14 +538,28 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
               }
 
               updateOperationState(tabId, {
-                isAnalyzing: false,
-                analysisProgress: 'Analysis complete!',
+                isDetecting: false,
+                isExplaining: false,
+                isAnalyzing: true,
+                analysisProgress: '🐻 Kuma has finished analyzing the research paper! (Analysis complete!)',
               });
+
+              setTimeout(() =>{
+                updateOperationState(tabId, {
+                  isDetecting: false,
+                  isExplaining: false,
+                  isAnalyzing: false,
+                  analysisProgress: '',
+                  error: null,
+                });
+              }, 5000);
             } else {
               updateOperationState(tabId, {
+                isDetecting: false,
                 isAnalyzing: false,
+                isExplaining: false,
                 analysisProgress: '',
-                error: 'Paper not found for analysis',
+                error: '🐻 Kuma could not find a research paper to analyze. (Paper not found for analysis)',
               });
             }
 

@@ -1,4 +1,7 @@
 @import "tailwindcss";
+html {
+  scrollbar-width: thin;
+}
 
 body {
   margin: 0;
@@ -37,6 +40,16 @@ body {
   background-color: #075985;
 }
 
+.btn-success {
+  background-color: #32964d;
+  color: white;
+}
+
+.btn-kuma-working {
+  background-color: #9c6640;
+  color: white;
+}
+
 .btn-secondary {
   background-color: #f3f4f6;
   color: #374151;
@@ -62,10 +75,19 @@ body {
   width: 0.625rem;
   height: 0.625rem;
   border-radius: 9999px;
+  padding-left: 5px;
+  padding-right: 5px;
+  margin-left: 5px;
+  margin-right: 10px;
 }
 
 .status-dot.ready {
   background-color: #22c55e;
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.status-dot.kuma-working {
+  background-color: #9c6640;
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 

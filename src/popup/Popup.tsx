@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
-import { Search, Sparkles, PanelRight, Settings, Download, Loader, PawPrint, RefreshCw, Database } from 'lucide-preact';
+import { Search, PanelRight, Settings, Backpack, Loader, PawPrint, RefreshCw, Database } from 'lucide-preact';
 import { MessageType, ResearchPaper, AIAvailability } from '../types/index.ts';
 
 export function Popup() {
@@ -13,6 +13,7 @@ export function Popup() {
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectionStatus, setDetectionStatus] = useState<string | null>(null);
   const [isPaperStored, setIsPaperStored] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Check AI availability and operation state on mount
   useEffect(() => {
@@ -29,19 +30,20 @@ export function Popup() {
 
         // Update UI based on state changes
         setIsDetecting(state.isDetecting);
-
+        setIsExplaining(state.isExplaining);
+        setIsAnalyzing(state.isAnalyzing);
         if (state.isDetecting) {
-          setDetectionStatus(state.detectionProgress || '🐻 Kuma is foraging for research papers...');
+          setDetectionStatus(state.detectionProgress || '🐻 Kuma is foraging for research papers... (Detecting paper)');
         } else if (state.isExplaining) {
-          setDetectionStatus(state.explanationProgress || '🐻 Kuma is thinking of ways to explain the research paper...');
+          setDetectionStatus(state.explanationProgress || '🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)');
         } else if (state.isAnalyzing) {
-          setDetectionStatus(state.analysisProgress || '🐻 Kuma is deeply analyzing the research paper...');
+          setDetectionStatus(state.analysisProgress || '🐻 Kuma is deeply analyzing the research paper... (Analyzing paper)');
         } else if (state.error) {
           setDetectionStatus(`❌ ${state.error}`);
         } else {
           // All done
-          setDetectionStatus('✅ Complete!');
-          setTimeout(() => setDetectionStatus(null), 3000);
+          setDetectionStatus('✅ Kuma is done! You can now open the sidepanel to see the results. (Complete!)');
+          setTimeout(() => setDetectionStatus(null), 5000);
         }
 
         if (state.currentPaper) {
@@ -70,15 +72,21 @@ export function Popup() {
 
       if (response.success && response.state) {
         const state = response.state;
+        setIsDetecting(state.isDetecting);
+        setIsExplaining(state.isExplaining);
+        setIsAnalyzing(state.isAnalyzing);
         console.log('[Popup] Loaded operation state:', state);
 
         // Update UI based on current state
         if (state.isDetecting) {
           setIsDetecting(true);
-          setDetectionStatus(state.detectionProgress || 'Detecting paper...');
+          setDetectionStatus(state.detectionProgress || '🐻 Kuma is foraging for research papers... (Detecting paper)');
         }
         if (state.isExplaining) {
-          setDetectionStatus('🐻 Kuma is explaining the paper...');
+          setDetectionStatus(state.explanationProgress || '🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)');
+        }
+        if (state.isAnalyzing) {
+          setDetectionStatus(state.analysisProgress || '🐻 Kuma is deeply analyzing the research paper... (Analyzing paper)');
         }
         if (state.currentPaper) {
           setPaper(state.currentPaper);
@@ -202,7 +210,7 @@ export function Popup() {
   async function handleDetectPaper() {
     try {
       setIsDetecting(true);
-      setDetectionStatus('🐻 Kuma is foraging for research papers...');
+      setDetectionStatus('🐻 Kuma is foraging for research papers... (Detecting paper)');
 
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
@@ -282,7 +290,7 @@ export function Popup() {
   }
 
   return (
-    <div class="w-80 bg-gradient-to-br from-gray-50 to-gray-100">
+    <div class="w-90 bg-gradient-to-br from-gray-50 to-gray-100">
       <div class="p-6">
         {/* Header */}
         <header class="mb-6 text-center">
@@ -291,7 +299,7 @@ export function Popup() {
             <img
               src="/icons/icon128.png"
               alt="Kuma the Research Bear"
-              class="w-16 h-16"
+              class="w-28 h-28"
             />
           </div>
 
@@ -302,8 +310,18 @@ export function Popup() {
         {/* AI Status */}
         <div class="card mb-4">
           <div class="flex items-center gap-3">
-            <span class={`status-dot ${aiStatus === 'ready' ? 'ready' : aiStatus === 'error' ? 'error' : ''}`} />
-            <span class="text-sm text-gray-700">{statusMessage}</span>
+            <span class={`status-dot rounded-full ${(() => {
+              if (aiStatus === 'ready' && (isDetecting || isExplaining || isAnalyzing)) return 'kuma-working';
+              if (aiStatus === 'ready') return 'ready';
+              if (aiStatus === 'error') return 'error';
+              return 'kuma-working';
+            })()}`} />
+            <span class="text-sm text-gray-700">{(() => {
+              if (aiStatus === 'ready' && detectionStatus && (isDetecting || isExplaining || isAnalyzing)) return detectionStatus;
+              if (aiStatus === 'ready') return 'Kuma is ready to help you with your research!';
+              if (aiStatus === 'error') return 'Kuma is full asleep again. (AI Model Crashed)';
+              return 'Kuma is missing from his cave. (Not available on this device)';
+            })()}</span>
           </div>
 
           {/* Initialize AI Button */}
@@ -371,6 +389,16 @@ export function Popup() {
           )}
         </div>
 
+        {/* Detection Status */}
+        {/* {(detectionStatus && (isDetecting || isExplaining || isAnalyzing)) && (
+          <div class="card mb-4 bg-blue-50 border-blue-200">
+            <div class="flex items-center gap-2">
+              {(isDetecting || isExplaining || isAnalyzing) && <Loader size={32} class="animate-spin bg-gradient-to-br text-blue-500" />}
+              <p class="text-sm font-medium text-blue-900">{detectionStatus}</p>
+            </div>
+          </div>
+        )} */}
+
         {/* Paper Info */}
         {paper && (
           <div class="card mb-4 bg-blue-50 border-blue-200">
@@ -388,47 +416,41 @@ export function Popup() {
           </div>
         )}
 
-        {/* Detection Status */}
-        {detectionStatus && (
-          <div class="card mb-4 bg-blue-50 border-blue-200">
-            <div class="flex items-center gap-2">
-              {isDetecting && <Loader size={14} class="animate-spin bg-gradient-to-br text-blue-500" />}
-              <p class="text-sm font-medium text-blue-900">{detectionStatus}</p>
-            </div>
-          </div>
-        )}
 
         {/* Actions */}
         <div class="space-y-2">
           <button
             onClick={handleDetectPaper}
-            disabled={aiStatus !== 'ready' || isDetecting}
-            class="btn btn-primary w-full hover:cursor-pointer"
+            disabled={aiStatus !== 'ready' || isDetecting || isExplaining || isAnalyzing || isPaperStored}
+            class={`${isPaperStored ? `${(isDetecting || isExplaining || isAnalyzing) ? 'btn btn-kuma-working' : 'btn btn-success'}` : `${'btn btn-primary'}`} w-full hover:cursor-pointer`}
             title={aiStatus !== 'ready' ? 'Wake Kuma up' : isDetecting ? 'Detecting and explaining...' : 'Detect paper and automatically generate explanation'}
           >
-            {isDetecting ? (
-              <>
-                <Loader size={16} class="animate-spin" />
-                Detecting & Explaining...
-              </>
-            ) : (
-              <>
-                <Search size={16} />
-                Detect & Explain Paper
-              </>
-            )}
+            {(() => {
+              if (isDetecting || isExplaining || isAnalyzing) {
+                return (
+                  <>
+                    <Loader size={32} class="animate-spin" />
+                    Kuma is hard at work... (Detecting, explaining, and analyzing)
+                  </>
+                );
+              } else if (isPaperStored) {
+                return (
+                  <>
+                    <Backpack size={32} />
+                    Kuma has found this research paper stored in his backpack. (Paper already stored)
+                  </>
+                );
+              } else {
+                return (
+                  <>
+                    <Search size={32} />
+                    Detect & Explain Paper
+                  </>
+                );
+              }
+            })()}
           </button>
 
-          {/* Explain Paper button removed - explanation now happens automatically after detection */}
-          {/* <button
-            onClick={handleExplainPaper}
-            disabled={!paper || isExplaining || aiStatus !== 'ready'}
-            class="btn btn-secondary w-full hover:cursor-pointer"
-            title={aiStatus !== 'ready' ? 'Wake Kuma up' : ''}
-          >
-            <Sparkles size={16} />
-            {isExplaining ? 'Explaining...' : 'Explain Paper'}
-          </button> */}
 
           <button
             onClick={handleOpenSidepanel}
