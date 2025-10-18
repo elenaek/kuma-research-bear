@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks';
-import { Search, Sparkles, PanelRight, Settings, Download, Loader, PawPrint, RefreshCw } from 'lucide-preact';
+import { Search, Sparkles, PanelRight, Settings, Download, Loader, PawPrint, RefreshCw, Database } from 'lucide-preact';
 import { MessageType, ResearchPaper, AIAvailability } from '../types/index.ts';
 
 export function Popup() {
@@ -12,6 +12,7 @@ export function Popup() {
   const [isResetting, setIsResetting] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectionStatus, setDetectionStatus] = useState<string | null>(null);
+  const [isPaperStored, setIsPaperStored] = useState(false);
 
   // Check AI availability and operation state on mount
   useEffect(() => {
@@ -30,11 +31,11 @@ export function Popup() {
         setIsDetecting(state.isDetecting);
 
         if (state.isDetecting) {
-          setDetectionStatus(state.detectionProgress || 'Detecting paper...');
+          setDetectionStatus(state.detectionProgress || '🐻 Kuma is foraging for research papers...');
         } else if (state.isExplaining) {
-          setDetectionStatus(state.explanationProgress || '🐻 Kuma is explaining the paper...');
+          setDetectionStatus(state.explanationProgress || '🐻 Kuma is thinking of ways to explain the research paper...');
         } else if (state.isAnalyzing) {
-          setDetectionStatus(state.analysisProgress || '🐻 Kuma is analyzing the paper...');
+          setDetectionStatus(state.analysisProgress || '🐻 Kuma is deeply analyzing the research paper...');
         } else if (state.error) {
           setDetectionStatus(`❌ ${state.error}`);
         } else {
@@ -45,6 +46,7 @@ export function Popup() {
 
         if (state.currentPaper) {
           setPaper(state.currentPaper);
+          checkPaperStorageStatus(state.currentPaper.url);
         }
       }
     };
@@ -80,6 +82,7 @@ export function Popup() {
         }
         if (state.currentPaper) {
           setPaper(state.currentPaper);
+          checkPaperStorageStatus(state.currentPaper.url);
         }
         if (state.error) {
           setDetectionStatus(`❌ ${state.error}`);
@@ -120,6 +123,27 @@ export function Popup() {
       setStatusMessage('Error checking Kuma\'s status');
       console.log('Kuma status check failed:', error);
       console.error('Kuma status check failed:', error);
+    }
+  }
+
+  async function checkPaperStorageStatus(paperUrl: string) {
+    try {
+      console.log('[Popup] Checking if paper is stored:', paperUrl);
+      const response = await chrome.runtime.sendMessage({
+        type: MessageType.IS_PAPER_STORED_IN_DB,
+        payload: { url: paperUrl },
+      });
+
+      if (response.success) {
+        console.log('[Popup] Paper stored check result:', response.isStored);
+        setIsPaperStored(response.isStored);
+      } else {
+        console.error('[Popup] Failed to check paper storage:', response.error);
+        setIsPaperStored(false);
+      }
+    } catch (error) {
+      console.error('[Popup] Error checking paper storage:', error);
+      setIsPaperStored(false);
     }
   }
 
@@ -350,7 +374,15 @@ export function Popup() {
         {/* Paper Info */}
         {paper && (
           <div class="card mb-4 bg-blue-50 border-blue-200">
-            <h3 class="text-sm font-semibold text-gray-700 mb-2">Current Paper</h3>
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <h3 class="text-sm font-semibold text-gray-700">Current Paper</h3>
+              {isPaperStored && (
+                <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 flex items-center gap-1">
+                  <Database size={10} />
+                  Stored
+                </span>
+              )}
+            </div>
             <p class="text-sm font-medium text-gray-900 mb-1 line-clamp-2">{paper.title}</p>
             <p class="text-xs text-gray-600 line-clamp-1">{paper.authors.join(', ')}</p>
           </div>

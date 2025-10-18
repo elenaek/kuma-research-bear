@@ -5,6 +5,16 @@ import { getPaperByUrl, getPaperChunks, getRelevantChunks } from '../utils/dbSer
 // Persistent operation state tracking (per-tab)
 const operationStates = new Map<number, OperationState>();
 
+// Active request tracking for deduplication
+// Key format: "tabId-operation-paperUrl" or similar
+const activeRequests = new Map<string, Promise<any>>();
+
+// Helper to generate request key for deduplication
+function getRequestKey(tabId: number | undefined, operation: string, paperUrl?: string): string {
+  const tabKey = tabId || 'default';
+  return paperUrl ? `${tabKey}-${operation}-${paperUrl}` : `${tabKey}-${operation}`;
+}
+
 // Helper to get or create operation state for a tab
 function getOperationState(tabId: number): OperationState {
   if (!operationStates.has(tabId)) {
@@ -19,6 +29,8 @@ function getOperationState(tabId: number): OperationState {
       explanationProgress: '',
       analysisProgress: '',
       lastUpdated: Date.now(),
+      activeAIRequests: [],
+      isUsingCachedRequest: false,
     });
   }
   return operationStates.get(tabId)!;
@@ -84,10 +96,13 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
           await chrome.storage.local.set({ isExplaining: true });
 
           const paper: ResearchPaper = message.payload.paper;
-          const explanation = await aiService.explainAbstract(paper.abstract);
-          const summary = await aiService.generateSummary(paper.title, paper.abstract);
+          // Generate context ID based on tab ID if available
+          const contextId = sender.tab?.id ? `tab-${sender.tab.id}-explain` : 'default-explain';
 
-          // Store the explanation
+          const explanation = await aiService.explainAbstract(paper.abstract, contextId);
+          const summary = await aiService.generateSummary(paper.title, paper.abstract, contextId);
+
+          // Store the explanation in chrome.storage (for quick access/backwards compatibility)
           await chrome.storage.local.set({
             lastExplanation: {
               paper,
@@ -97,6 +112,19 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
             },
             isExplaining: false, // Clear flag when done
           });
+
+          // Also store in IndexedDB per-paper for persistence
+          try {
+            const storedPaper = await getPaperByUrl(paper.url);
+            if (storedPaper) {
+              const { updatePaperExplanation } = await import('../utils/dbService.ts');
+              await updatePaperExplanation(storedPaper.id, explanation, summary);
+              console.log('[Background] ✓ Explanation stored in IndexedDB');
+            }
+          } catch (dbError) {
+            console.warn('[Background] Failed to store explanation in IndexedDB:', dbError);
+            // Don't fail the whole operation if IndexedDB update fails
+          }
 
           sendResponse({ success: true, explanation, summary });
         } catch (explainError) {
@@ -108,65 +136,122 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
       case MessageType.EXPLAIN_SECTION:
         const sectionText = message.payload.text;
-        const simplified = await aiService.simplifyText(sectionText);
+        const sectionContextId = sender.tab?.id ? `tab-${sender.tab.id}-section` : 'default-section';
+        const simplified = await aiService.simplifyText(sectionText, sectionContextId);
         sendResponse({ success: true, simplified });
         break;
 
       case MessageType.EXPLAIN_TERM:
         const term = message.payload.term;
         const context = message.payload.context;
-        const termExplanation = await aiService.explainTerm(term, context);
+        const termContextId = sender.tab?.id ? `tab-${sender.tab.id}-term` : 'default-term';
+        const termExplanation = await aiService.explainTerm(term, context, termContextId);
         sendResponse({ success: true, explanation: termExplanation });
         break;
 
       case MessageType.GENERATE_SUMMARY:
         const { title, abstract } = message.payload;
-        const summaryResult = await aiService.generateSummary(title, abstract);
+        const summaryContextId = sender.tab?.id ? `tab-${sender.tab.id}-summary` : 'default-summary';
+        const summaryResult = await aiService.generateSummary(title, abstract, summaryContextId);
         sendResponse({ success: true, summary: summaryResult });
         break;
 
       case MessageType.ANALYZE_PAPER:
         try {
           const paperUrl = message.payload.url;
+          // Use tab ID from payload or sender for context
+          const tabId = message.payload.tabId || sender.tab?.id;
+          const analysisContextId = tabId ? `tab-${tabId}-analysis` : 'default-analysis';
 
-          // Retrieve paper from IndexedDB
-          const storedPaper = await getPaperByUrl(paperUrl);
+          // Check for existing active request
+          const requestKey = getRequestKey(tabId, 'analyze', paperUrl);
+          if (activeRequests.has(requestKey)) {
+            console.log(`[Background] Reusing existing analysis request for ${requestKey}`);
 
-          if (!storedPaper) {
-            sendResponse({
-              success: false,
-              error: 'Paper not found in storage. Please store the paper first.'
-            });
+            // Update operation state to indicate cached request
+            if (tabId) {
+              updateOperationState(tabId, {
+                isUsingCachedRequest: true,
+                analysisProgress: 'Using existing analysis in progress...',
+              });
+            }
+
+            const existingAnalysis = await activeRequests.get(requestKey);
+            sendResponse({ success: true, analysis: existingAnalysis });
             break;
           }
 
-          console.log(`Analyzing paper: ${storedPaper.title}`);
+          // Create new analysis promise
+          const analysisPromise = (async () => {
+            // Retrieve paper from IndexedDB
+            const storedPaper = await getPaperByUrl(paperUrl);
 
-          // Get paper chunks for comprehensive analysis
-          const chunks = await getPaperChunks(storedPaper.id);
+            if (!storedPaper) {
+              throw new Error('Paper not found in storage. Please store the paper first.');
+            }
 
-          // Use fullText for analysis (more complete than abstract)
-          const paperContent = storedPaper.fullText || storedPaper.abstract;
+            console.log(`Analyzing paper: ${storedPaper.title} with context: ${analysisContextId}`);
 
-          // Run comprehensive analysis
-          const analysis: PaperAnalysisResult = await aiService.analyzePaper(paperContent);
+            // Get paper chunks for comprehensive analysis
+            const chunks = await getPaperChunks(storedPaper.id);
 
-          // Store analysis result
-          await chrome.storage.local.set({
-            lastAnalysis: {
-              paper: storedPaper,
-              analysis,
-              timestamp: Date.now(),
-            },
-          });
+            // Use fullText for analysis (more complete than abstract)
+            const paperContent = storedPaper.fullText || storedPaper.abstract;
 
-          console.log('✓ Paper analysis complete');
-          sendResponse({ success: true, analysis });
-        } catch (analysisError) {
-          console.error('Error analyzing paper:', analysisError);
+            // Run comprehensive analysis with context ID
+            const analysis: PaperAnalysisResult = await aiService.analyzePaper(paperContent, analysisContextId);
+
+            return analysis;
+          })();
+
+          // Store the promise for deduplication
+          activeRequests.set(requestKey, analysisPromise);
+
+          try {
+            const analysis = await analysisPromise;
+
+            // Get the stored paper for storage operations
+            const storedPaper = await getPaperByUrl(paperUrl);
+
+            if (storedPaper) {
+              // Store analysis result in chrome.storage (for quick access/backwards compatibility)
+              await chrome.storage.local.set({
+                lastAnalysis: {
+                  paper: storedPaper,
+                  analysis,
+                  timestamp: Date.now(),
+                },
+              });
+
+              // Also store in IndexedDB per-paper for persistence
+              try {
+                const { updatePaperAnalysis } = await import('../utils/dbService.ts');
+                await updatePaperAnalysis(storedPaper.id, analysis);
+                console.log('[Background] ✓ Analysis stored in IndexedDB');
+              } catch (dbError) {
+                console.warn('[Background] Failed to store analysis in IndexedDB:', dbError);
+                // Don't fail the whole operation if IndexedDB update fails
+              }
+            }
+
+            console.log('✓ Paper analysis complete');
+            sendResponse({ success: true, analysis });
+          } catch (analysisError) {
+            console.error('Error analyzing paper:', analysisError);
+            sendResponse({
+              success: false,
+              error: `Analysis failed: ${String(analysisError)}`
+            });
+          } finally {
+            // Clean up the active request
+            activeRequests.delete(requestKey);
+          }
+        } catch (error) {
+          console.error('Error in analysis setup:', error);
+          activeRequests.delete(requestKey);
           sendResponse({
             success: false,
-            error: `Analysis failed: ${String(analysisError)}`
+            error: `Analysis failed: ${String(error)}`
           });
         }
         break;
@@ -174,6 +259,9 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
       case MessageType.ASK_QUESTION:
         try {
           const { paperUrl, question } = message.payload;
+          // Generate context ID for Q&A
+          const qaTabId = message.payload.tabId || sender.tab?.id;
+          const qaContextId = qaTabId ? `tab-${qaTabId}-qa` : 'default-qa';
 
           if (!paperUrl || !question) {
             sendResponse({
@@ -183,7 +271,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
             break;
           }
 
-          console.log(`Answering question about paper: ${paperUrl}`);
+          console.log(`Answering question about paper: ${paperUrl} with context: ${qaContextId}`);
 
           // Retrieve paper from IndexedDB
           const storedPaper = await getPaperByUrl(paperUrl);
@@ -215,8 +303,8 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
             section: chunk.section,
           }));
 
-          // Use AI to answer the question
-          const qaResult: QuestionAnswer = await aiService.answerQuestion(question, contextChunks);
+          // Use AI to answer the question with context ID
+          const qaResult: QuestionAnswer = await aiService.answerQuestion(question, contextChunks, qaContextId);
 
           console.log('✓ Question answered successfully');
           sendResponse({ success: true, answer: qaResult });
@@ -378,10 +466,12 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
               explanationProgress: 'Generating explanation...',
             });
 
-            const explanation = await aiService.explainAbstract(detectResponse.paper.abstract);
-            const summary = await aiService.generateSummary(detectResponse.paper.title, detectResponse.paper.abstract);
+            // Use tab ID for context
+            const explainContextId = `tab-${tabId}-explain`;
+            const explanation = await aiService.explainAbstract(detectResponse.paper.abstract, explainContextId);
+            const summary = await aiService.generateSummary(detectResponse.paper.title, detectResponse.paper.abstract, explainContextId);
 
-            // Store explanation
+            // Store explanation in chrome.storage (for quick access/backwards compatibility)
             await chrome.storage.local.set({
               lastExplanation: {
                 paper: detectResponse.paper,
@@ -391,6 +481,19 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
               },
               currentPaper: detectResponse.paper,
             });
+
+            // Also store in IndexedDB per-paper for persistence
+            try {
+              const storedPaperForExplanation = await getPaperByUrl(detectResponse.paper.url);
+              if (storedPaperForExplanation) {
+                const { updatePaperExplanation } = await import('../utils/dbService.ts');
+                await updatePaperExplanation(storedPaperForExplanation.id, explanation, summary);
+                console.log('[Background] ✓ Explanation stored in IndexedDB');
+              }
+            } catch (dbError) {
+              console.warn('[Background] Failed to store explanation in IndexedDB:', dbError);
+              // Don't fail the whole operation if IndexedDB update fails
+            }
 
             updateOperationState(tabId, {
               isExplaining: false,
@@ -408,9 +511,10 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
             if (storedPaper) {
               const paperContent = storedPaper.fullText || storedPaper.abstract;
-              const analysis: PaperAnalysisResult = await aiService.analyzePaper(paperContent);
+              const analysisContextId = `tab-${tabId}-analysis`;
+              const analysis: PaperAnalysisResult = await aiService.analyzePaper(paperContent, analysisContextId);
 
-              // Store analysis
+              // Store analysis in chrome.storage (for quick access/backwards compatibility)
               await chrome.storage.local.set({
                 lastAnalysis: {
                   paper: storedPaper,
@@ -418,6 +522,16 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
                   timestamp: Date.now(),
                 },
               });
+
+              // Also store in IndexedDB per-paper for persistence
+              try {
+                const { updatePaperAnalysis } = await import('../utils/dbService.ts');
+                await updatePaperAnalysis(storedPaper.id, analysis);
+                console.log('[Background] ✓ Analysis stored in IndexedDB');
+              } catch (dbError) {
+                console.warn('[Background] Failed to store analysis in IndexedDB:', dbError);
+                // Don't fail the whole operation if IndexedDB update fails
+              }
 
               updateOperationState(tabId, {
                 isAnalyzing: false,
@@ -478,6 +592,45 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     } else {
       chrome.action.setBadgeText({ text: '', tabId });
     }
+  }
+});
+
+// Clean up AI sessions when tabs are closed
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+  console.log(`[Background] Tab ${tabId} closed, cleaning up AI sessions...`);
+
+  // Clean up all session contexts for this tab
+  const contextPrefixes = [
+    `tab-${tabId}-explain`,
+    `tab-${tabId}-section`,
+    `tab-${tabId}-term`,
+    `tab-${tabId}-summary`,
+    `tab-${tabId}-analysis`,
+    `tab-${tabId}-qa`,
+    `tab-${tabId}-extraction`,
+  ];
+
+  for (const contextId of contextPrefixes) {
+    aiService.destroySessionForContext(contextId);
+  }
+
+  // Clean up active requests for this tab
+  const requestsToDelete: string[] = [];
+  for (const [key] of activeRequests) {
+    if (key.startsWith(`${tabId}-`) || key.startsWith(`tab-${tabId}-`)) {
+      requestsToDelete.push(key);
+    }
+  }
+
+  for (const key of requestsToDelete) {
+    activeRequests.delete(key);
+    console.log(`[Background] Cleaned up active request: ${key}`);
+  }
+
+  // Also clean up operation state for this tab
+  if (operationStates.has(tabId)) {
+    operationStates.delete(tabId);
+    console.log(`[Background] Cleaned up operation state for tab ${tabId}`);
   }
 });
 

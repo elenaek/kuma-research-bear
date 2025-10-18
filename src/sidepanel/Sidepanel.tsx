@@ -1,8 +1,39 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
 import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader, PawPrint, ChevronLeft, ChevronRight, Trash2, Settings, ChevronDown, ChevronUp } from 'lucide-preact';
 import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, MessageType } from '../types/index.ts';
 import { MarkdownRenderer } from '../components/MarkdownRenderer.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
+
+// Debounce utility
+function useDebounce<T extends (...args: any[]) => any>(
+  callback: T,
+  delay: number
+): T {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const debouncedCallback = useCallback(
+    ((...args: Parameters<T>) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => {
+        callback(...args);
+      }, delay);
+    }) as T,
+    [callback, delay]
+  );
+
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  return debouncedCallback;
+}
 
 // Helper function to get paper from background worker's IndexedDB
 async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
@@ -115,6 +146,15 @@ export function Sidepanel() {
   const [showDebug, setShowDebug] = useState(false);
   const [debugInfo, setDebugInfo] = useState<any>(null);
 
+  // Track if operations are queued
+  const [hasQueuedOperations, setHasQueuedOperations] = useState(false);
+  const [operationQueueMessage, setOperationQueueMessage] = useState('');
+
+  // Create debounced version of loadExplanation to prevent rapid re-triggers
+  const debouncedLoadExplanation = useDebounce(() => {
+    loadExplanation();
+  }, 300); // 300ms debounce delay
+
   useEffect(() => {
     loadExplanation();
 
@@ -128,10 +168,10 @@ export function Sidepanel() {
           setIsExplainingInBackground(isExplaining);
         }
 
-        // Reload on data changes
+        // Reload on data changes with debouncing
         if (changes.lastExplanation || changes.lastAnalysis || changes.currentPaper) {
-          console.log('Storage changed, reloading explanation...', changes);
-          loadExplanation();
+          console.log('Storage changed, will reload explanation after debounce...', changes);
+          debouncedLoadExplanation();
         }
       }
     };
@@ -148,11 +188,8 @@ export function Sidepanel() {
         setIsExplainingInBackground(state.isExplaining);
         setIsAnalyzing(state.isAnalyzing);
 
-        // If operation completed (all flags false), reload to get latest data
-        if (!state.isDetecting && !state.isExplaining && !state.isAnalyzing && !state.error) {
-          console.log('[Sidepanel] Operation completed, reloading...');
-          setTimeout(() => loadExplanation(), 500);
-        }
+        // Removed auto-reload on operation completion - storage listener handles reloads
+        // This was causing infinite loop with auto-trigger logic
       }
     };
 
@@ -308,10 +345,10 @@ export function Sidepanel() {
             });
             setViewState('stored-only');
 
-            // Auto-trigger analysis for stored paper
-            if (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.currentPaper.url) {
+            // Auto-trigger analysis for stored paper (only if not already analyzing)
+            if (!isAnalyzing && (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.currentPaper.url)) {
               console.log('[Sidepanel] Auto-triggering analysis for stored paper...');
-              triggerAnalysis(result.currentPaper.url);
+              debouncedTriggerAnalysis(result.currentPaper.url);
             }
           } else {
             console.log('[Sidepanel] Paper not stored yet after retries.');
@@ -331,13 +368,6 @@ export function Sidepanel() {
         return;
       }
 
-      setData(result.lastExplanation);
-
-      // Load analysis if available
-      if (result.lastAnalysis) {
-        setAnalysis(result.lastAnalysis.analysis);
-      }
-
       // Check if paper is stored in IndexedDB with retry logic
       console.log('[Sidepanel] Checking storage for explained paper...');
       setIsCheckingStorage(true);
@@ -348,17 +378,47 @@ export function Sidepanel() {
 
         if (stored) {
           console.log('[Sidepanel] ✓ Paper is stored, Q&A enabled');
+
+          // Prioritize loading from StoredPaper fields, fall back to chrome.storage
+          const explanationData: ExplanationData = {
+            paper: result.lastExplanation.paper,
+            explanation: stored.explanation || result.lastExplanation.explanation,
+            summary: stored.summary || result.lastExplanation.summary,
+          };
+          setData(explanationData);
+
+          // Load analysis from StoredPaper or chrome.storage
+          if (stored.analysis) {
+            console.log('[Sidepanel] Loading analysis from StoredPaper');
+            setAnalysis(stored.analysis);
+          } else if (result.lastAnalysis) {
+            console.log('[Sidepanel] Loading analysis from chrome.storage');
+            setAnalysis(result.lastAnalysis.analysis);
+          }
+
+          // Auto-trigger analysis if paper is stored and no analysis exists yet (only if not already analyzing)
+          if (!stored.analysis && !isAnalyzing && (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.lastExplanation.paper.url)) {
+            console.log('[Sidepanel] Paper is stored, triggering automatic analysis...');
+            triggerAnalysis(result.lastExplanation.paper.url);
+          }
         } else {
           console.log('[Sidepanel] Paper not stored, Q&A disabled');
-        }
 
-        // Auto-trigger analysis if paper is stored and no analysis exists yet
-        if (stored && (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.lastExplanation.paper.url)) {
-          console.log('[Sidepanel] Paper is stored, triggering automatic analysis...');
-          triggerAnalysis(result.lastExplanation.paper.url);
+          // Paper not stored, use chrome.storage data
+          setData(result.lastExplanation);
+
+          // Load analysis if available
+          if (result.lastAnalysis) {
+            setAnalysis(result.lastAnalysis.analysis);
+          }
         }
       } catch (dbError) {
         console.error('[Sidepanel] Could not check paper storage status:', dbError);
+        // Fallback to chrome.storage if IndexedDB check fails
+        setData(result.lastExplanation);
+        if (result.lastAnalysis) {
+          setAnalysis(result.lastAnalysis.analysis);
+        }
       } finally {
         setIsCheckingStorage(false);
       }
@@ -371,6 +431,18 @@ export function Sidepanel() {
   }
 
   async function triggerAnalysis(paperUrl: string) {
+    // Guard: Don't retrigger if already analyzing
+    if (isAnalyzing) {
+      console.log('[Sidepanel] Analysis already in progress, skipping');
+      setOperationQueueMessage('Analysis already in progress for another paper');
+      setHasQueuedOperations(true);
+      setTimeout(() => {
+        setHasQueuedOperations(false);
+        setOperationQueueMessage('');
+      }, 3000);
+      return;
+    }
+
     try {
       setIsAnalyzing(true);
       console.log('Starting paper analysis for:', paperUrl);
@@ -385,13 +457,31 @@ export function Sidepanel() {
         // Analysis will be loaded automatically via storage change listener
       } else {
         console.error('Analysis failed:', response.error);
+        // Show error to user
+        setOperationQueueMessage(`Analysis failed: ${response.error}`);
+        setHasQueuedOperations(true);
+        setTimeout(() => {
+          setHasQueuedOperations(false);
+          setOperationQueueMessage('');
+        }, 5000);
       }
     } catch (error) {
       console.error('Error triggering analysis:', error);
+      setOperationQueueMessage('Failed to start analysis');
+      setHasQueuedOperations(true);
+      setTimeout(() => {
+        setHasQueuedOperations(false);
+        setOperationQueueMessage('');
+      }, 3000);
     } finally {
       setIsAnalyzing(false);
     }
   }
+
+  // Create debounced version of triggerAnalysis
+  const debouncedTriggerAnalysis = useDebounce((paperUrl: string) => {
+    triggerAnalysis(paperUrl);
+  }, 500); // 500ms debounce for analysis
 
   async function handleAskQuestion() {
     if (!question.trim() || !data?.paper.url) {
@@ -532,12 +622,24 @@ Source: ${paper.url}
     // Try to load explanation and analysis for this paper
     const result = await chrome.storage.local.get(['lastExplanation', 'lastAnalysis']);
 
-    if (result.lastExplanation?.paper?.url === newPaper.url) {
+    // Prioritize loading from StoredPaper fields, fall back to chrome.storage
+    if (newPaper.explanation && newPaper.summary) {
+      console.log('[Sidepanel] Loading explanation from StoredPaper');
+      setData({
+        paper: newPaper,
+        explanation: newPaper.explanation,
+        summary: newPaper.summary,
+      });
+      setActiveTab('summary');
+      setViewState('content');
+    } else if (result.lastExplanation?.paper?.url === newPaper.url) {
+      console.log('[Sidepanel] Loading explanation from chrome.storage');
       setData(result.lastExplanation);
       setActiveTab('summary');
       setViewState('content');
     } else {
       // No explanation for this paper, show stored-only view
+      console.log('[Sidepanel] No explanation found for this paper');
       setData({
         paper: newPaper,
         explanation: { originalText: '', explanation: '', timestamp: 0 },
@@ -547,9 +649,15 @@ Source: ${paper.url}
       setViewState('stored-only');
     }
 
-    if (result.lastAnalysis?.paper?.url === newPaper.url) {
+    // Load analysis from StoredPaper or chrome.storage
+    if (newPaper.analysis) {
+      console.log('[Sidepanel] Loading analysis from StoredPaper');
+      setAnalysis(newPaper.analysis);
+    } else if (result.lastAnalysis?.paper?.url === newPaper.url) {
+      console.log('[Sidepanel] Loading analysis from chrome.storage');
       setAnalysis(result.lastAnalysis.analysis);
     } else {
+      console.log('[Sidepanel] No analysis found, triggering new analysis');
       setAnalysis(null);
       // Trigger analysis for this paper
       triggerAnalysis(newPaper.url);
@@ -1313,6 +1421,18 @@ Source: ${paper.url}
             </div>
           )}
 
+          {/* Operation Queue Banner */}
+          {hasQueuedOperations && operationQueueMessage && (
+            <div class="card mb-4 bg-yellow-50 border-yellow-300">
+              <div class="flex items-center gap-3">
+                <AlertCircle size={20} class="text-yellow-600" />
+                <div class="flex-1">
+                  <p class="text-sm font-medium text-yellow-900">{operationQueueMessage}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Explanation In Progress Banner */}
           {isExplainingInBackground && (
             <div class="card mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300">
@@ -1775,7 +1895,7 @@ Source: ${paper.url}
                         {analysis.limitations.studyLimitations.map((limitation, idx) => (
                           <li key={idx} class="flex gap-2 text-sm text-gray-600">
                             <span class="text-red-600">•</span>
-                            <span>{limitation}</span>
+                            <MarkdownRenderer content={limitation} />
                           </li>
                         ))}
                       </ul>

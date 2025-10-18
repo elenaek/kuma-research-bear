@@ -30,11 +30,21 @@ function sleep(ms: number): Promise<void> {
 /**
  * Chrome AI Service for interacting with Chrome's built-in AI APIs
  * Uses the stable Prompt API (Chrome 138+)
+ * Supports concurrent sessions for multiple tabs/contexts
  */
 class ChromeAIService {
-  private session: AILanguageModelSession | null = null;
+  // Multiple sessions support - one per context (tab)
+  private sessions: Map<string, AILanguageModelSession> = new Map();
+  private sessionActivity: Map<string, number> = new Map(); // Track last activity time
+  private activeRequests: Map<string, AbortController> = new Map(); // Track active requests
   private capabilities: AICapabilities | null = null;
   private extractionRetries: Map<string, number> = new Map(); // Track retries per URL
+
+  // Configuration
+  private readonly MAX_CONCURRENT_SESSIONS = 10;
+  private readonly SESSION_IDLE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+  private readonly CLEANUP_INTERVAL = 60 * 1000; // Check every minute
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Check if Chrome Prompt API is available
@@ -81,16 +91,137 @@ class ChromeAIService {
   }
 
   /**
-   * Create an AI session using the Prompt API
+   * Initialize cleanup timer on first use
    */
-  async createSession(options?: AISessionOptions): Promise<boolean> {
+  private initializeCleanup() {
+    if (!this.cleanupTimer) {
+      this.cleanupTimer = setInterval(() => {
+        this.cleanupInactiveSessions();
+      }, this.CLEANUP_INTERVAL);
+    }
+  }
+
+  /**
+   * Get or create a session for a specific context (tab)
+   * Reuses existing sessions when possible for better performance
+   */
+  async getOrCreateSession(contextId: string, options?: AISessionOptions): Promise<AILanguageModelSession> {
+    // Initialize cleanup on first session creation
+    this.initializeCleanup();
+
+    // Check if we already have a session for this context
+    if (this.sessions.has(contextId)) {
+      const session = this.sessions.get(contextId)!;
+      this.sessionActivity.set(contextId, Date.now());
+      console.log(`[AI] Reusing existing session for context: ${contextId}`);
+      return session;
+    }
+
+    // Check if we've reached max sessions limit
+    if (this.sessions.size >= this.MAX_CONCURRENT_SESSIONS) {
+      console.warn(`[AI] Max sessions limit reached (${this.MAX_CONCURRENT_SESSIONS}), cleaning up old sessions`);
+      this.cleanupInactiveSessions();
+
+      // If still at limit, remove the oldest session
+      if (this.sessions.size >= this.MAX_CONCURRENT_SESSIONS) {
+        const oldestContext = this.findOldestSession();
+        if (oldestContext) {
+          this.destroySessionForContext(oldestContext);
+        }
+      }
+    }
+
+    // Create new session for this context
     try {
       if (typeof LanguageModel === 'undefined') {
         throw new Error('Prompt API not available');
       }
 
-      this.session = await LanguageModel.create(options);
+      console.log(`[AI] Creating new session for context: ${contextId}`);
+      const session = await LanguageModel.create(options);
 
+      this.sessions.set(contextId, session);
+      this.sessionActivity.set(contextId, Date.now());
+
+      console.log(`[AI] Session created successfully. Total sessions: ${this.sessions.size}`);
+      return session;
+    } catch (error) {
+      console.error(`[AI] Error creating session for context ${contextId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Find the oldest (least recently used) session
+   */
+  private findOldestSession(): string | null {
+    let oldestContext: string | null = null;
+    let oldestTime = Date.now();
+
+    for (const [context, time] of this.sessionActivity.entries()) {
+      if (time < oldestTime) {
+        oldestTime = time;
+        oldestContext = context;
+      }
+    }
+
+    return oldestContext;
+  }
+
+  /**
+   * Clean up inactive sessions to free resources
+   */
+  private cleanupInactiveSessions() {
+    const now = Date.now();
+    const sessionsToRemove: string[] = [];
+
+    for (const [context, lastActivity] of this.sessionActivity.entries()) {
+      if (now - lastActivity > this.SESSION_IDLE_TIMEOUT) {
+        sessionsToRemove.push(context);
+      }
+    }
+
+    if (sessionsToRemove.length > 0) {
+      console.log(`[AI] Cleaning up ${sessionsToRemove.length} inactive sessions`);
+      for (const context of sessionsToRemove) {
+        this.destroySessionForContext(context);
+      }
+    }
+  }
+
+  /**
+   * Destroy a session for a specific context
+   */
+  destroySessionForContext(contextId: string) {
+    const session = this.sessions.get(contextId);
+    if (session) {
+      try {
+        session.destroy();
+        console.log(`[AI] Session destroyed for context: ${contextId}`);
+      } catch (error) {
+        console.error(`[AI] Error destroying session for context ${contextId}:`, error);
+      }
+    }
+
+    this.sessions.delete(contextId);
+    this.sessionActivity.delete(contextId);
+
+    // Cancel any active requests for this context
+    const abortController = this.activeRequests.get(contextId);
+    if (abortController) {
+      abortController.abort();
+      this.activeRequests.delete(contextId);
+    }
+  }
+
+  /**
+   * Legacy method - creates a session without context (for backward compatibility)
+   * @deprecated Use getOrCreateSession instead
+   */
+  async createSession(options?: AISessionOptions): Promise<boolean> {
+    try {
+      // Use a default context for legacy calls
+      await this.getOrCreateSession('default', options);
       return true;
     } catch (error) {
       console.error('Error creating AI session:', error);
@@ -99,25 +230,58 @@ class ChromeAIService {
   }
 
   /**
-   * Prompt the AI model
+   * Prompt the AI model with context support
    */
-  async prompt(input: string, systemPrompt?: string, responseConstraint?: JSONSchema): Promise<string> {
+  async prompt(
+    input: string,
+    systemPrompt?: string,
+    responseConstraint?: JSONSchema,
+    contextId: string = 'default'
+  ): Promise<string> {
     try {
-      if (!this.session) {
-        const created = await this.createSession({ systemPrompt });
-        if (!created) {
-          throw new Error('Failed to create AI session');
+      // Get or create session for this context
+      const session = await this.getOrCreateSession(contextId, { systemPrompt });
+
+      // Create abort controller for this request
+      const abortController = new AbortController();
+
+      // Cancel any existing request for this context
+      const existingController = this.activeRequests.get(contextId);
+      if (existingController) {
+        console.log(`[AI] Cancelling existing request for context: ${contextId}`);
+        existingController.abort();
+      }
+
+      this.activeRequests.set(contextId, abortController);
+
+      try {
+        // Make the prompt call with abort signal
+        const response = await session.prompt(input, {
+          responseConstraint,
+          signal: abortController.signal
+        });
+
+        // Clear the request tracking on success
+        this.activeRequests.delete(contextId);
+
+        // Update activity timestamp
+        this.sessionActivity.set(contextId, Date.now());
+
+        return response;
+      } catch (error: any) {
+        // Clear the request tracking
+        this.activeRequests.delete(contextId);
+
+        // Check if it was an abort
+        if (error.name === 'AbortError') {
+          console.log(`[AI] Request aborted for context: ${contextId}`);
+          throw new Error('AI request was cancelled');
         }
-      }
 
-      if (!this.session) {
-        throw new Error('No active AI session');
+        throw error;
       }
-
-      const response = await this.session.prompt(input, { responseConstraint });
-      return response;
     } catch (error) {
-      console.error('Error prompting AI:', error);
+      console.error(`[AI] Error prompting AI for context ${contextId}:`, error);
       throw error;
     }
   }
@@ -126,7 +290,7 @@ class ChromeAIService {
    * Fix malformed JSON by asking AI to correct it
    * Used when initial JSON parsing fails
    */
-  async fixMalformedJSON(malformedJson: string): Promise<string> {
+  async fixMalformedJSON(malformedJson: string, contextId: string = 'default'): Promise<string> {
     const systemPrompt = `You are a JSON validator and fixer. Your job is to take malformed JSON and return valid, properly escaped JSON.`;
 
     const input = `The following JSON has syntax errors (likely improperly escaped strings). Fix it and return ONLY valid JSON with properly escaped strings:
@@ -140,7 +304,7 @@ Important:
 - Return ONLY the corrected JSON, no explanations or markdown`;
 
     try {
-      const response = await this.prompt(input, systemPrompt);
+      const response = await this.prompt(input, systemPrompt, undefined, contextId);
       return response.trim();
     } catch (error) {
       console.error('Failed to fix malformed JSON:', error);
@@ -151,7 +315,7 @@ Important:
   /**
    * Explain a research paper abstract
    */
-  async explainAbstract(abstract: string): Promise<ExplanationResult> {
+  async explainAbstract(abstract: string, contextId: string = 'default'): Promise<ExplanationResult> {
     const systemPrompt = `You are a helpful research assistant that explains complex academic papers in simple terms.
 Your goal is to make research papers accessible to people without specialized knowledge.
 Break down technical jargon, use analogies when helpful, and focus on the key insights.
@@ -167,7 +331,7 @@ Use markdown formatting for better readability:
 Abstract:
 ${abstract}`;
 
-    const explanation = await this.prompt(input, systemPrompt);
+    const explanation = await this.prompt(input, systemPrompt, undefined, contextId);
 
     return {
       originalText: abstract,
@@ -179,7 +343,7 @@ ${abstract}`;
   /**
    * Generate a summary of a paper
    */
-  async generateSummary(title: string, abstract: string): Promise<SummaryResult> {
+  async generateSummary(title: string, abstract: string, contextId: string = 'default'): Promise<SummaryResult> {
     const systemPrompt = `You are a research assistant that creates concise summaries of academic papers.
 Extract the most important information and present it clearly.
 Use markdown formatting to enhance readability.`;
@@ -198,7 +362,7 @@ KEY POINTS:
 - [point 2]
 - [point 3]`;
 
-    const response = await this.prompt(input, systemPrompt);
+    const response = await this.prompt(input, systemPrompt, undefined, contextId);
 
     // Parse the response
     const summaryMatch = response.match(/SUMMARY:\s*(.+?)(?=KEY POINTS:|$)/s);
@@ -222,26 +386,26 @@ KEY POINTS:
   /**
    * Explain a technical term
    */
-  async explainTerm(term: string, context?: string): Promise<string> {
+  async explainTerm(term: string, context?: string, contextId: string = 'default'): Promise<string> {
     const systemPrompt = `You are a helpful assistant that explains technical and scientific terms in simple language.`;
 
     const input = context
       ? `Explain the term "${term}" in the context of: ${context}`
       : `Explain the term "${term}" in simple terms`;
 
-    return await this.prompt(input, systemPrompt);
+    return await this.prompt(input, systemPrompt, undefined, contextId);
   }
 
   /**
    * Simplify a section of text
    */
-  async simplifyText(text: string): Promise<string> {
+  async simplifyText(text: string, contextId: string = 'default'): Promise<string> {
     const systemPrompt = `You are a helpful assistant that rewrites complex academic text in simple, clear language
 while preserving the original meaning.`;
 
     const input = `Rewrite this text in simpler terms:\n\n${text}`;
 
-    return await this.prompt(input, systemPrompt);
+    return await this.prompt(input, systemPrompt, undefined, contextId);
   }
 
   /**
@@ -249,7 +413,7 @@ while preserving the original meaning.`;
    * This is the core method for intelligent paper detection
    * Implements exponential backoff with max 3 retries
    */
-  async extractPaperMetadata(content: string): Promise<any> {
+  async extractPaperMetadata(content: string, contextId: string = 'extraction'): Promise<any> {
     // Check if AI is readily available (no user gesture needed)
     const capabilities = await this.checkAvailability();
 
@@ -326,11 +490,8 @@ ${truncatedContent}
 Return ONLY the JSON object, no other text. Extract as much information as you can find.`;
 
     try {
-      // Create fresh session for this extraction
-      this.destroySession();
-
       console.log(`Attempting AI extraction (attempt ${currentRetries + 1}/${maxRetries})...`);
-      const response = await this.prompt(input, systemPrompt);
+      const response = await this.prompt(input, systemPrompt, undefined, contextId);
 
       // Try to extract JSON from response
       // Sometimes the AI adds markdown code blocks
@@ -351,7 +512,7 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
 
         try {
           // Ask AI to fix the malformed JSON
-          const fixedJson = await this.fixMalformedJSON(jsonStr);
+          const fixedJson = await this.fixMalformedJSON(jsonStr, contextId);
 
           // Remove markdown if AI added it
           let cleanedFixed = fixedJson.trim();
@@ -407,7 +568,7 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
       // If we haven't hit max retries, try again
       if (currentRetries + 1 < maxRetries) {
         console.log(`Will retry with exponential backoff...`);
-        return await this.extractPaperMetadata(content);
+        return await this.extractPaperMetadata(content, contextId);
       }
 
       // Max retries exceeded
@@ -485,9 +646,9 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
     try {
       console.log('[AI Reset] Attempting to reset crashed AI...');
 
-      // Step 1: Destroy any existing crashed session
-      this.destroySession();
-      console.log('[AI Reset] ✓ Destroyed crashed session');
+      // Step 1: Destroy all existing sessions
+      this.destroyAllSessions();
+      console.log('[AI Reset] ✓ Destroyed all sessions');
 
       // Step 2: Clear all retry counts
       this.clearRetries();
@@ -555,10 +716,22 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
   }
 
   /**
+   * Destroy all sessions - used during reset
+   */
+  private destroyAllSessions() {
+    for (const [contextId] of this.sessions) {
+      this.destroySessionForContext(contextId);
+    }
+    this.sessions.clear();
+    this.sessionActivity.clear();
+    this.activeRequests.clear();
+  }
+
+  /**
    * Analyze paper methodology
    * Examines study design, data collection, sample size, and statistical methods
    */
-  async analyzeMethodology(paperContent: string): Promise<MethodologyAnalysis> {
+  async analyzeMethodology(paperContent: string, contextId: string = 'analysis'): Promise<MethodologyAnalysis> {
     const systemPrompt = `You are a research methodology expert. Analyze research papers for their study design, methods, and rigor.`;
 
     const input = `Analyze the methodology of this research paper.
@@ -566,8 +739,7 @@ Paper content:
 ${paperContent.slice(0, 6000)}`;
 
     try {
-      this.destroySession();
-      const response = await this.prompt(input, systemPrompt, methodologyAnalysisSchema);
+      const response = await this.prompt(input, systemPrompt, methodologyAnalysisSchema, contextId);
       return JSON.parse(response);
     } catch (error) {
       console.error('Methodology analysis failed:', error);
@@ -587,7 +759,7 @@ ${paperContent.slice(0, 6000)}`;
    * Identify confounders and biases
    * Looks for potential confounding variables and methodological biases
    */
-  async identifyConfounders(paperContent: string): Promise<ConfounderAnalysis> {
+  async identifyConfounders(paperContent: string, contextId: string = 'analysis'): Promise<ConfounderAnalysis> {
     const systemPrompt = `You are a research quality expert specializing in identifying biases and confounding variables.`;
 
     const input = `Identify potential confounders and biases in this research paper.
@@ -596,8 +768,7 @@ Paper content:
 ${paperContent.slice(0, 6000)}`;
 
     try {
-      this.destroySession();
-      const response = await this.prompt(input, systemPrompt, confounderAnalysisSchema);
+      const response = await this.prompt(input, systemPrompt, confounderAnalysisSchema, contextId);
       return JSON.parse(response);
     } catch (error) {
       console.error('Confounder analysis failed:', error);
@@ -613,7 +784,7 @@ ${paperContent.slice(0, 6000)}`;
    * Analyze implications and applications
    * Identifies real-world applications and significance
    */
-  async analyzeImplications(paperContent: string): Promise<ImplicationAnalysis> {
+  async analyzeImplications(paperContent: string, contextId: string = 'analysis'): Promise<ImplicationAnalysis> {
     const systemPrompt = `You are a research impact expert who identifies practical applications and significance of research.`;
 
     const input = `Analyze the implications of this research paper.
@@ -621,8 +792,7 @@ Paper content:
 ${paperContent.slice(0, 6000)}`;
 
     try {
-      this.destroySession();
-      const response = await this.prompt(input, systemPrompt, implicationAnalysisSchema);
+      const response = await this.prompt(input, systemPrompt, implicationAnalysisSchema, contextId);
       return JSON.parse(response);
     } catch (error) {
       console.error('Implications analysis failed:', error);
@@ -638,7 +808,7 @@ ${paperContent.slice(0, 6000)}`;
    * Identify limitations
    * Extracts and explains study limitations and constraints
    */
-  async identifyLimitations(paperContent: string): Promise<LimitationAnalysis> {
+  async identifyLimitations(paperContent: string, contextId: string = 'analysis'): Promise<LimitationAnalysis> {
     const systemPrompt = `You are a research critique expert who identifies limitations and constraints in studies.`;
 
     const input = `Identify the limitations of this research paper.
@@ -647,8 +817,7 @@ Paper content:
 ${paperContent.slice(0, 6000)}`;
 
     try {
-      this.destroySession();
-      const response = await this.prompt(input, systemPrompt, limitationAnalysisSchema);
+      const response = await this.prompt(input, systemPrompt, limitationAnalysisSchema, contextId);
       return JSON.parse(response);
     } catch (error) {
       console.error('Limitations analysis failed:', error);
@@ -663,15 +832,15 @@ ${paperContent.slice(0, 6000)}`;
    * Generate complete paper analysis
    * Combines all analysis methods for comprehensive evaluation
    */
-  async analyzePaper(paperContent: string): Promise<PaperAnalysisResult> {
+  async analyzePaper(paperContent: string, contextId: string = 'analysis'): Promise<PaperAnalysisResult> {
     console.log('Starting comprehensive paper analysis...');
 
-    // Run all analyses
+    // Run all analyses in parallel with unique sub-contexts
     const [methodology, confounders, implications, limitations] = await Promise.all([
-      this.analyzeMethodology(paperContent),
-      this.identifyConfounders(paperContent),
-      this.analyzeImplications(paperContent),
-      this.identifyLimitations(paperContent),
+      this.analyzeMethodology(paperContent, `${contextId}-methodology`),
+      this.identifyConfounders(paperContent, `${contextId}-confounders`),
+      this.analyzeImplications(paperContent, `${contextId}-implications`),
+      this.identifyLimitations(paperContent, `${contextId}-limitations`),
     ]);
 
     return {
@@ -687,7 +856,11 @@ ${paperContent.slice(0, 6000)}`;
    * Answer a question about a research paper using RAG
    * Uses relevant content chunks to provide context-aware answers
    */
-  async answerQuestion(question: string, contextChunks: Array<{ content: string; section?: string }>): Promise<QuestionAnswer> {
+  async answerQuestion(
+    question: string,
+    contextChunks: Array<{ content: string; section?: string }>,
+    contextId: string = 'qa'
+  ): Promise<QuestionAnswer> {
     console.log('Answering question using RAG...');
 
     // Combine chunks into context with section markers
@@ -717,8 +890,7 @@ Use markdown formatting for better readability:
 - Mention which sections you used in your answer`;
 
     try {
-      this.destroySession();
-      const answer = await this.prompt(input, systemPrompt);
+      const answer = await this.prompt(input, systemPrompt, undefined, contextId);
 
       // Extract section references from the answer (simple heuristic)
       const sources: string[] = [];
@@ -766,13 +938,12 @@ Use markdown formatting for better readability:
   }
 
   /**
-   * Destroy the current session
+   * Legacy method - destroy session (for backward compatibility)
+   * @deprecated Use destroySessionForContext instead
    */
   destroySession() {
-    if (this.session) {
-      this.session.destroy();
-      this.session = null;
-    }
+    // Destroy the default session if it exists
+    this.destroySessionForContext('default');
   }
 }
 

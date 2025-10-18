@@ -159,6 +159,9 @@ export interface StoredPaper extends ResearchPaper {
   storedAt: number;
   lastAccessedAt: number;
   qaHistory?: QuestionAnswer[]; // Q&A history for this paper
+  explanation?: ExplanationResult; // Stored explanation for this paper
+  summary?: SummaryResult; // Stored summary for this paper
+  analysis?: PaperAnalysisResult; // Stored analysis for this paper
 }
 
 export interface ContentChunk {
@@ -234,4 +237,8 @@ export interface OperationState {
   explanationProgress: string;
   analysisProgress: string;
   lastUpdated: number;
+  // Track active AI requests for this tab
+  activeAIRequests: string[];
+  // Track if operations are being deduplicated
+  isUsingCachedRequest: boolean;
 }

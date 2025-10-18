@@ -383,6 +383,101 @@ export async function updatePaperQAHistory(paperId: string, qaHistory: any[]): P
 }
 
 /**
+ * Update explanation and summary for a paper
+ */
+export async function updatePaperExplanation(
+  paperId: string,
+  explanation: any,
+  summary: any
+): Promise<boolean> {
+  const db = await initDB();
+
+  try {
+    // Get the paper first
+    const transaction = db.transaction([PAPERS_STORE], 'readonly');
+    const store = transaction.objectStore(PAPERS_STORE);
+
+    const paper = await new Promise<StoredPaper | null>((resolve) => {
+      const request = store.get(paperId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+
+    if (!paper) {
+      console.error('Paper not found for explanation update:', paperId);
+      db.close();
+      return false;
+    }
+
+    // Update the paper with explanation and summary
+    paper.explanation = explanation;
+    paper.summary = summary;
+    paper.lastAccessedAt = Date.now();
+
+    const updateTransaction = db.transaction([PAPERS_STORE], 'readwrite');
+    const updateStore = updateTransaction.objectStore(PAPERS_STORE);
+    await new Promise<void>((resolve, reject) => {
+      const request = updateStore.put(paper);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to update explanation'));
+    });
+
+    console.log(`✓ Updated explanation for paper: ${paper.title}`);
+    db.close();
+    return true;
+  } catch (error) {
+    db.close();
+    console.error('Error updating explanation:', error);
+    return false;
+  }
+}
+
+/**
+ * Update analysis for a paper
+ */
+export async function updatePaperAnalysis(paperId: string, analysis: any): Promise<boolean> {
+  const db = await initDB();
+
+  try {
+    // Get the paper first
+    const transaction = db.transaction([PAPERS_STORE], 'readonly');
+    const store = transaction.objectStore(PAPERS_STORE);
+
+    const paper = await new Promise<StoredPaper | null>((resolve) => {
+      const request = store.get(paperId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+
+    if (!paper) {
+      console.error('Paper not found for analysis update:', paperId);
+      db.close();
+      return false;
+    }
+
+    // Update the paper with analysis
+    paper.analysis = analysis;
+    paper.lastAccessedAt = Date.now();
+
+    const updateTransaction = db.transaction([PAPERS_STORE], 'readwrite');
+    const updateStore = updateTransaction.objectStore(PAPERS_STORE);
+    await new Promise<void>((resolve, reject) => {
+      const request = updateStore.put(paper);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to update analysis'));
+    });
+
+    console.log(`✓ Updated analysis for paper: ${paper.title}`);
+    db.close();
+    return true;
+  } catch (error) {
+    db.close();
+    console.error('Error updating analysis:', error);
+    return false;
+  }
+}
+
+/**
  * Search papers by title or content (simple full-text search)
  */
 export async function searchPapers(query: string): Promise<StoredPaper[]> {
