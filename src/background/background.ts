@@ -24,6 +24,7 @@ function getOperationState(tabId: number): OperationState {
       isExplaining: false,
       isAnalyzing: false,
       currentPaper: null,
+      isPaperStored: false,
       error: null,
       detectionProgress: '',
       explanationProgress: '',
@@ -36,10 +37,110 @@ function getOperationState(tabId: number): OperationState {
   return operationStates.get(tabId)!;
 }
 
+// Icon paths configuration - paths must be absolute from extension root
+const ICON_PATHS = {
+  default: {
+    16: '/icons/icon16.png',
+    32: '/icons/icon32.png',
+    48: '/icons/icon48.png',
+    128: '/icons/icon128.png',
+  },
+  detecting: {
+    16: '/icons/icon-detecting-16.png',
+    32: '/icons/icon-detecting-32.png',
+    48: '/icons/icon-detecting-48.png',
+    128: '/icons/icon-detecting-128.png',
+  },
+  explaining: {
+    16: '/icons/icon-explaining-16.png',
+    32: '/icons/icon-explaining-32.png',
+    48: '/icons/icon-explaining-48.png',
+    128: '/icons/icon-explaining-128.png',
+  },
+  analyzing: {
+    16: '/icons/icon-analyzing-16.png',
+    32: '/icons/icon-analyzing-32.png',
+    48: '/icons/icon-analyzing-48.png',
+    128: '/icons/icon-analyzing-128.png',
+  },
+  stored: {
+    16: '/icons/icon-stored-16.png',
+    32: '/icons/icon-stored-32.png',
+    48: '/icons/icon-stored-48.png',
+    128: '/icons/icon-stored-128.png',
+  },
+};
+
+// Helper function to update icon based on operation state
+async function updateIconForTab(tabId: number, state: OperationState) {
+  try {
+    let iconType = 'default';
+
+    // Priority: analyzing > explaining > detecting > stored > default
+    if (state.isAnalyzing) {
+      iconType = 'analyzing';
+    } else if (state.isExplaining) {
+      iconType = 'explaining';
+    } else if (state.isDetecting) {
+      iconType = 'detecting';
+    } else if (state.isPaperStored && state.currentPaper) {
+      iconType = 'stored';
+    }
+
+    console.log(`[Background] Updating icon for tab ${tabId}: ${iconType}, state:`, {
+      isDetecting: state.isDetecting,
+      isExplaining: state.isExplaining,
+      isAnalyzing: state.isAnalyzing,
+      isPaperStored: state.isPaperStored
+    });
+
+    const iconPaths = ICON_PATHS[iconType as keyof typeof ICON_PATHS];
+
+    // Update the extension icon for this specific tab
+    await chrome.action.setIcon({
+      path: iconPaths,
+      tabId: tabId,
+    });
+
+    // Also update the tooltip to show the current operation
+    let title = 'Kuma the Research Bear';
+    if (state.isAnalyzing) {
+      title += ' - Analyzing paper...';
+    } else if (state.isExplaining) {
+      title += ' - Explaining paper...';
+    } else if (state.isDetecting) {
+      title += ' - Detecting paper...';
+    } else if (state.isPaperStored && state.currentPaper) {
+      title += ' - Paper saved';
+    }
+
+    await chrome.action.setTitle({
+      title: title,
+      tabId: tabId,
+    });
+
+    console.log(`[Background] Icon updated successfully for tab ${tabId}: ${iconType}`);
+  } catch (error) {
+    console.error(`[Background] Failed to update icon for tab ${tabId}:`, error);
+    // Fallback to default icon on error
+    try {
+      await chrome.action.setIcon({
+        path: ICON_PATHS.default,
+        tabId: tabId,
+      });
+    } catch (fallbackError) {
+      console.error('[Background] Failed to set default icon:', fallbackError);
+    }
+  }
+}
+
 // Helper to update state and broadcast changes
 function updateOperationState(tabId: number, updates: Partial<OperationState>) {
   const state = getOperationState(tabId);
   Object.assign(state, updates, { lastUpdated: Date.now() });
+
+  // Update the extension icon based on the new state
+  updateIconForTab(tabId, state);
 
   // Broadcast state change to any listeners (sidepanel, popup)
   chrome.runtime.sendMessage({
@@ -92,15 +193,36 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
       case MessageType.EXPLAIN_PAPER:
         try {
-          // Set flag to indicate explanation is in progress
+          const paper: ResearchPaper = message.payload.paper;
+          const tabId = message.payload.tabId || sender.tab?.id;
+
+          // Update operation state to show explaining is in progress
+          if (tabId) {
+            updateOperationState(tabId, {
+              isExplaining: true,
+              explanationProgress: '🐻 Kuma is thinking of ways to explain the research paper...',
+              currentPaper: paper,
+              error: null,
+            });
+          }
+
+          // Set flag to indicate explanation is in progress (for backwards compatibility)
           await chrome.storage.local.set({ isExplaining: true });
 
-          const paper: ResearchPaper = message.payload.paper;
           // Generate context ID based on tab ID if available
-          const contextId = sender.tab?.id ? `tab-${sender.tab.id}-explain` : 'default-explain';
+          const contextId = tabId ? `tab-${tabId}-explain` : 'default-explain';
 
           const explanation = await aiService.explainAbstract(paper.abstract, contextId);
           const summary = await aiService.generateSummary(paper.title, paper.abstract, contextId);
+
+          // Update operation state to show completion
+          if (tabId) {
+            updateOperationState(tabId, {
+              isExplaining: false,
+              explanationProgress: '🐻 Kuma has finished explaining the research paper!',
+              error: null,
+            });
+          }
 
           // Store the explanation in chrome.storage (for quick access/backwards compatibility)
           await chrome.storage.local.set({
@@ -128,6 +250,16 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
           sendResponse({ success: true, explanation, summary });
         } catch (explainError) {
+          // Update operation state to show error
+          const tabId = message.payload.tabId || sender.tab?.id;
+          if (tabId) {
+            updateOperationState(tabId, {
+              isExplaining: false,
+              explanationProgress: '',
+              error: `🐻 Kuma had trouble explaining: ${String(explainError)}`,
+            });
+          }
+
           // Clear flag on error
           await chrome.storage.local.set({ isExplaining: false });
           throw explainError;
@@ -181,6 +313,15 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
             break;
           }
 
+          // Update operation state to show analysis is starting
+          if (tabId) {
+            updateOperationState(tabId, {
+              isAnalyzing: true,
+              analysisProgress: '🐻 Kuma is deeply analyzing the research paper...',
+              error: null,
+            });
+          }
+
           // Create new analysis promise
           const analysisPromise = (async () => {
             // Retrieve paper from IndexedDB
@@ -188,6 +329,13 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
             if (!storedPaper) {
               throw new Error('Paper not found in storage. Please store the paper first.');
+            }
+
+            // Update state with current paper
+            if (tabId) {
+              updateOperationState(tabId, {
+                currentPaper: storedPaper,
+              });
             }
 
             console.log(`Analyzing paper: ${storedPaper.title} with context: ${analysisContextId}`);
@@ -234,10 +382,36 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
               }
             }
 
+            // Update operation state to show completion
+            if (tabId) {
+              updateOperationState(tabId, {
+                isAnalyzing: false,
+                analysisProgress: '🐻 Kuma has finished analyzing the research paper!',
+                error: null,
+              });
+
+              // Clear the progress message after a delay
+              setTimeout(() => {
+                updateOperationState(tabId, {
+                  analysisProgress: '',
+                });
+              }, 5000);
+            }
+
             console.log('✓ Paper analysis complete');
             sendResponse({ success: true, analysis });
           } catch (analysisError) {
             console.error('Error analyzing paper:', analysisError);
+
+            // Update operation state to show error
+            if (tabId) {
+              updateOperationState(tabId, {
+                isAnalyzing: false,
+                analysisProgress: '',
+                error: `🐻 Kuma had trouble analyzing: ${String(analysisError)}`,
+              });
+            }
+
             sendResponse({
               success: false,
               error: `Analysis failed: ${String(analysisError)}`
@@ -248,6 +422,18 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
           }
         } catch (error) {
           console.error('Error in analysis setup:', error);
+
+          // Update operation state to show error
+          const tabId = message.payload.tabId || sender.tab?.id;
+          if (tabId) {
+            updateOperationState(tabId, {
+              isAnalyzing: false,
+              analysisProgress: '',
+              error: `🐻 Kuma couldn't analyze: ${String(error)}`,
+            });
+          }
+
+          const requestKey = getRequestKey(tabId, 'analyze', message.payload.url);
           activeRequests.delete(requestKey);
           sendResponse({
             success: false,
@@ -335,6 +521,16 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
             message.payload.fullText
           );
           console.log('[Background] ✓ Paper stored successfully:', storedPaper.id);
+
+          // Update operation state to show paper is stored
+          const tabId = message.payload.tabId || sender.tab?.id;
+          if (tabId) {
+            updateOperationState(tabId, {
+              currentPaper: storedPaper,
+              isPaperStored: true,
+            });
+          }
+
           sendResponse({ success: true, paper: storedPaper });
         } catch (dbError) {
           console.error('[Background] Failed to store paper:', dbError);
@@ -445,7 +641,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
             if (!detectResponse.paper) {
               updateOperationState(tabId, {
-                isDetecting: true,
+                isDetecting: false,
                 detectionProgress: '',
                 error: '🐻 Kuma didn\'t find any research papers. (No paper detected on this page)',
               });
@@ -453,11 +649,19 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
               return;
             }
 
+            // Check if paper is already stored in DB
+            let isPaperStored = false;
+            if (detectResponse.paper && detectResponse.alreadyStored) {
+              isPaperStored = true;
+              console.log('[Background] Paper is already stored in DB');
+            }
+
             // Update state with detected paper
             updateOperationState(tabId, {
               isDetecting: true,
               detectionProgress: '🐻 Kuma found a research paper! (Paper detected!)',
               currentPaper: detectResponse.paper,
+              isPaperStored: isPaperStored,
             });
 
             // Phase 2: Explanation
@@ -514,6 +718,11 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
             const storedPaper = await getPaperByUrl(paperUrl);
 
             if (storedPaper) {
+              // Update state to show paper is stored
+              updateOperationState(tabId, {
+                isPaperStored: true,
+              });
+
               const paperContent = storedPaper.fullText || storedPaper.abstract;
               const analysisContextId = `tab-${tabId}-analysis`;
               const analysis: PaperAnalysisResult = await aiService.analyzePaper(paperContent, analysisContextId);
@@ -545,12 +754,16 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
               });
 
               setTimeout(() =>{
+                // Get current state to preserve isPaperStored
+                const currentState = getOperationState(tabId);
                 updateOperationState(tabId, {
                   isDetecting: false,
                   isExplaining: false,
                   isAnalyzing: false,
                   analysisProgress: '',
                   error: null,
+                  // Preserve the isPaperStored state
+                  isPaperStored: currentState.isPaperStored,
                 });
               }, 5000);
             } else {
@@ -589,26 +802,40 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
   }
 }
 
-// Handle tab updates to enable/disable extension icon
+// Handle tab updates - removed site restrictions to allow extension on any site
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
-    const supportedSites = [
-      'arxiv.org',
-      'pubmed.ncbi.nlm.nih.gov',
-      'ncbi.nlm.nih.gov/pmc',
-      'biorxiv.org',
-      'medrxiv.org',
-      'scholar.google.com',
-      'papers.ssrn.com',
-    ];
+    // Extension now works on ALL sites - no restrictions
+    // The badge has been removed in favor of dynamic icon changes
+    // Icons will change based on operation state (detecting/explaining/analyzing)
 
-    const isSupported = supportedSites.some(site => tab.url?.includes(site));
+    // Clear any existing badge to avoid conflicts with icon changes
+    chrome.action.setBadgeText({ text: '', tabId });
+  }
+});
 
-    if (isSupported) {
-      chrome.action.setBadgeText({ text: '✓', tabId });
-      chrome.action.setBadgeBackgroundColor({ color: '#22c55e', tabId });
-    } else {
-      chrome.action.setBadgeText({ text: '', tabId });
+// Handle tab activation to update icon based on current tab's state
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  const { tabId } = activeInfo;
+
+  // Check if we have an operation state for this tab
+  if (operationStates.has(tabId)) {
+    const state = operationStates.get(tabId)!;
+    await updateIconForTab(tabId, state);
+    console.log(`[Background] Tab ${tabId} activated, icon updated based on current state`);
+  } else {
+    // Reset to default icon if no state exists
+    try {
+      await chrome.action.setIcon({
+        path: ICON_PATHS.default,
+        tabId: tabId,
+      });
+      await chrome.action.setTitle({
+        title: 'Kuma the Research Bear',
+        tabId: tabId,
+      });
+    } catch (error) {
+      console.error(`[Background] Failed to reset icon for tab ${tabId}:`, error);
     }
   }
 });
@@ -650,6 +877,9 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
     operationStates.delete(tabId);
     console.log(`[Background] Cleaned up operation state for tab ${tabId}`);
   }
+
+  // Reset icon to default (cleanup any custom icons)
+  // Note: Icon is automatically cleaned up when tab is closed, but this is for consistency
 });
 
 console.log('Research Bear background service worker loaded');

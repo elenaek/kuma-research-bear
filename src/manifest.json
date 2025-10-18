@@ -20,10 +20,10 @@
   "action": {
     "default_popup": "src/popup/popup.html",
     "default_icon": {
+      "128": "icons/icon128.png",
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
+      "48": "icons/icon48.png"
     }
   },
   "background": {
@@ -51,15 +51,15 @@
     "default_path": "src/sidepanel/sidepanel.html"
   },
   "icons": {
+    "128": "icons/icon128.png",
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "48": "icons/icon48.png"
   },
   "web_accessible_resources": [
     {
       "resources": ["pdf.worker.min.mjs"],
       "matches": ["<all_urls>"]
     }
-  ],
+  ]
 }

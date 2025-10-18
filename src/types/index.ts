@@ -232,6 +232,7 @@ export interface OperationState {
   isExplaining: boolean;
   isAnalyzing: boolean;
   currentPaper: ResearchPaper | null;
+  isPaperStored: boolean;  // Track if the current paper is stored in DB
   error: string | null;
   detectionProgress: string;
   explanationProgress: string;
