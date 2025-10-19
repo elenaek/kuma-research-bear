@@ -1,108 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader, PawPrint, ChevronLeft, ChevronRight, Trash2, Settings, ChevronDown, ChevronUp } from 'lucide-preact';
-import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, MessageType, GlossaryResult } from '../types/index.ts';
+import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, GlossaryResult } from '../types/index.ts';
 import { MarkdownRenderer } from '../components/MarkdownRenderer.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import { GlossaryList } from '../components/GlossaryCard.tsx';
-
-// Debounce utility
-function useDebounce<T extends (...args: any[]) => any>(
-  callback: T,
-  delay: number
-): T {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const debouncedCallback = useCallback(
-    ((...args: Parameters<T>) => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      timeoutRef.current = setTimeout(() => {
-        callback(...args);
-      }, delay);
-    }) as T,
-    [callback, delay]
-  );
-
-  // Clean up on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-
-  return debouncedCallback;
-}
-
-// Helper function to get paper from background worker's IndexedDB
-async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
-  console.log('[Sidepanel] Requesting paper from background worker:', url);
-  const response = await chrome.runtime.sendMessage({
-    type: MessageType.GET_PAPER_FROM_DB_BY_URL,
-    payload: { url },
-  });
-
-  if (response.success) {
-    console.log('[Sidepanel] Paper retrieval result:', response.paper ? 'Found' : 'Not found');
-    return response.paper;
-  } else {
-    console.error('[Sidepanel] Failed to get paper:', response.error);
-    return null;
-  }
-}
-
-// Helper function to get all papers from IndexedDB
-async function getAllPapers(): Promise<StoredPaper[]> {
-  console.log('[Sidepanel] Requesting all papers from background worker');
-  const response = await chrome.runtime.sendMessage({
-    type: MessageType.GET_ALL_PAPERS_FROM_DB,
-    payload: {},
-  });
-
-  if (response.success) {
-    console.log('[Sidepanel] Retrieved', response.papers.length, 'papers');
-    return response.papers || [];
-  } else {
-    console.error('[Sidepanel] Failed to get all papers:', response.error);
-    return [];
-  }
-}
-
-// Helper function to update Q&A history for a paper
-async function updatePaperQAHistory(paperId: string, qaHistory: QuestionAnswer[]): Promise<boolean> {
-  console.log('[Sidepanel] Updating Q&A history for paper:', paperId);
-  const response = await chrome.runtime.sendMessage({
-    type: MessageType.UPDATE_PAPER_QA_HISTORY,
-    payload: { paperId, qaHistory },
-  });
-
-  if (response.success) {
-    console.log('[Sidepanel] Q&A history updated successfully');
-    return true;
-  } else {
-    console.error('[Sidepanel] Failed to update Q&A history:', response.error);
-    return false;
-  }
-}
-
-// Helper function to delete a paper
-async function deletePaperFromDB(paperId: string): Promise<boolean> {
-  console.log('[Sidepanel] Deleting paper:', paperId);
-  const response = await chrome.runtime.sendMessage({
-    type: MessageType.DELETE_PAPER_FROM_DB,
-    payload: { paperId },
-  });
-
-  if (response.success) {
-    console.log('[Sidepanel] Paper deleted successfully');
-    return true;
-  } else {
-    console.error('[Sidepanel] Failed to delete paper:', response.error);
-    return false;
-  }
-}
+import { useDebounce } from './hooks/useDebounce.ts';
+import * as ChromeService from '../services/ChromeService.ts';
+import * as StorageService from '../services/StorageService.ts';
 
 type ViewState = 'loading' | 'empty' | 'content' | 'stored-only';
 type TabType = 'summary' | 'explanation' | 'qa' | 'analysis' | 'glossary' | 'original';
@@ -161,73 +65,48 @@ export function Sidepanel() {
   useEffect(() => {
     loadExplanation();
 
-    // Listen for storage changes
-    const storageListener = (changes: any, namespace: string) => {
-      if (namespace === 'local') {
-        // Handle explanation progress flag
-        if (changes.isExplaining) {
-          const isExplaining = changes.isExplaining.newValue || false;
-          console.log('[Sidepanel] Explanation status changed:', isExplaining);
-          setIsExplainingInBackground(isExplaining);
+    // Create storage listener using StorageService
+    const storageListener = StorageService.createStorageListener(
+      (isExplaining) => setIsExplainingInBackground(isExplaining),
+      () => debouncedLoadExplanation()
+    );
+
+    // Create operation state listener using StorageService
+    const messageListener = StorageService.createOperationStateListener((state) => {
+      // Update banner states
+      setIsExplainingInBackground(state.isExplaining);
+
+      // Update paper-specific generation states
+      const paperUrl = state.currentPaper?.url;
+      if (paperUrl) {
+        // Update analyzing papers Set
+        if (state.isAnalyzing) {
+          setAnalyzingPapers(prev => new Set(prev).add(paperUrl));
+        } else {
+          setAnalyzingPapers(prev => {
+            const next = new Set(prev);
+            next.delete(paperUrl);
+            return next;
+          });
         }
 
-        // Reload on data changes with debouncing
-        if (changes.lastExplanation || changes.lastAnalysis || changes.currentPaper) {
-          console.log('Storage changed, will reload explanation after debounce...', changes);
-          debouncedLoadExplanation();
+        // Update glossary generating papers Set
+        if (state.isGeneratingGlossary) {
+          setGlossaryGeneratingPapers(prev => new Set(prev).add(paperUrl));
+        } else {
+          setGlossaryGeneratingPapers(prev => {
+            const next = new Set(prev);
+            next.delete(paperUrl);
+            return next;
+          });
         }
       }
-    };
+    });
 
-    // Listen for operation state changes from background
-    const messageListener = (message: any) => {
-      if (message.type === MessageType.OPERATION_STATE_CHANGED) {
-        const state = message.payload?.state;
-        if (!state) return;
+    // Register listeners and get cleanup function
+    const cleanup = StorageService.registerListeners(storageListener, messageListener);
 
-        console.log('[Sidepanel] Operation state changed:', state);
-
-        // Update banner states
-        setIsExplainingInBackground(state.isExplaining);
-
-        // Update paper-specific generation states
-        const paperUrl = state.currentPaper?.url;
-        if (paperUrl) {
-          // Update analyzing papers Set
-          if (state.isAnalyzing) {
-            setAnalyzingPapers(prev => new Set(prev).add(paperUrl));
-          } else {
-            setAnalyzingPapers(prev => {
-              const next = new Set(prev);
-              next.delete(paperUrl);
-              return next;
-            });
-          }
-
-          // Update glossary generating papers Set
-          if (state.isGeneratingGlossary) {
-            setGlossaryGeneratingPapers(prev => new Set(prev).add(paperUrl));
-          } else {
-            setGlossaryGeneratingPapers(prev => {
-              const next = new Set(prev);
-              next.delete(paperUrl);
-              return next;
-            });
-          }
-        }
-
-        // Removed auto-reload on operation completion - storage listener handles reloads
-        // This was causing infinite loop with auto-trigger logic
-      }
-    };
-
-    chrome.storage.onChanged.addListener(storageListener);
-    chrome.runtime.onMessage.addListener(messageListener);
-
-    return () => {
-      chrome.storage.onChanged.removeListener(storageListener);
-      chrome.runtime.onMessage.removeListener(messageListener);
-    };
+    return cleanup;
   }, []);
 
   /**
@@ -239,7 +118,7 @@ export function Sidepanel() {
       console.log(`[Sidepanel] Checking if paper is stored (attempt ${i + 1}/${maxRetries})...`);
 
       try {
-        const stored = await getPaperByUrl(paperUrl);
+        const stored = await ChromeService.getPaperByUrl(paperUrl);
 
         if (stored) {
           console.log(`[Sidepanel] ✓ Paper found in storage!`, {
@@ -296,7 +175,7 @@ export function Sidepanel() {
     // Try to get paper from IndexedDB
     if (result.currentPaper?.url) {
       try {
-        const stored = await getPaperByUrl(result.currentPaper.url);
+        const stored = await ChromeService.getPaperByUrl(result.currentPaper.url);
         debugData.indexedDB = {
           queryUrl: result.currentPaper.url,
           found: !!stored,
@@ -318,7 +197,7 @@ export function Sidepanel() {
   async function loadExplanation() {
     try {
       // Load all papers from IndexedDB
-      const papers = await getAllPapers();
+      const papers = await ChromeService.getAllPapers();
       setAllPapers(papers);
       console.log('[Sidepanel] Loaded', papers.length, 'papers from IndexedDB');
 
@@ -326,10 +205,7 @@ export function Sidepanel() {
       try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab?.id) {
-          const stateResponse = await chrome.runtime.sendMessage({
-            type: MessageType.GET_OPERATION_STATE,
-            payload: { tabId: tab.id },
-          });
+          const stateResponse = await ChromeService.getOperationState(tab.id);
 
           if (stateResponse.success && stateResponse.state) {
             const state = stateResponse.state;
@@ -498,10 +374,7 @@ export function Sidepanel() {
       setAnalyzingPapers(prev => new Set(prev).add(paperUrl));
       console.log('Starting paper analysis for:', paperUrl);
 
-      const response = await chrome.runtime.sendMessage({
-        type: 'ANALYZE_PAPER',
-        payload: { url: paperUrl },
-      });
+      const response = await ChromeService.analyzePaper(paperUrl);
 
       if (response.success) {
         console.log('✓ Paper analysis completed successfully');
@@ -552,12 +425,9 @@ export function Sidepanel() {
       setGlossaryGeneratingPapers(prev => new Set(prev).add(paperUrl));
       console.log('Starting glossary generation for:', paperUrl);
 
-      const response = await chrome.runtime.sendMessage({
-        type: MessageType.GENERATE_GLOSSARY,
-        payload: { url: paperUrl },
-      });
+      const response = await ChromeService.generateGlossary(paperUrl);
 
-      if (response.success) {
+      if (response.success && response.glossary) {
         console.log('✓ Glossary generated successfully');
         setGlossary(response.glossary);
 
@@ -621,15 +491,9 @@ export function Sidepanel() {
       setIsAsking(true);
       console.log('Asking question:', question);
 
-      const response = await chrome.runtime.sendMessage({
-        type: MessageType.ASK_QUESTION,
-        payload: {
-          paperUrl: data.paper.url,
-          question: question.trim(),
-        },
-      });
+      const response = await ChromeService.askQuestion(data.paper.url, question.trim());
 
-      if (response.success) {
+      if (response.success && response.answer) {
         console.log('✓ Question answered successfully');
         // Add to history
         const newHistory = [response.answer, ...qaHistory];
@@ -638,7 +502,7 @@ export function Sidepanel() {
 
         // Save Q&A history to database
         if (storedPaper) {
-          await updatePaperQAHistory(storedPaper.id, newHistory);
+          await ChromeService.updatePaperQAHistory(storedPaper.id, newHistory);
         }
       } else {
         console.error('Question answering failed:', response.error);
@@ -698,10 +562,7 @@ Source: ${paper.url}
       setIsRegenerating(true);
       setViewState('loading');
 
-      const response = await chrome.runtime.sendMessage({
-        type: 'EXPLAIN_PAPER',
-        payload: { paper: result.currentPaper },
-      });
+      const response = await ChromeService.explainPaper(result.currentPaper);
 
       if (response.success) {
         await loadExplanation();
@@ -837,7 +698,7 @@ Source: ${paper.url}
 
     try {
       setIsDeleting(true);
-      const success = await deletePaperFromDB(storedPaper.id);
+      const success = await ChromeService.deletePaper(storedPaper.id);
 
       if (success) {
         console.log('[Sidepanel] Paper deleted successfully');
@@ -909,7 +770,7 @@ Source: ${paper.url}
       // Delete all papers one by one
       let successCount = 0;
       for (const paper of allPapers) {
-        const success = await deletePaperFromDB(paper.id);
+        const success = await ChromeService.deletePaper(paper.id);
         if (success) {
           successCount++;
         }
