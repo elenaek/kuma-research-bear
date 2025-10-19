@@ -646,15 +646,10 @@ Source: ${paper.url}
       console.log('[Sidepanel] Loading analysis from chrome.storage');
       setAnalysis(result.lastAnalysis.analysis);
     } else {
-      // Only trigger if not already analyzing this paper
-      if (!operationState.isAnalyzing(paperToUse.url)) {
-        console.log('[Sidepanel] No analysis found in database, triggering new analysis');
-        setAnalysis(null);
-        triggerAnalysis(paperToUse.url);
-      } else {
-        console.log('[Sidepanel] Analysis already in progress for this paper');
-        setAnalysis(null);
-      }
+      // Paper switching should NOT auto-trigger analysis (prevents retrigger bug)
+      // Analysis is only auto-triggered during initial load in loadExplanation()
+      console.log('[Sidepanel] No analysis for this paper');
+      setAnalysis(null);
     }
 
     // Load glossary from fresh StoredPaper data
@@ -662,15 +657,10 @@ Source: ${paper.url}
       console.log('[Sidepanel] Loading glossary for paper:', paperToUse.title);
       setGlossary(paperToUse.glossary);
     } else {
-      // Only trigger if not already generating for this paper
-      if (!operationState.isGeneratingGlossary(paperToUse.url)) {
-        console.log('[Sidepanel] No glossary found, triggering generation');
-        setGlossary(null);
-        triggerGlossaryGeneration(paperToUse.url);
-      } else {
-        console.log('[Sidepanel] Glossary generation already in progress for this paper');
-        setGlossary(null);
-      }
+      // Paper switching should NOT auto-trigger glossary generation (prevents retrigger bug)
+      // Glossary is only auto-triggered during initial load in loadExplanation()
+      console.log('[Sidepanel] No glossary for this paper');
+      setGlossary(null);
     }
   }
 
