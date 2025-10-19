@@ -23,12 +23,14 @@ function getOperationState(tabId: number): OperationState {
       isDetecting: false,
       isExplaining: false,
       isAnalyzing: false,
+      isGeneratingGlossary: false,
       currentPaper: null,
       isPaperStored: false,
       error: null,
       detectionProgress: '',
       explanationProgress: '',
       analysisProgress: '',
+      glossaryProgress: '',
       lastUpdated: Date.now(),
       activeAIRequests: [],
       isUsingCachedRequest: false,
@@ -655,8 +657,28 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
       case MessageType.DELETE_PAPER_FROM_DB:
         try {
           console.log('[Background] Deleting paper:', message.payload.paperId);
+
+          // Get paper URL before deletion to clean up OperationState
+          const { getPaperById } = await import('../utils/dbService.ts');
+          const paperToDelete = await getPaperById(message.payload.paperId);
+          const deletedPaperUrl = paperToDelete?.url;
+
           const deleted = await (await import('../utils/dbService.ts')).deletePaper(message.payload.paperId);
           console.log('[Background] Paper deletion result:', deleted);
+
+          // Clear any OperationState entries referencing this paper
+          if (deleted && deletedPaperUrl) {
+            operationStates.forEach((state, tabId) => {
+              if (state.currentPaper?.url === deletedPaperUrl) {
+                console.log(`[Background] Clearing currentPaper from tab ${tabId} OperationState`);
+                updateOperationState(tabId, {
+                  currentPaper: null,
+                  isPaperStored: false,
+                });
+              }
+            });
+          }
+
           sendResponse({ success: deleted });
         } catch (dbError) {
           console.error('[Background] Failed to delete paper:', dbError);
@@ -784,12 +806,14 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
               explanationProgress: '🐻 Kuma has finished explaining the research paper! (Explanation complete!)',
             });
 
-            // Phase 3: Analysis (auto-trigger)
+            // Phase 3: Analysis + Glossary (auto-trigger in parallel)
             updateOperationState(tabId, {
               isDetecting: false,
               isExplaining: false,
               isAnalyzing: true,
+              isGeneratingGlossary: true,
               analysisProgress: '🐻 Kuma is deeply analyzing the research paper... (Analyzing paper)',
+              glossaryProgress: '🐻 Kuma is extracting technical terms and acronyms... (Generating glossary)',
             });
 
             const paperUrl = detectResponse.paper.url;
@@ -803,7 +827,13 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
               const paperContent = storedPaper.fullText || storedPaper.abstract;
               const analysisContextId = `tab-${tabId}-analysis`;
-              const analysis: PaperAnalysisResult = await aiService.analyzePaper(paperContent, analysisContextId);
+              const glossaryContextId = `tab-${tabId}-glossary`;
+
+              // Run analysis and glossary generation in parallel
+              const [analysis, glossary] = await Promise.all([
+                aiService.analyzePaper(paperContent, analysisContextId),
+                aiService.generateGlossary(paperContent, storedPaper.title, glossaryContextId)
+              ]);
 
               // Store analysis in chrome.storage (for quick access/backwards compatibility)
               await chrome.storage.local.set({
@@ -814,13 +844,16 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
                 },
               });
 
-              // Also store in IndexedDB per-paper for persistence
+              // Store both analysis and glossary in IndexedDB
               try {
-                const { updatePaperAnalysis } = await import('../utils/dbService.ts');
-                await updatePaperAnalysis(storedPaper.id, analysis);
-                console.log('[Background] ✓ Analysis stored in IndexedDB');
+                const { updatePaperAnalysis, updatePaperGlossary } = await import('../utils/dbService.ts');
+                await Promise.all([
+                  updatePaperAnalysis(storedPaper.id, analysis),
+                  updatePaperGlossary(storedPaper.id, glossary)
+                ]);
+                console.log('[Background] ✓ Analysis and glossary stored in IndexedDB');
               } catch (dbError) {
-                console.warn('[Background] Failed to store analysis in IndexedDB:', dbError);
+                console.warn('[Background] Failed to store analysis/glossary in IndexedDB:', dbError);
                 // Don't fail the whole operation if IndexedDB update fails
               }
 
@@ -828,7 +861,9 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
                 isDetecting: false,
                 isExplaining: false,
                 isAnalyzing: true,
+                isGeneratingGlossary: true,
                 analysisProgress: '🐻 Kuma has finished analyzing the research paper! (Analysis complete!)',
+                glossaryProgress: '🐻 Kuma has finished extracting terms! (Glossary complete!)',
               });
 
               setTimeout(() =>{
@@ -838,7 +873,9 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
                   isDetecting: false,
                   isExplaining: false,
                   isAnalyzing: false,
+                  isGeneratingGlossary: false,
                   analysisProgress: '',
+                  glossaryProgress: '',
                   error: null,
                   // Preserve the isPaperStored state
                   isPaperStored: currentState.isPaperStored,
@@ -849,7 +886,9 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
                 isDetecting: false,
                 isAnalyzing: false,
                 isExplaining: false,
+                isGeneratingGlossary: false,
                 analysisProgress: '',
+                glossaryProgress: '',
                 error: '🐻 Kuma could not find a research paper to analyze. (Paper not found for analysis)',
               });
             }
@@ -861,9 +900,11 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
               isDetecting: false,
               isExplaining: false,
               isAnalyzing: false,
+              isGeneratingGlossary: false,
               detectionProgress: '',
               explanationProgress: '',
               analysisProgress: '',
+              glossaryProgress: '',
               error: String(flowError),
             });
             sendResponse({ success: false, error: String(flowError) });

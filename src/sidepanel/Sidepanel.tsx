@@ -678,8 +678,11 @@ Source: ${paper.url}
   }
 
   // Paper navigation and management functions
-  async function switchToPaper(index: number) {
-    if (index < 0 || index >= allPapers.length) return;
+  async function switchToPaper(index: number, papersArray?: StoredPaper[]) {
+    // Use provided array or fall back to state (for backwards compatibility)
+    const papers = papersArray || allPapers;
+
+    if (index < 0 || index >= papers.length) return;
 
     console.log(`[Sidepanel] Switching to paper at index ${index}`);
 
@@ -690,7 +693,7 @@ Source: ${paper.url}
 
     // Switch to new paper
     setCurrentPaperIndex(index);
-    const newPaper = allPapers[index];
+    const newPaper = papers[index];
     setStoredPaper(newPaper);
 
     // Load Q&A history for new paper
@@ -779,7 +782,8 @@ Source: ${paper.url}
           // Switch to previous paper, or first if we deleted the first
           const newIndex = Math.max(0, currentPaperIndex - 1);
           setCurrentPaperIndex(newIndex);
-          await switchToPaper(newIndex);
+          // Pass newAllPapers directly to avoid race condition with state updates
+          await switchToPaper(newIndex, newAllPapers);
         }
       } else {
         alert('Failed to delete paper. Please try again.');

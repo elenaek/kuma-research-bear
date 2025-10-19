@@ -252,12 +252,14 @@ export interface OperationState {
   isDetecting: boolean;
   isExplaining: boolean;
   isAnalyzing: boolean;
+  isGeneratingGlossary: boolean;
   currentPaper: ResearchPaper | null;
   isPaperStored: boolean;  // Track if the current paper is stored in DB
   error: string | null;
   detectionProgress: string;
   explanationProgress: string;
   analysisProgress: string;
+  glossaryProgress: string;
   lastUpdated: number;
   // Track active AI requests for this tab
   activeAIRequests: string[];

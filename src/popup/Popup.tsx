@@ -14,6 +14,7 @@ export function Popup() {
   const [detectionStatus, setDetectionStatus] = useState<string | null>(null);
   const [isPaperStored, setIsPaperStored] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isGeneratingGlossary, setIsGeneratingGlossary] = useState(false);
 
   // Check AI availability and operation state on mount
   useEffect(() => {
@@ -32,12 +33,18 @@ export function Popup() {
         setIsDetecting(state.isDetecting);
         setIsExplaining(state.isExplaining);
         setIsAnalyzing(state.isAnalyzing);
+        setIsGeneratingGlossary(state.isGeneratingGlossary);
         if (state.isDetecting) {
           setDetectionStatus(state.detectionProgress || '🐻 Kuma is foraging for research papers... (Detecting paper)');
         } else if (state.isExplaining) {
           setDetectionStatus(state.explanationProgress || '🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)');
+        } else if (state.isAnalyzing && state.isGeneratingGlossary) {
+          // Both analysis and glossary are running in parallel
+          setDetectionStatus('🐻 Kuma is analyzing the paper and extracting key terms... (Analyzing + Glossary)');
         } else if (state.isAnalyzing) {
           setDetectionStatus(state.analysisProgress || '🐻 Kuma is deeply analyzing the research paper... (Analyzing paper)');
+        } else if (state.isGeneratingGlossary) {
+          setDetectionStatus(state.glossaryProgress || '🐻 Kuma is extracting technical terms and acronyms... (Generating glossary)');
         } else if (state.error) {
           setDetectionStatus(`❌ ${state.error}`);
         } else {
@@ -75,6 +82,7 @@ export function Popup() {
         setIsDetecting(state.isDetecting);
         setIsExplaining(state.isExplaining);
         setIsAnalyzing(state.isAnalyzing);
+        setIsGeneratingGlossary(state.isGeneratingGlossary);
         console.log('[Popup] Loaded operation state:', state);
 
         // Update UI based on current state
@@ -85,8 +93,12 @@ export function Popup() {
         if (state.isExplaining) {
           setDetectionStatus(state.explanationProgress || '🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)');
         }
-        if (state.isAnalyzing) {
+        if (state.isAnalyzing && state.isGeneratingGlossary) {
+          setDetectionStatus('🐻 Kuma is analyzing the paper and extracting key terms... (Analyzing + Glossary)');
+        } else if (state.isAnalyzing) {
           setDetectionStatus(state.analysisProgress || '🐻 Kuma is deeply analyzing the research paper... (Analyzing paper)');
+        } else if (state.isGeneratingGlossary) {
+          setDetectionStatus(state.glossaryProgress || '🐻 Kuma is extracting technical terms and acronyms... (Generating glossary)');
         }
         if (state.currentPaper) {
           setPaper(state.currentPaper);
@@ -317,7 +329,7 @@ export function Popup() {
               return 'kuma-working';
             })()}`} />
             <span class="text-sm text-gray-700">{(() => {
-              if (aiStatus === 'ready' && detectionStatus && (isDetecting || isExplaining || isAnalyzing)) return detectionStatus;
+              if (aiStatus === 'ready' && detectionStatus && (isDetecting || isExplaining || isAnalyzing || isGeneratingGlossary)) return detectionStatus;
               if (aiStatus === 'ready') return 'Kuma is ready to help you with your research!';
               if (aiStatus === 'error') return 'Kuma is full asleep again. (AI Model Crashed)';
               return 'Kuma is missing from his cave. (Not available on this device)';
@@ -421,12 +433,12 @@ export function Popup() {
         <div class="space-y-2">
           <button
             onClick={handleDetectPaper}
-            disabled={aiStatus !== 'ready' || isDetecting || isExplaining || isAnalyzing || isPaperStored}
-            class={`${isPaperStored ? `${(isDetecting || isExplaining || isAnalyzing) ? 'btn btn-kuma-working' : 'btn btn-success'}` : `${'btn btn-primary'}`} w-full hover:cursor-pointer`}
+            disabled={aiStatus !== 'ready' || isDetecting || isExplaining || isAnalyzing || isGeneratingGlossary || isPaperStored}
+            class={`${isPaperStored ? `${(isDetecting || isExplaining || isAnalyzing || isGeneratingGlossary) ? 'btn btn-kuma-working' : 'btn btn-success'}` : `${'btn btn-primary'}`} w-full hover:cursor-pointer`}
             title={aiStatus !== 'ready' ? 'Wake Kuma up' : isDetecting ? 'Detecting and explaining...' : 'Detect paper and automatically generate explanation'}
           >
             {(() => {
-              if (isDetecting || isExplaining || isAnalyzing) {
+              if (isDetecting || isExplaining || isAnalyzing || isGeneratingGlossary) {
                 return (
                   <>
                     <Loader size={32} class="animate-spin" />

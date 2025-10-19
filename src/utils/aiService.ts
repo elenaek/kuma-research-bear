@@ -938,29 +938,8 @@ Use markdown formatting for better readability:
   ): Promise<GlossaryResult> {
     console.log('Generating glossary of terms and acronyms...');
 
-    const maxChars = 20000; // ~5000tokens
+    const maxChars = 15000; // ~3750tokens
     const truncatedContent = paperContent.slice(0, maxChars);
-
-//     const systemPrompt = `You are a research paper terminology expert who creates comprehensive glossaries.
-// Extract acronyms, initialisms, and key technical terms from research papers.
-// Provide clear definitions and helpful analogies for each term.`;
-
-//     const input = `Extract all acronyms, initialisms, and important technical abbreviations from this research paper and create a glossary.
-
-// For each acronym/term, provide:
-// 1. The acronym/initialism (e.g., "RCT", "CI", "FDA")
-// 2. The full expanded form
-// 3. A clear definition
-// 4. An array of study contexts with sections - for each context, specify:
-//    - context: how the term is used (string)
-//    - sections: array of section names where this usage appears (array of strings)
-// 5. An analogy to help understand the term
-
-// Focus on terms that are critical to understanding the paper.
-// Paper Title: ${paperTitle}
-
-// Paper Content:
-// ${truncatedContent}.`;
     const systemPrompt = `You are a research paper terminology expert who creates comprehensive glossaries.
     Extract acronyms, initialisms, and key technical terms from research papers.
     Provide clear definitions and helpful analogies for each term.
@@ -973,7 +952,7 @@ For each key acronym/initialisms/technical terms, provide:
 2. The full expanded form
 3. A clear definition
 4. An array of study contexts with sections - for each context, specify:
-   - context: how the term is used (string)
+   - context: describe how the term is used in this paper (string)
    - sections: array of section names where this usage appears (array of strings)
 5. A simple analogy to help understand it
 

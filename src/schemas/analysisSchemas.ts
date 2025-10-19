@@ -277,8 +277,7 @@ export const glossarySchema: JSONSchema = {
               properties: {
                 context: {
                   type: 'string',
-                  description: 'How this term is used in a specific context in this paper',
-                  maxLength: 200
+                  description: 'Describe how this term is used in this paper',
                 },
                 sections: {
                   type: 'array',
@@ -294,13 +293,12 @@ export const glossarySchema: JSONSchema = {
               additionalProperties: false
             },
             description: 'Different contexts where this term appears with their sections',
-            minItems: 1,
-            maxItems: 5
+            minItems: 1
           },
           analogy: {
             type: 'string',
             description: 'A simple analogy to help understand the concept',
-            maxLength: 150,
+            maxLength: 200,
           }
         },
         required: ['acronym', 'longForm', 'definition', 'studyContext', 'analogy'],
