@@ -285,3 +285,151 @@ export async function explainPaper(paper: any): Promise<ExplainPaperResponse> {
     return { success: false, error: String(error) };
   }
 }
+
+export interface DetectAndExplainResponse {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Start the detect and explain flow for a tab
+ */
+export async function startDetectAndExplain(tabId: number): Promise<DetectAndExplainResponse> {
+  console.log('[ChromeService] Starting detect and explain for tab:', tabId);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.START_DETECT_AND_EXPLAIN,
+      payload: { tabId },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Detect and explain started successfully');
+      return { success: true };
+    } else {
+      console.error('[ChromeService] Detect and explain failed:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error starting detect and explain:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Check if a paper is stored in the database
+ */
+export async function isPaperStoredInDB(url: string): Promise<boolean> {
+  console.log('[ChromeService] Checking if paper is stored:', url);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.IS_PAPER_STORED_IN_DB,
+      payload: { url },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] Paper stored check result:', response.isStored);
+      return response.isStored || false;
+    } else {
+      console.error('[ChromeService] Failed to check paper storage:', response.error);
+      return false;
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error checking paper storage:', error);
+    return false;
+  }
+}
+
+/**
+ * AI Management Operations
+ */
+
+export interface AICapabilities {
+  availability: 'available' | 'downloadable' | 'downloading' | 'unavailable' | 'no';
+}
+
+export interface AIStatusResponse {
+  success: boolean;
+  error?: string;
+  capabilities?: AICapabilities;
+}
+
+/**
+ * Check AI status and capabilities
+ */
+export async function checkAIStatus(): Promise<AIStatusResponse> {
+  console.log('[ChromeService] Checking AI status');
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.AI_STATUS,
+    });
+
+    if (response) {
+      const capabilities = response.capabilities || { availability: 'no' };
+      console.log('[ChromeService] AI status retrieved:', capabilities.availability);
+      return { success: true, capabilities };
+    } else {
+      console.error('[ChromeService] Failed to check AI status');
+      return { success: false, error: 'No response from background' };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error checking AI status:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export interface AIInitResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Initialize AI
+ */
+export async function initializeAI(): Promise<AIInitResponse> {
+  console.log('[ChromeService] Initializing AI');
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.INITIALIZE_AI,
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ AI initialized successfully');
+      return { success: true, message: response.message };
+    } else {
+      console.error('[ChromeService] AI initialization failed:', response.message);
+      return { success: false, error: response.message };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error initializing AI:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Reset AI
+ */
+export async function resetAI(): Promise<AIInitResponse> {
+  console.log('[ChromeService] Resetting AI');
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.RESET_AI,
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ AI reset successfully');
+      return { success: true, message: response.message };
+    } else {
+      console.error('[ChromeService] AI reset failed:', response.message);
+      return { success: false, error: response.message };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error resetting AI:', error);
+    return { success: false, error: String(error) };
+  }
+}
