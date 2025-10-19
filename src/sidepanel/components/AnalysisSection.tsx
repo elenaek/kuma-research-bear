@@ -1,0 +1,269 @@
+import { FileText, AlertTriangle, TrendingUp, AlertCircle, CheckCircle, Loader } from 'lucide-preact';
+import { PaperAnalysisResult } from '../../types/index.ts';
+import { Tooltip } from '../../components/Tooltip.tsx';
+import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
+
+interface AnalysisSectionProps {
+  analysis: PaperAnalysisResult | null;
+  isAnalyzing: boolean;
+}
+
+/**
+ * Analysis Section Component
+ * Displays paper analysis results including methodology, confounders, implications, and limitations
+ */
+export function AnalysisSection(props: AnalysisSectionProps) {
+  const { analysis, isAnalyzing } = props;
+
+  // Loading state
+  if (isAnalyzing && !analysis) {
+    return (
+      <div class="card">
+        <div class="flex flex-col items-center justify-center gap-4 py-12">
+          <Loader size={32} class="animate-spin text-blue-600" />
+          <div class="text-center">
+            <p class="text-base font-medium text-gray-900 mb-2">Analyzing Paper...</p>
+            <p class="text-sm text-gray-600">
+              Evaluating methodology, identifying confounders, analyzing implications, and assessing limitations.
+            </p>
+            <p class="text-xs text-gray-500 mt-2">This may take 20-30 seconds</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // No analysis yet
+  if (!analysis) {
+    return (
+      <div class="card text-center py-8">
+        <TrendingUp size={32} class="mx-auto mb-3 text-gray-400" />
+        <p class="text-sm text-gray-600">Analysis will begin automatically</p>
+        <p class="text-xs text-gray-500 mt-1">Please wait...</p>
+      </div>
+    );
+  }
+
+  // Analysis results
+  return (
+    <>
+      {/* Methodology Analysis */}
+      <div class="card">
+        <div class="flex items-center gap-2 mb-3">
+          <FileText size={18} class="text-blue-600" />
+          <h3 class="text-base font-semibold text-gray-900">Methodology</h3>
+        </div>
+
+        <div class="space-y-3">
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1">
+              Study Type
+              <Tooltip text="The type of study (e.g. randomized controlled trial, cohort study, case-control study, etc.)" />
+            </p>
+            <p class="text-sm text-gray-600">{analysis.methodology.studyType}</p>
+          </div>
+
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1">
+              Study Design
+              <Tooltip text="The overall framework and approach used to conduct the research study" />
+            </p>
+            <p class="text-sm text-gray-600">{analysis.methodology.studyDesign}</p>
+          </div>
+
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1">
+              Data Collection
+              <Tooltip text="Methods and procedures used to gather information and measurements for the study" />
+            </p>
+            <p class="text-sm text-gray-600">{analysis.methodology.dataCollection}</p>
+          </div>
+
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1">
+              Sample Size
+              <Tooltip text="The number of participants or observations included in the study" />
+            </p>
+            <p class="text-sm text-gray-600">{analysis.methodology.sampleSize}</p>
+          </div>
+
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1">
+              Statistical Methods
+              <Tooltip text="Analytical techniques and tests used to evaluate and interpret the data" />
+            </p>
+            <p class="text-sm text-gray-600">{analysis.methodology.statisticalMethods}</p>
+          </div>
+
+          <div>
+            <p class="text-sm font-medium text-green-700 mb-1 flex items-center gap-1">
+              <CheckCircle size={14} />
+              Strengths
+              <Tooltip text="Notable positive aspects and robust elements of the research methodology" />
+            </p>
+            <ul class="space-y-1">
+              {analysis.methodology.strengths.map((strength, idx) => (
+                <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                  <span class="text-green-600">•</span>
+                  <span>{strength}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <p class="text-sm font-medium text-yellow-700 mb-1 flex items-center gap-1">
+              <AlertCircle size={14} />
+              Concerns
+              <Tooltip text="Potential weaknesses or issues identified in the research methodology" />
+            </p>
+            <ul class="space-y-1">
+              {analysis.methodology.concerns.map((concern, idx) => (
+                <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                  <span class="text-yellow-600">•</span>
+                  <span>{concern}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Confounders & Biases */}
+      <div class="card">
+        <div class="flex items-center gap-2 mb-3">
+          <AlertTriangle size={18} class="text-orange-600" />
+          <h3 class="text-lg font-semibold text-gray-900">Confounders & Biases</h3>
+        </div>
+
+        <div class="space-y-3">
+          <div>
+            <p class="text-base font-medium text-gray-700 mb-1">
+              Identified Confounders
+              <Tooltip text="Variables that may influence both the independent and dependent variables, potentially distorting results" />
+            </p>
+            <ul class="space-y-3">
+              {analysis.confounders.identified.map((item, idx) => (
+                <li key={idx} class="flex flex-col gap-2 text-sm text-gray-600">
+                  <span class="font-medium text-gray-600">{item.name}</span>
+                  <span class="text-gray-500 text-xs">{item.explanation}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <p class="text-base font-medium text-gray-700 mb-1">
+              Potential Biases
+              <Tooltip text="Systematic errors or tendencies that could skew the study results in a particular direction" />
+            </p>
+            <ul class="space-y-3">
+              {analysis.confounders.biases.map((bias, idx) => (
+                <li key={idx} class="flex flex-col gap-2 text-sm text-gray-600">
+                  <span class="font-medium text-gray-600">{bias.name}</span>
+                  <span class="text-gray-500 text-xs">{bias.explanation}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <p class="text-base font-medium text-gray-700 mb-1">
+              Control Measures
+              <Tooltip text="Strategies implemented by researchers to minimize or account for confounders and biases" />
+            </p>
+            <ul class="space-y-3">
+              {analysis.confounders.controlMeasures.map((controlMeasure, idx) => (
+                <li key={idx} class="flex flex-col gap-2 text-sm text-gray-600">
+                  <span class="font-medium text-gray-600">{controlMeasure.name}</span>
+                  <span class="text-gray-500 text-xs">{controlMeasure.explanation}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Implications */}
+      <div class="card">
+        <div class="flex items-center gap-2 mb-3">
+          <TrendingUp size={18} class="text-blue-600" />
+          <h3 class="text-base font-semibold text-gray-900">Implications</h3>
+        </div>
+
+        <div class="space-y-3">
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1">
+              Significance
+              <Tooltip text="The importance and meaning of the research findings within the field" />
+            </p>
+            <p class="text-sm text-gray-600">{analysis.implications.significance}</p>
+          </div>
+
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1">
+              Possible Real-World Applications
+              <Tooltip text="What the research findings may be applied to in the real world" />
+            </p>
+            <ul class="space-y-3">
+              {analysis.implications.realWorldApplications.map((app, idx) => (
+                <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                  <span class="text-blue-600">•</span>
+                  <span>{app}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1">
+              What could be Investigated Further
+              <Tooltip text="Suggested areas for further investigation to build upon or address gaps in this research" />
+            </p>
+            <ul class="space-y-3">
+              {analysis.implications.futureResearch.map((research, idx) => (
+                <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                  <span class="text-purple-600">•</span>
+                  <span>{research}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Limitations */}
+      <div class="card">
+        <div class="flex items-center gap-2 mb-3">
+          <AlertCircle size={18} class="text-red-600" />
+          <h3 class="text-base font-semibold text-gray-900">Limitations</h3>
+        </div>
+
+        <div class="space-y-3">
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1">
+              Study Limitations
+              <Tooltip text="Constraints and boundaries that may affect the validity or scope of the research findings" />
+            </p>
+            <ul class="space-y-3">
+              {analysis.limitations.studyLimitations.map((limitation, idx) => (
+                <li key={idx} class="flex gap-2 text-sm text-gray-600">
+                  <span class="text-red-600">•</span>
+                  <MarkdownRenderer content={limitation} />
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <p class="text-sm font-medium text-gray-700 mb-1">
+              Generalizability
+              <Tooltip text="The extent to which findings can be applied to other populations, settings, or contexts" />
+            </p>
+            <p class="text-sm text-gray-600">{analysis.limitations.generalizability}</p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
