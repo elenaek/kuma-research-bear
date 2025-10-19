@@ -115,6 +115,10 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
       isDetecting: false,
       isExplaining: true,
       explanationProgress: '🐻 Kuma has finished explaining the research paper! (Explanation complete!)',
+      // Update completion tracking (explanation + summary = 2 of 4 features)
+      hasExplanation: true,
+      hasSummary: true,
+      completionPercentage: 50,
     });
 
     // Phase 3: Analysis + Glossary (auto-trigger in parallel)
@@ -175,10 +179,16 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
         isGeneratingGlossary: true,
         analysisProgress: '🐻 Kuma has finished analyzing the research paper! (Analysis complete!)',
         glossaryProgress: '🐻 Kuma has finished extracting terms! (Glossary complete!)',
+        // Update completion tracking (all 4 features now complete!)
+        hasExplanation: true,
+        hasSummary: true,
+        hasAnalysis: true,
+        hasGlossary: true,
+        completionPercentage: 100,
       });
 
       setTimeout(() =>{
-        // Get current state to preserve isPaperStored
+        // Get current state to preserve completion status
         const currentState = operationStateService.getState(tabId);
         updateOperationState(tabId, {
           isDetecting: false,
@@ -188,8 +198,13 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
           analysisProgress: '',
           glossaryProgress: '',
           error: null,
-          // Preserve the isPaperStored state
+          // Preserve the isPaperStored and completion tracking fields
           isPaperStored: currentState.isPaperStored,
+          hasExplanation: currentState.hasExplanation,
+          hasSummary: currentState.hasSummary,
+          hasAnalysis: currentState.hasAnalysis,
+          hasGlossary: currentState.hasGlossary,
+          completionPercentage: currentState.completionPercentage,
         });
       }, 5000);
     } else {

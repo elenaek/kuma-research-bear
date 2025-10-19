@@ -3,6 +3,7 @@ import { aiService } from '../../utils/aiService.ts';
 import { getPaperByUrl, getPaperChunks, getRelevantChunks } from '../../utils/dbService.ts';
 import * as operationStateService from '../services/operationStateService.ts';
 import * as requestDeduplicationService from '../services/requestDeduplicationService.ts';
+import * as paperStatusService from '../services/paperStatusService.ts';
 
 /**
  * AI Message Handlers
@@ -98,6 +99,19 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
         const { updatePaperExplanation } = await import('../../utils/dbService.ts');
         await updatePaperExplanation(storedPaper.id, explanation, summary);
         console.log('[AIHandlers] ✓ Explanation stored in IndexedDB');
+
+        // Update completion tracking in operation state
+        if (tabId) {
+          const status = await paperStatusService.checkPaperStatus(storedPaper.url);
+          operationStateService.updateState(tabId, {
+            hasExplanation: status.hasExplanation,
+            hasSummary: status.hasSummary,
+            hasAnalysis: status.hasAnalysis,
+            hasGlossary: status.hasGlossary,
+            completionPercentage: status.completionPercentage,
+          });
+          console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
+        }
       }
     } catch (dbError) {
       console.warn('[AIHandlers] Failed to store explanation in IndexedDB:', dbError);
@@ -244,6 +258,19 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
           const { updatePaperAnalysis } = await import('../../utils/dbService.ts');
           await updatePaperAnalysis(storedPaper.id, analysis);
           console.log('[AIHandlers] ✓ Analysis stored in IndexedDB');
+
+          // Update completion tracking in operation state
+          if (tabId) {
+            const status = await paperStatusService.checkPaperStatus(storedPaper.url);
+            operationStateService.updateState(tabId, {
+              hasExplanation: status.hasExplanation,
+              hasSummary: status.hasSummary,
+              hasAnalysis: status.hasAnalysis,
+              hasGlossary: status.hasGlossary,
+              completionPercentage: status.completionPercentage,
+            });
+            console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
+          }
         } catch (dbError) {
           console.warn('[AIHandlers] Failed to store analysis in IndexedDB:', dbError);
           // Don't fail the whole operation if IndexedDB update fails
@@ -364,6 +391,19 @@ export async function handleGenerateGlossary(payload: any, tabId?: number): Prom
           const { updatePaperGlossary } = await import('../../utils/dbService.ts');
           await updatePaperGlossary(storedPaper.id, glossary);
           console.log('[AIHandlers] ✓ Glossary stored in IndexedDB');
+
+          // Update completion tracking in operation state
+          if (tabId) {
+            const status = await paperStatusService.checkPaperStatus(storedPaper.url);
+            operationStateService.updateState(tabId, {
+              hasExplanation: status.hasExplanation,
+              hasSummary: status.hasSummary,
+              hasAnalysis: status.hasAnalysis,
+              hasGlossary: status.hasGlossary,
+              completionPercentage: status.completionPercentage,
+            });
+            console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
+          }
         } catch (dbError) {
           console.warn('[AIHandlers] Failed to store glossary in IndexedDB:', dbError);
           // Don't fail the whole operation if IndexedDB update fails
