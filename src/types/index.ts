@@ -35,6 +35,7 @@ export enum MessageType {
   GET_OPERATION_STATE = 'GET_OPERATION_STATE',
   START_DETECT_AND_EXPLAIN = 'START_DETECT_AND_EXPLAIN',
   OPERATION_STATE_CHANGED = 'OPERATION_STATE_CHANGED',
+  PAPER_DELETED = 'PAPER_DELETED', // Broadcast when paper(s) deleted
 }
 
 export interface Message {

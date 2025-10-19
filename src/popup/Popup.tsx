@@ -19,9 +19,52 @@ export function Popup() {
     checkInitialState();
   }, []);
 
+  // Listen for PAPER_DELETED messages
+  useEffect(() => {
+    const listener = (message: any) => {
+      if (message.type === 'PAPER_DELETED') {
+        const deletedPaperUrl = message.payload?.paperUrl;
+        console.log('[Popup] Paper deleted:', deletedPaperUrl);
+
+        // Clear state if the deleted paper matches the current paper
+        if (deletedPaperUrl && paperStatus.paper?.url === deletedPaperUrl) {
+          console.log('[Popup] Clearing state for deleted paper');
+          operationState.clearState();
+          paperStatus.clearPaper();
+        }
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(listener);
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(listener);
+    };
+  }, [paperStatus.paper?.url]);
+
   async function checkInitialState() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+      // Step 1: Check database for stored paper (if URL exists)
+      if (tab.url) {
+        console.log('[Popup] Checking database for stored paper:', tab.url);
+        const status = await paperStatus.checkStoredPaper(tab.url);
+
+        if (status.isStored) {
+          // Update operation state with completion info
+          operationState.setCompletionStatus({
+            hasExplanation: status.hasExplanation,
+            hasSummary: status.hasSummary,
+            hasAnalysis: status.hasAnalysis,
+            hasGlossary: status.hasGlossary,
+            completionPercentage: status.completionPercentage,
+          });
+          console.log('[Popup] ✓ Stored paper found with completion:', status.completionPercentage + '%');
+        }
+      }
+
+      // Step 2: Check background for active operations
       if (tab.id) {
         await operationState.checkOperationState(tab.id);
       }
@@ -107,6 +150,11 @@ export function Popup() {
           <PaperInfoCard
             paper={paperStatus.paper}
             isPaperStored={paperStatus.isPaperStored}
+            hasExplanation={operationState.hasExplanation}
+            hasSummary={operationState.hasSummary}
+            hasAnalysis={operationState.hasAnalysis}
+            hasGlossary={operationState.hasGlossary}
+            completionPercentage={operationState.completionPercentage}
           />
         )}
 

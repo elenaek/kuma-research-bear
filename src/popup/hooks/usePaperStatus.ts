@@ -10,6 +10,8 @@ interface UsePaperStatusReturn {
   // Actions
   setPaper: (paper: ResearchPaper | null) => void;
   checkPaperStorageStatus: (paperUrl: string) => Promise<void>;
+  checkStoredPaper: (url: string) => Promise<ChromeService.PaperStatusInfo>;
+  clearPaper: () => void;
 }
 
 /**
@@ -51,10 +53,57 @@ export function usePaperStatus(): UsePaperStatusReturn {
     }
   }
 
+  async function checkStoredPaper(url: string): Promise<ChromeService.PaperStatusInfo> {
+    try {
+      console.log('[usePaperStatus] Checking stored paper for URL:', url);
+      const status = await ChromeService.getPaperStatus(url);
+
+      if (status.isStored) {
+        console.log('[usePaperStatus] ✓ Stored paper found:', {
+          completionPercentage: status.completionPercentage,
+          hasExplanation: status.hasExplanation,
+          hasAnalysis: status.hasAnalysis,
+        });
+        setIsPaperStored(true);
+
+        // Load the full paper to get title, authors, etc.
+        const fullPaper = await ChromeService.getPaperByUrl(url);
+        if (fullPaper) {
+          setPaper(fullPaper as ResearchPaper);
+        }
+      } else {
+        setIsPaperStored(false);
+      }
+
+      return status;
+    } catch (error) {
+      console.error('[usePaperStatus] Error checking stored paper:', error);
+      return {
+        isStored: false,
+        hasExplanation: false,
+        hasSummary: false,
+        hasAnalysis: false,
+        hasGlossary: false,
+        completionPercentage: 0,
+      };
+    }
+  }
+
+  /**
+   * Clear paper state (used when paper is deleted)
+   */
+  function clearPaper() {
+    setPaper(null);
+    setIsPaperStored(false);
+    console.log('[usePaperStatus] Paper state cleared');
+  }
+
   return {
     paper,
     isPaperStored,
     setPaper,
     checkPaperStorageStatus,
+    checkStoredPaper,
+    clearPaper,
   };
 }

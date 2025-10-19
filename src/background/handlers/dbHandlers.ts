@@ -1,5 +1,8 @@
 import { getPaperByUrl } from '../../utils/dbService.ts';
 import * as operationStateService from '../services/operationStateService.ts';
+import * as paperCleanupService from '../services/paperCleanupService.ts';
+import * as iconService from '../services/iconService.ts';
+import { MessageType } from '../../types/index.ts';
 
 /**
  * Database Message Handlers
@@ -93,36 +96,59 @@ export async function handleDeletePaper(payload: any): Promise<any> {
   try {
     console.log('[DBHandlers] Deleting paper:', payload.paperId);
 
-    // Get paper URL before deletion to clean up OperationState
+    // Get paper URL before deletion for cleanup
     const { getPaperById, deletePaper } = await import('../../utils/dbService.ts');
     const paperToDelete = await getPaperById(payload.paperId);
     const deletedPaperUrl = paperToDelete?.url;
 
+    if (!deletedPaperUrl) {
+      console.warn('[DBHandlers] Paper not found or has no URL');
+      return { success: false, error: 'Paper not found' };
+    }
+
+    // 1. Clean up all resources (AI sessions, requests, states) before deletion
+    console.log('[DBHandlers] Cleaning up resources for paper:', deletedPaperUrl);
+    const cleanupSummary = await paperCleanupService.cleanupPaper(deletedPaperUrl);
+    console.log('[DBHandlers] Cleanup summary:', cleanupSummary);
+
+    // 2. Delete the paper from database
     const deleted = await deletePaper(payload.paperId);
     console.log('[DBHandlers] Paper deletion result:', deleted);
 
-    // Clear any OperationState entries referencing this paper
-    if (deleted && deletedPaperUrl) {
-      operationStateService.getAllStates().forEach((state, tabId) => {
-        if (state.currentPaper?.url === deletedPaperUrl) {
-          console.log(`[DBHandlers] Clearing currentPaper from tab ${tabId} OperationState`);
-          const updatedState = operationStateService.updateState(tabId, {
-            currentPaper: null,
-            isPaperStored: false,
-          });
+    // 3. Update icons for tabs showing this paper's URL
+    if (deleted) {
+      try {
+        const tabs = await chrome.tabs.query({});
+        const matchingTabs = tabs.filter(tab => tab.url === deletedPaperUrl);
 
-          // Broadcast state change
-          chrome.runtime.sendMessage({
-            type: 'OPERATION_STATE_CHANGED',
-            payload: { state: updatedState },
-          }).catch(() => {
-            // No listeners, that's ok
-          });
+        for (const tab of matchingTabs) {
+          if (tab.id !== undefined) {
+            await iconService.setDefaultIcon(tab.id);
+            console.log(`[DBHandlers] ✓ Icon reset for tab ${tab.id}`);
+          }
         }
-      });
+
+        if (matchingTabs.length > 0) {
+          console.log(`[DBHandlers] ✓ Icons updated for ${matchingTabs.length} tab(s)`);
+        }
+      } catch (iconError) {
+        console.warn('[DBHandlers] Failed to update icons:', iconError);
+        // Don't fail the deletion if icon update fails
+      }
     }
 
-    return { success: deleted };
+    // 4. Broadcast PAPER_DELETED message to notify all components
+    if (deleted) {
+      chrome.runtime.sendMessage({
+        type: MessageType.PAPER_DELETED,
+        payload: { paperUrl: deletedPaperUrl, paperId: payload.paperId },
+      }).catch(() => {
+        // No listeners, that's ok
+      });
+      console.log('[DBHandlers] ✓ PAPER_DELETED broadcast sent');
+    }
+
+    return { success: deleted, cleanupSummary };
   } catch (dbError) {
     console.error('[DBHandlers] Failed to delete paper:', dbError);
     return { success: false, error: String(dbError) };

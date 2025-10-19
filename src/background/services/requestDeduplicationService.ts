@@ -77,6 +77,40 @@ export function getAllRequestKeys(): string[] {
 }
 
 /**
+ * Get all request keys for a specific paper URL
+ * @param paperUrl - Paper URL to find requests for
+ * @returns Array of request keys that include this paper URL
+ */
+export function getRequestsByUrl(paperUrl: string): string[] {
+  const matchingKeys: string[] = [];
+
+  for (const [key] of activeRequests) {
+    // Check if this request key includes the paper URL
+    // Format: "tabId-operation-paperUrl"
+    if (key.endsWith(`-${paperUrl}`)) {
+      matchingKeys.push(key);
+    }
+  }
+
+  return matchingKeys;
+}
+
+/**
+ * Delete all active requests for a specific paper URL
+ * @param paperUrl - Paper URL to clean up
+ * @returns Array of deleted request keys
+ */
+export function deleteRequestsByUrl(paperUrl: string): string[] {
+  const requestsToDelete = getRequestsByUrl(paperUrl);
+
+  for (const key of requestsToDelete) {
+    activeRequests.delete(key);
+  }
+
+  return requestsToDelete;
+}
+
+/**
  * Clear all active requests
  */
 export function clearAllRequests(): void {

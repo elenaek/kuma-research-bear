@@ -11,6 +11,11 @@ interface OperationState {
   analysisProgress?: string;
   glossaryProgress?: string;
   error?: string;
+  hasExplanation?: boolean;
+  hasSummary?: boolean;
+  hasAnalysis?: boolean;
+  hasGlossary?: boolean;
+  completionPercentage?: number;
 }
 
 interface UseOperationStateReturn {
@@ -20,11 +25,24 @@ interface UseOperationStateReturn {
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
   detectionStatus: string | null;
+  hasExplanation: boolean;
+  hasSummary: boolean;
+  hasAnalysis: boolean;
+  hasGlossary: boolean;
+  completionPercentage: number;
 
   // Actions
   checkOperationState: (tabId: number) => Promise<void>;
   setDetectionStatus: (status: string | null) => void;
   setIsDetecting: (value: boolean) => void;
+  setCompletionStatus: (status: {
+    hasExplanation: boolean;
+    hasSummary: boolean;
+    hasAnalysis: boolean;
+    hasGlossary: boolean;
+    completionPercentage: number;
+  }) => void;
+  clearState: () => void;
 }
 
 /**
@@ -37,6 +55,11 @@ export function useOperationState(): UseOperationStateReturn {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingGlossary, setIsGeneratingGlossary] = useState(false);
   const [detectionStatus, setDetectionStatus] = useState<string | null>(null);
+  const [hasExplanation, setHasExplanation] = useState(false);
+  const [hasSummary, setHasSummary] = useState(false);
+  const [hasAnalysis, setHasAnalysis] = useState(false);
+  const [hasGlossary, setHasGlossary] = useState(false);
+  const [completionPercentage, setCompletionPercentage] = useState(0);
 
   // Listen for operation state changes from background
   useEffect(() => {
@@ -52,6 +75,13 @@ export function useOperationState(): UseOperationStateReturn {
         setIsExplaining(state.isExplaining);
         setIsAnalyzing(state.isAnalyzing);
         setIsGeneratingGlossary(state.isGeneratingGlossary);
+
+        // Update completion status if available
+        if (state.hasExplanation !== undefined) setHasExplanation(state.hasExplanation);
+        if (state.hasSummary !== undefined) setHasSummary(state.hasSummary);
+        if (state.hasAnalysis !== undefined) setHasAnalysis(state.hasAnalysis);
+        if (state.hasGlossary !== undefined) setHasGlossary(state.hasGlossary);
+        if (state.completionPercentage !== undefined) setCompletionPercentage(state.completionPercentage);
 
         // Update status message based on current operation
         if (state.isDetecting) {
@@ -95,6 +125,24 @@ export function useOperationState(): UseOperationStateReturn {
         setIsExplaining(state.isExplaining);
         setIsAnalyzing(state.isAnalyzing);
         setIsGeneratingGlossary(state.isGeneratingGlossary);
+
+        // Only load completion status if there's actually a current paper in the state
+        // This prevents stale cached completion data from overwriting database truth
+        if (state.currentPaper) {
+          if (state.hasExplanation !== undefined) setHasExplanation(state.hasExplanation);
+          if (state.hasSummary !== undefined) setHasSummary(state.hasSummary);
+          if (state.hasAnalysis !== undefined) setHasAnalysis(state.hasAnalysis);
+          if (state.hasGlossary !== undefined) setHasGlossary(state.hasGlossary);
+          if (state.completionPercentage !== undefined) setCompletionPercentage(state.completionPercentage);
+          console.log('[useOperationState] Loaded completion status from background:', {
+            hasExplanation: state.hasExplanation,
+            hasAnalysis: state.hasAnalysis,
+            completionPercentage: state.completionPercentage,
+          });
+        } else {
+          console.log('[useOperationState] Skipping completion status (no current paper in background state)');
+        }
+
         console.log('[useOperationState] Loaded operation state:', state);
 
         // Update UI based on current state
@@ -119,14 +167,53 @@ export function useOperationState(): UseOperationStateReturn {
     }
   }
 
+  function setCompletionStatus(status: {
+    hasExplanation: boolean;
+    hasSummary: boolean;
+    hasAnalysis: boolean;
+    hasGlossary: boolean;
+    completionPercentage: number;
+  }) {
+    setHasExplanation(status.hasExplanation);
+    setHasSummary(status.hasSummary);
+    setHasAnalysis(status.hasAnalysis);
+    setHasGlossary(status.hasGlossary);
+    setCompletionPercentage(status.completionPercentage);
+    console.log('[useOperationState] Completion status updated:', status);
+  }
+
+  /**
+   * Clear all operation state (used when paper is deleted)
+   */
+  function clearState() {
+    setIsDetecting(false);
+    setIsExplaining(false);
+    setIsAnalyzing(false);
+    setIsGeneratingGlossary(false);
+    setDetectionStatus(null);
+    setHasExplanation(false);
+    setHasSummary(false);
+    setHasAnalysis(false);
+    setHasGlossary(false);
+    setCompletionPercentage(0);
+    console.log('[useOperationState] State cleared');
+  }
+
   return {
     isDetecting,
     isExplaining,
     isAnalyzing,
     isGeneratingGlossary,
     detectionStatus,
+    hasExplanation,
+    hasSummary,
+    hasAnalysis,
+    hasGlossary,
+    completionPercentage,
     checkOperationState,
     setDetectionStatus,
     setIsDetecting,
+    setCompletionStatus,
+    clearState,
   };
 }

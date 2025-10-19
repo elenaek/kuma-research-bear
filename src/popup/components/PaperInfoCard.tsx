@@ -1,29 +1,70 @@
 import { Database } from 'lucide-preact';
 import type { ResearchPaper } from '../../types/index.ts';
+import { CompletionBadges } from './CompletionBadges.tsx';
 
 interface PaperInfoCardProps {
   paper: ResearchPaper;
   isPaperStored: boolean;
+  hasExplanation?: boolean;
+  hasSummary?: boolean;
+  hasAnalysis?: boolean;
+  hasGlossary?: boolean;
+  completionPercentage?: number;
 }
 
 /**
  * Paper Info Card component
- * Displays current paper information with storage status badge
+ * Displays current paper information with storage status badge and completion indicators
  */
-export function PaperInfoCard({ paper, isPaperStored }: PaperInfoCardProps) {
+export function PaperInfoCard({
+  paper,
+  isPaperStored,
+  hasExplanation = false,
+  hasSummary = false,
+  hasAnalysis = false,
+  hasGlossary = false,
+  completionPercentage = 0,
+}: PaperInfoCardProps) {
+  const getCompletionBadgeText = () => {
+    if (completionPercentage === 100) return 'Ready';
+    if (completionPercentage === 0) return '0% Ready';
+    return `${Math.round(completionPercentage)}% Ready`;
+  };
+
+  const getCompletionBadgeColor = () => {
+    if (completionPercentage === 100) return 'bg-green-100 text-green-700';
+    if (completionPercentage >= 50) return 'bg-yellow-100 text-yellow-700';
+    return 'bg-orange-100 text-orange-700';
+  };
+
   return (
     <div class="card mb-4 bg-blue-50 border-blue-200">
       <div class="flex items-start justify-between gap-2 mb-2">
         <h3 class="text-sm font-semibold text-gray-700">Current Paper</h3>
         {isPaperStored && (
-          <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 flex items-center gap-1">
-            <Database size={10} />
-            Stored
-          </span>
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 flex items-center gap-1">
+              <Database size={10} />
+              Stored
+            </span>
+            <span class={`px-2 py-1 text-xs font-medium rounded-full ${getCompletionBadgeColor()}`}>
+              {getCompletionBadgeText()}
+            </span>
+          </div>
         )}
       </div>
       <p class="text-sm font-medium text-gray-900 mb-1 line-clamp-2">{paper.title}</p>
       <p class="text-xs text-gray-600 line-clamp-1">{paper.authors.join(', ')}</p>
+
+      {/* Show completion badges only when paper is stored */}
+      {isPaperStored && (
+        <CompletionBadges
+          hasExplanation={hasExplanation}
+          hasSummary={hasSummary}
+          hasAnalysis={hasAnalysis}
+          hasGlossary={hasGlossary}
+        />
+      )}
     </div>
   );
 }
