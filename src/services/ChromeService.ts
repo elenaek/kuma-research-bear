@@ -117,6 +117,37 @@ export async function deletePaper(paperId: string): Promise<boolean> {
   }
 }
 
+export interface StorePaperResponse {
+  success: boolean;
+  error?: string;
+  paper?: StoredPaper;
+}
+
+/**
+ * Store a paper in IndexedDB with full text
+ */
+export async function storePaperInDB(paper: any, fullText?: string): Promise<StorePaperResponse> {
+  console.log('[ChromeService] Storing paper in IndexedDB:', paper.title);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.STORE_PAPER_IN_DB,
+      payload: { paper, fullText },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Paper stored successfully');
+      return { success: true, paper: response.paper };
+    } else {
+      console.error('[ChromeService] Failed to store paper:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error storing paper:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
 /**
  * AI Operations
  */

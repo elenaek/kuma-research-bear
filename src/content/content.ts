@@ -1,279 +1,76 @@
-import { MessageType, ResearchPaper } from '../types/index.ts';
-import { detectPaper, detectPaperWithAI } from '../utils/paperDetectors.ts';
-import { extractPageText, isPDFPage } from '../utils/contentExtractor.ts';
-import { getPDFUrl, extractPDFText } from '../utils/pdfExtractor.ts';
+import { ResearchPaper } from '../types/index.ts';
+import { detectAndStorePaper } from './services/paperDetectionService.ts';
+import { createMessageRouter } from './handlers/messageHandlers.ts';
+import { createMutationObserver, startObserving } from './handlers/mutationHandler.ts';
 
 /**
- * Extract full text from the current page (HTML or PDF)
+ * Content Script
+ * Orchestrates paper detection, storage, and message handling
  */
-async function extractFullText(): Promise<string> {
-  try {
-    // Check if this is a PDF page
-    if (isPDFPage()) {
-      console.log('[Content] PDF detected, extracting full PDF text...');
-      const pdfUrl = getPDFUrl();
-      if (!pdfUrl) {
-        console.error('[Content] Could not determine PDF URL');
-        return '';
-      }
 
-      try {
-        // Extract all text from the PDF (PDF.js is lazy-loaded here)
-        const pdfContent = await extractPDFText(pdfUrl, (progress) => {
-          console.log(`[Content] PDF extraction progress: ${progress.percentComplete}% (${progress.currentPage}/${progress.totalPages})`);
-        });
-
-        console.log('[Content] ✓ PDF text extracted:', {
-          pageCount: pdfContent.pageCount,
-          textLength: pdfContent.text.length,
-          wordCount: pdfContent.text.split(/\s+/).length,
-        });
-
-        return pdfContent.text;
-      } catch (pdfError) {
-        console.error('[Content] Failed to extract PDF text:', pdfError);
-        // Return empty string on PDF extraction failure
-        return '';
-      }
-    } else {
-      // Regular HTML page
-      const extracted = extractPageText();
-      return extracted.text;
-    }
-  } catch (error) {
-    console.error('[Content] Fatal error in extractFullText:', error);
-    return '';
-  }
-}
-
-// Helper functions to communicate with background worker for IndexedDB operations
-async function storePaperInDB(paper: ResearchPaper, fullText?: string): Promise<any> {
-  const response = await chrome.runtime.sendMessage({
-    type: MessageType.STORE_PAPER_IN_DB,
-    payload: { paper, fullText },
-  });
-  return response;
-}
-
-async function isPaperStoredInDB(url: string): Promise<boolean> {
-  const response = await chrome.runtime.sendMessage({
-    type: MessageType.IS_PAPER_STORED_IN_DB,
-    payload: { url },
-  });
-  return response.isStored;
-}
-
-async function getPaperByUrlFromDB(url: string): Promise<any> {
-  const response = await chrome.runtime.sendMessage({
-    type: MessageType.GET_PAPER_FROM_DB_BY_URL,
-    payload: { url },
-  });
-  return response.paper;
-}
-
+// State management
 let currentPaper: ResearchPaper | null = null;
 
-// Auto-detect paper on page load
+// Getter and setter for currentPaper (used by handlers)
+function getCurrentPaper(): ResearchPaper | null {
+  return currentPaper;
+}
+
+function setCurrentPaper(paper: ResearchPaper | null): void {
+  currentPaper = paper;
+}
+
+/**
+ * Initialize content script
+ * Auto-detect paper on page load
+ */
 async function init() {
+  console.log('[Content] Initializing content script...');
+
   try {
-    currentPaper = await detectPaper();
+    currentPaper = await detectAndStorePaper();
 
     if (currentPaper) {
-      console.log('Research paper detected:', currentPaper.title);
-      // Store in chrome storage for access by other components
-      await chrome.storage.local.set({ currentPaper });
-
-      // Store in IndexedDB via background worker if not already stored
-      try {
-        const alreadyStored = await isPaperStoredInDB(currentPaper.url);
-        if (!alreadyStored) {
-          console.log('[Content] Storing paper in IndexedDB via background worker...');
-          // Extract full text in content script (where document is available)
-          const fullText = await extractFullText();
-          const storeResult = await storePaperInDB(currentPaper, fullText);
-          if (storeResult.success) {
-            console.log('[Content] ✓ Paper stored locally for offline access');
-          } else {
-            console.error('[Content] Failed to store paper:', storeResult.error);
-          }
-        } else {
-          console.log('[Content] Paper already stored in IndexedDB');
-        }
-      } catch (dbError) {
-        console.warn('[Content] Failed to store paper in IndexedDB:', dbError);
-        // Don't fail the whole detection if storage fails
-      }
+      console.log('[Content] ✓ Research paper detected on page load:', currentPaper.title);
     } else {
-      console.log('No research paper detected on this page');
+      console.log('[Content] No research paper detected on this page');
     }
   } catch (error) {
-    console.error('Error during paper detection:', error);
+    console.error('[Content] Error during initialization:', error);
   }
 }
 
-// Listen for messages from popup/background
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  // Handle async operations properly
-  (async () => {
-    try {
-      switch (message.type) {
-        case MessageType.DETECT_PAPER:
-          // Manual detection uses AI-first approach
-          currentPaper = await detectPaperWithAI();
+/**
+ * Set up message listener
+ * Routes messages to appropriate handlers
+ */
+function setupMessageListener() {
+  const messageRouter = createMessageRouter(getCurrentPaper);
+  chrome.runtime.onMessage.addListener(messageRouter);
+  console.log('[Content] Message listener registered');
+}
 
-          // Store in IndexedDB if detected
-          let stored = false;
-          let chunkCount = 0;
-          let alreadyStored = false;
-          let storageError: string | undefined;
+/**
+ * Set up mutation observer
+ * Re-detects papers when page content changes (useful for SPAs)
+ */
+function setupMutationObserver() {
+  const observer = createMutationObserver(getCurrentPaper, setCurrentPaper);
+  startObserving(observer);
+}
 
-          if (currentPaper) {
-            console.log('[Content] Paper detected, preparing to store:', {
-              title: currentPaper.title,
-              url: currentPaper.url,
-              source: currentPaper.source
-            });
+/**
+ * Bootstrap the content script
+ */
+(async () => {
+  // Initialize paper detection
+  await init();
 
-            try {
-              alreadyStored = await isPaperStoredInDB(currentPaper.url);
-              console.log('[Content] isPaperStored check result:', alreadyStored);
+  // Set up message handling
+  setupMessageListener();
 
-              if (!alreadyStored) {
-                console.log('[Content] Storing paper in IndexedDB via background worker...');
-                // Extract full text in content script (where document is available)
-                const fullText = await extractFullText();
-                const storeResult = await storePaperInDB(currentPaper, fullText);
+  // Set up mutation observer for SPA detection
+  setupMutationObserver();
 
-                if (storeResult.success) {
-                  const storedPaper = storeResult.paper;
-                  console.log('[Content] ✓ Paper stored successfully!', {
-                    id: storedPaper.id,
-                    chunkCount: storedPaper.chunkCount,
-                    storedAt: new Date(storedPaper.storedAt).toLocaleString()
-                  });
-                  stored = true;
-                  chunkCount = storedPaper.chunkCount;
-                  alreadyStored = false;
-                } else {
-                  console.error('[Content] Failed to store paper:', storeResult.error);
-                  stored = false;
-                  storageError = storeResult.error;
-                }
-              } else {
-                console.log('[Content] Paper already stored, fetching existing data...');
-                const existingPaper = await getPaperByUrlFromDB(currentPaper.url);
-                console.log('[Content] Existing paper retrieved:', {
-                  id: existingPaper?.id,
-                  chunkCount: existingPaper?.chunkCount
-                });
-                stored = true;
-                chunkCount = existingPaper?.chunkCount || 0;
-                alreadyStored = true;
-              }
-            } catch (dbError) {
-              // Capture detailed error message for debugging
-              console.error('[Content] ❌ Failed to store paper in IndexedDB:', {
-                error: dbError,
-                stack: dbError instanceof Error ? dbError.stack : undefined,
-                paperUrl: currentPaper.url
-              });
-              stored = false;
-
-              // Extract error message
-              if (dbError instanceof Error) {
-                storageError = dbError.message;
-              } else {
-                storageError = String(dbError);
-              }
-            }
-          }
-
-          sendResponse({
-            paper: currentPaper,
-            stored,
-            chunkCount,
-            alreadyStored,
-            storageError
-          });
-          break;
-
-        case MessageType.EXPLAIN_PAPER:
-          if (currentPaper) {
-            // Send paper to background for explanation
-            chrome.runtime.sendMessage({
-              type: MessageType.EXPLAIN_PAPER,
-              payload: { paper: currentPaper },
-            });
-            sendResponse({ success: true });
-          } else {
-            sendResponse({ success: false, error: 'No paper detected' });
-          }
-          break;
-
-        case MessageType.EXPLAIN_SECTION:
-          // Handle section explanation
-          chrome.runtime.sendMessage({
-            type: MessageType.EXPLAIN_SECTION,
-            payload: message.payload,
-          });
-          sendResponse({ success: true });
-          break;
-
-        default:
-          sendResponse({ success: false, error: 'Unknown message type' });
-      }
-    } catch (error) {
-      console.error('Error handling message:', error);
-      sendResponse({ success: false, error: String(error) });
-    }
-  })();
-
-  return true; // Keep message channel open for async response
-});
-
-// Initialize on page load
-init();
-
-// Re-detect on dynamic page changes (for SPAs)
-const observer = new MutationObserver((mutations) => {
-  const significantChange = mutations.some(
-    mutation => mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0
-  );
-
-  if (significantChange && !currentPaper) {
-    // Use async detection
-    (async () => {
-      try {
-        currentPaper = await detectPaper();
-        if (currentPaper) {
-          await chrome.storage.local.set({ currentPaper });
-          console.log('Paper detected after page mutation:', currentPaper.title);
-
-          // Store in IndexedDB via background worker
-          try {
-            const alreadyStored = await isPaperStoredInDB(currentPaper.url);
-            if (!alreadyStored) {
-              // Extract full text in content script (where document is available)
-              const fullText = await extractFullText();
-              const storeResult = await storePaperInDB(currentPaper, fullText);
-              if (storeResult.success) {
-                console.log('[Content] ✓ Paper stored locally');
-              } else {
-                console.error('[Content] Failed to store paper:', storeResult.error);
-              }
-            }
-          } catch (dbError) {
-            console.warn('[Content] Failed to store paper in IndexedDB:', dbError);
-          }
-        }
-      } catch (error) {
-        console.error('Error detecting paper after mutation:', error);
-      }
-    })();
-  }
-});
-
-observer.observe(document.body, {
-  childList: true,
-  subtree: true,
-});
+  console.log('[Content] ✓ Content script initialized successfully');
+})();
