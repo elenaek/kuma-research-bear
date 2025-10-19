@@ -29,6 +29,11 @@ export function getState(tabId: number): OperationState {
       lastUpdated: Date.now(),
       activeAIRequests: [],
       isUsingCachedRequest: false,
+      hasExplanation: false,
+      hasSummary: false,
+      hasAnalysis: false,
+      hasGlossary: false,
+      completionPercentage: 0,
     });
   }
   return operationStates.get(tabId)!;

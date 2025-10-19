@@ -62,7 +62,8 @@ export async function updateIconForTab(tabId: number, state: OperationState): Pr
       isDetecting: state.isDetecting,
       isExplaining: state.isExplaining,
       isAnalyzing: state.isAnalyzing,
-      isPaperStored: state.isPaperStored
+      isPaperStored: state.isPaperStored,
+      completionPercentage: state.completionPercentage
     });
 
     const iconPaths = ICON_PATHS[iconType as keyof typeof ICON_PATHS];
@@ -82,7 +83,8 @@ export async function updateIconForTab(tabId: number, state: OperationState): Pr
     } else if (state.isDetecting) {
       title += ' - Detecting paper...';
     } else if (state.isPaperStored && state.currentPaper) {
-      title += ' - Paper saved';
+      // Show completion status in title
+      title += getCompletionTitle(state);
     }
 
     await chrome.action.setTitle({
@@ -102,6 +104,30 @@ export async function updateIconForTab(tabId: number, state: OperationState): Pr
     } catch (fallbackError) {
       console.error('[IconService] Failed to set default icon:', fallbackError);
     }
+  }
+}
+
+/**
+ * Get completion title based on what features are ready
+ */
+function getCompletionTitle(state: OperationState): string {
+  const completed = [
+    state.hasExplanation && 'Explanation',
+    state.hasSummary && 'Summary',
+    state.hasAnalysis && 'Analysis',
+    state.hasGlossary && 'Glossary',
+  ].filter(Boolean);
+
+  if (completed.length === 0) {
+    return ' - Paper saved';
+  } else if (completed.length === 4) {
+    return ' - All features ready';
+  } else if (completed.length === 1) {
+    return ` - ${completed[0]} ready`;
+  } else {
+    // Show percentage for partial completion
+    const percentage = Math.round(state.completionPercentage);
+    return ` - ${percentage}% complete (${completed.length}/4)`;
   }
 }
 

@@ -265,4 +265,10 @@ export interface OperationState {
   activeAIRequests: string[];
   // Track if operations are being deduplicated
   isUsingCachedRequest: boolean;
+  // Track completion status of stored paper features
+  hasExplanation: boolean;
+  hasSummary: boolean;
+  hasAnalysis: boolean;
+  hasGlossary: boolean;
+  completionPercentage: number; // 0-100, based on completed features
 }

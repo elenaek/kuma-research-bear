@@ -372,6 +372,65 @@ export async function isPaperStoredInDB(url: string): Promise<boolean> {
   }
 }
 
+export interface PaperStatusInfo {
+  isStored: boolean;
+  hasExplanation: boolean;
+  hasSummary: boolean;
+  hasAnalysis: boolean;
+  hasGlossary: boolean;
+  completionPercentage: number;
+}
+
+/**
+ * Get lightweight paper status (without full paper data)
+ * Useful for quick checks on tab activation
+ */
+export async function getPaperStatus(url: string): Promise<PaperStatusInfo> {
+  console.log('[ChromeService] Getting paper status for:', url);
+
+  try {
+    const paper = await getPaperByUrl(url);
+
+    if (!paper) {
+      return {
+        isStored: false,
+        hasExplanation: false,
+        hasSummary: false,
+        hasAnalysis: false,
+        hasGlossary: false,
+        completionPercentage: 0,
+      };
+    }
+
+    const hasExplanation = !!paper.explanation;
+    const hasSummary = !!paper.summary;
+    const hasAnalysis = !!paper.analysis;
+    const hasGlossary = !!paper.glossary;
+
+    const completedFeatures = [hasExplanation, hasSummary, hasAnalysis, hasGlossary].filter(Boolean).length;
+    const completionPercentage = (completedFeatures / 4) * 100;
+
+    return {
+      isStored: true,
+      hasExplanation,
+      hasSummary,
+      hasAnalysis,
+      hasGlossary,
+      completionPercentage,
+    };
+  } catch (error) {
+    console.error('[ChromeService] Error getting paper status:', error);
+    return {
+      isStored: false,
+      hasExplanation: false,
+      hasSummary: false,
+      hasAnalysis: false,
+      hasGlossary: false,
+      completionPercentage: 0,
+    };
+  }
+}
+
 /**
  * AI Management Operations
  */

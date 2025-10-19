@@ -2,6 +2,7 @@ import { aiService } from '../../utils/aiService.ts';
 import * as operationStateService from '../services/operationStateService.ts';
 import * as requestDeduplicationService from '../services/requestDeduplicationService.ts';
 import * as iconService from '../services/iconService.ts';
+import * as paperStatusService from '../services/paperStatusService.ts';
 
 /**
  * Tab Lifecycle Handlers
@@ -10,12 +11,13 @@ import * as iconService from '../services/iconService.ts';
 
 /**
  * Handle tab updates - clear badges when tab loading completes
+ * Also check for stored papers when navigation completes
  */
-export function handleTabUpdated(
+export async function handleTabUpdated(
   tabId: number,
   changeInfo: chrome.tabs.TabChangeInfo,
   tab: chrome.tabs.Tab
-): void {
+): Promise<void> {
   if (changeInfo.status === 'complete' && tab.url) {
     // Extension now works on ALL sites - no restrictions
     // The badge has been removed in favor of dynamic icon changes
@@ -23,23 +25,68 @@ export function handleTabUpdated(
 
     // Clear any existing badge to avoid conflicts with icon changes
     chrome.action.setBadgeText({ text: '', tabId });
+
+    // Check if this URL has a stored paper
+    await checkAndUpdatePaperStatus(tabId, tab.url);
   }
 }
 
 /**
  * Handle tab activation - update icon based on current tab's state
+ * Check database for stored papers if no operation state exists
  */
 export async function handleTabActivated(activeInfo: chrome.tabs.TabActiveInfo): Promise<void> {
   const { tabId } = activeInfo;
 
-  // Check if we have an operation state for this tab
-  if (operationStateService.hasState(tabId)) {
+  try {
+    // Get the tab to access its URL
+    const tab = await chrome.tabs.get(tabId);
+
+    // Check if we have an operation state for this tab
+    if (operationStateService.hasState(tabId)) {
+      const state = operationStateService.getRawState(tabId)!;
+      await iconService.updateIconForTab(tabId, state);
+      console.log(`[TabLifecycle] Tab ${tabId} activated, icon updated based on current state`);
+    } else if (tab.url) {
+      // No operation state exists, check if this URL has a stored paper
+      await checkAndUpdatePaperStatus(tabId, tab.url);
+    } else {
+      // No URL, set default icon
+      await iconService.setDefaultIcon(tabId);
+    }
+  } catch (error) {
+    console.error(`[TabLifecycle] Error handling tab activation for ${tabId}:`, error);
+    await iconService.setDefaultIcon(tabId);
+  }
+}
+
+/**
+ * Check if a URL has a stored paper and update operation state + icon accordingly
+ */
+async function checkAndUpdatePaperStatus(tabId: number, url: string): Promise<void> {
+  console.log(`[TabLifecycle] Checking paper status for tab ${tabId}, URL: ${url}`);
+
+  // Quick database lookup
+  const status = await paperStatusService.checkPaperStatus(url);
+
+  if (status.isStored) {
+    // Update operation state with completion info
+    paperStatusService.updateOperationStateFromStoredPaper(tabId, status);
+
+    // Update icon to reflect stored paper
     const state = operationStateService.getRawState(tabId)!;
     await iconService.updateIconForTab(tabId, state);
-    console.log(`[TabLifecycle] Tab ${tabId} activated, icon updated based on current state`);
+
+    console.log(`[TabLifecycle] ✓ Stored paper found for tab ${tabId}:`, {
+      completionPercentage: status.completionPercentage,
+      hasExplanation: status.hasExplanation,
+      hasAnalysis: status.hasAnalysis,
+      hasGlossary: status.hasGlossary,
+    });
   } else {
-    // Reset to default icon if no state exists
+    // No stored paper, set default icon
     await iconService.setDefaultIcon(tabId);
+    console.log(`[TabLifecycle] No stored paper for tab ${tabId}`);
   }
 }
 
