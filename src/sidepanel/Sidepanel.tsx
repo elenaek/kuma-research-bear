@@ -741,25 +741,42 @@ Source: ${paper.url}
     // Switch to new paper
     setCurrentPaperIndex(index);
     const newPaper = papers[index];
-    setStoredPaper(newPaper);
+
+    // Fetch fresh paper data from IndexedDB to avoid stale state issues
+    const freshPaper = await getPaperByUrl(newPaper.url);
+    if (freshPaper) {
+      // Update the allPapers array with fresh data to prevent future staleness
+      const updatedPapers = [...papers];
+      updatedPapers[index] = freshPaper;
+      if (!papersArray) {
+        // Only update state if using state array (not passed-in array)
+        setAllPapers(updatedPapers);
+      }
+      setStoredPaper(freshPaper);
+    } else {
+      setStoredPaper(newPaper);
+    }
+
+    // Use fresh paper data if available, otherwise fall back to array data
+    const paperToUse = freshPaper || newPaper;
 
     // Load Q&A history for new paper
-    setQaHistory(newPaper.qaHistory || []);
+    setQaHistory(paperToUse.qaHistory || []);
 
     // Try to load explanation and analysis for this paper
     const result = await chrome.storage.local.get(['lastExplanation', 'lastAnalysis']);
 
     // Prioritize loading from StoredPaper fields, fall back to chrome.storage
-    if (newPaper.explanation && newPaper.summary) {
+    if (paperToUse.explanation && paperToUse.summary) {
       console.log('[Sidepanel] Loading explanation from StoredPaper');
       setData({
-        paper: newPaper,
-        explanation: newPaper.explanation,
-        summary: newPaper.summary,
+        paper: paperToUse,
+        explanation: paperToUse.explanation,
+        summary: paperToUse.summary,
       });
       setActiveTab('summary');
       setViewState('content');
-    } else if (result.lastExplanation?.paper?.url === newPaper.url) {
+    } else if (result.lastExplanation?.paper?.url === paperToUse.url) {
       console.log('[Sidepanel] Loading explanation from chrome.storage');
       setData(result.lastExplanation);
       setActiveTab('summary');
@@ -768,7 +785,7 @@ Source: ${paper.url}
       // No explanation for this paper, show stored-only view
       console.log('[Sidepanel] No explanation found for this paper');
       setData({
-        paper: newPaper,
+        paper: paperToUse,
         explanation: { originalText: '', explanation: '', timestamp: 0 },
         summary: { summary: '', keyPoints: [], timestamp: 0 }
       });
@@ -776,29 +793,39 @@ Source: ${paper.url}
       setViewState('stored-only');
     }
 
-    // Load analysis from StoredPaper or chrome.storage
-    if (newPaper.analysis) {
-      console.log('[Sidepanel] Loading analysis from StoredPaper');
-      setAnalysis(newPaper.analysis);
-    } else if (result.lastAnalysis?.paper?.url === newPaper.url) {
+    // Load analysis from fresh StoredPaper data or chrome.storage
+    if (paperToUse.analysis) {
+      console.log('[Sidepanel] Loading analysis from StoredPaper (fresh data)');
+      setAnalysis(paperToUse.analysis);
+    } else if (result.lastAnalysis?.paper?.url === paperToUse.url) {
       console.log('[Sidepanel] Loading analysis from chrome.storage');
       setAnalysis(result.lastAnalysis.analysis);
     } else {
-      console.log('[Sidepanel] No analysis found, triggering new analysis');
-      setAnalysis(null);
-      // Trigger analysis for this paper
-      triggerAnalysis(newPaper.url);
+      // Only trigger if not already analyzing this paper
+      if (!analyzingPapers.has(paperToUse.url)) {
+        console.log('[Sidepanel] No analysis found in database, triggering new analysis');
+        setAnalysis(null);
+        triggerAnalysis(paperToUse.url);
+      } else {
+        console.log('[Sidepanel] Analysis already in progress for this paper');
+        setAnalysis(null);
+      }
     }
 
-    // Load glossary from StoredPaper
-    if (newPaper.glossary) {
-      console.log('[Sidepanel] Loading glossary for paper:', newPaper.title);
-      setGlossary(newPaper.glossary);
+    // Load glossary from fresh StoredPaper data
+    if (paperToUse.glossary) {
+      console.log('[Sidepanel] Loading glossary for paper:', paperToUse.title);
+      setGlossary(paperToUse.glossary);
     } else {
-      console.log('[Sidepanel] No glossary found, triggering generation');
-      setGlossary(null);
-      // Trigger glossary generation for this paper
-      triggerGlossaryGeneration(newPaper.url);
+      // Only trigger if not already generating for this paper
+      if (!glossaryGeneratingPapers.has(paperToUse.url)) {
+        console.log('[Sidepanel] No glossary found, triggering generation');
+        setGlossary(null);
+        triggerGlossaryGeneration(paperToUse.url);
+      } else {
+        console.log('[Sidepanel] Glossary generation already in progress for this paper');
+        setGlossary(null);
+      }
     }
   }
 
