@@ -120,9 +120,9 @@ export function Sidepanel() {
   const [copied, setCopied] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [analysis, setAnalysis] = useState<PaperAnalysisResult | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analyzingPapers, setAnalyzingPapers] = useState<Set<string>>(new Set());
   const [glossary, setGlossary] = useState<GlossaryResult | null>(null);
-  const [isGeneratingGlossary, setIsGeneratingGlossary] = useState(false);
+  const [glossaryGeneratingPapers, setGlossaryGeneratingPapers] = useState<Set<string>>(new Set());
   const [isCheckingStorage, setIsCheckingStorage] = useState(false);
   const [isExplainingInBackground, setIsExplainingInBackground] = useState(false);
 
@@ -189,7 +189,32 @@ export function Sidepanel() {
 
         // Update banner states
         setIsExplainingInBackground(state.isExplaining);
-        setIsAnalyzing(state.isAnalyzing);
+
+        // Update paper-specific generation states
+        const paperUrl = state.currentPaper?.url;
+        if (paperUrl) {
+          // Update analyzing papers Set
+          if (state.isAnalyzing) {
+            setAnalyzingPapers(prev => new Set(prev).add(paperUrl));
+          } else {
+            setAnalyzingPapers(prev => {
+              const next = new Set(prev);
+              next.delete(paperUrl);
+              return next;
+            });
+          }
+
+          // Update glossary generating papers Set
+          if (state.isGeneratingGlossary) {
+            setGlossaryGeneratingPapers(prev => new Set(prev).add(paperUrl));
+          } else {
+            setGlossaryGeneratingPapers(prev => {
+              const next = new Set(prev);
+              next.delete(paperUrl);
+              return next;
+            });
+          }
+        }
 
         // Removed auto-reload on operation completion - storage listener handles reloads
         // This was causing infinite loop with auto-trigger logic
@@ -263,7 +288,7 @@ export function Sidepanel() {
         storedPaperId: storedPaper?.id || 'N/A',
         storedPaperChunkCount: storedPaper?.chunkCount || 0,
         hasAnalysis: !!analysis,
-        isAnalyzing,
+        isAnalyzingCurrentPaper: storedPaper?.url ? analyzingPapers.has(storedPaper.url) : false,
         isCheckingStorage,
       },
     };
@@ -312,7 +337,17 @@ export function Sidepanel() {
 
             // Update banner states based on current operation
             setIsExplainingInBackground(state.isExplaining);
-            setIsAnalyzing(state.isAnalyzing);
+
+            // Update paper-specific generation states
+            const paperUrl = state.currentPaper?.url;
+            if (paperUrl) {
+              if (state.isAnalyzing) {
+                setAnalyzingPapers(prev => new Set(prev).add(paperUrl));
+              }
+              if (state.isGeneratingGlossary) {
+                setGlossaryGeneratingPapers(prev => new Set(prev).add(paperUrl));
+              }
+            }
           }
         }
       } catch (stateError) {
@@ -348,8 +383,8 @@ export function Sidepanel() {
             });
             setViewState('stored-only');
 
-            // Auto-trigger analysis for stored paper (only if not already analyzing)
-            if (!isAnalyzing && (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.currentPaper.url)) {
+            // Auto-trigger analysis for stored paper (only if not already analyzing this paper)
+            if (!analyzingPapers.has(result.currentPaper.url) && (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.currentPaper.url)) {
               console.log('[Sidepanel] Auto-triggering analysis for stored paper...');
               debouncedTriggerAnalysis(result.currentPaper.url);
             }
@@ -405,14 +440,14 @@ export function Sidepanel() {
             setGlossary(stored.glossary);
           }
 
-          // Auto-trigger analysis if paper is stored and no analysis exists yet (only if not already analyzing)
-          if (!stored.analysis && !isAnalyzing && (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.lastExplanation.paper.url)) {
+          // Auto-trigger analysis if paper is stored and no analysis exists yet (only if not already analyzing this paper)
+          if (!stored.analysis && !analyzingPapers.has(result.lastExplanation.paper.url) && (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.lastExplanation.paper.url)) {
             console.log('[Sidepanel] Paper is stored, triggering automatic analysis...');
             triggerAnalysis(result.lastExplanation.paper.url);
           }
 
-          // Auto-trigger glossary generation if paper is stored and no glossary exists yet
-          if (!stored.glossary && !isGeneratingGlossary) {
+          // Auto-trigger glossary generation if paper is stored and no glossary exists yet (only if not already generating for this paper)
+          if (!stored.glossary && !glossaryGeneratingPapers.has(result.lastExplanation.paper.url)) {
             console.log('[Sidepanel] Paper is stored, triggering automatic glossary generation...');
             triggerGlossaryGeneration(result.lastExplanation.paper.url);
           }
@@ -446,10 +481,10 @@ export function Sidepanel() {
   }
 
   async function triggerAnalysis(paperUrl: string) {
-    // Guard: Don't retrigger if already analyzing
-    if (isAnalyzing) {
-      console.log('[Sidepanel] Analysis already in progress, skipping');
-      setOperationQueueMessage('Analysis already in progress for another paper');
+    // Guard: Don't retrigger if already analyzing THIS paper
+    if (analyzingPapers.has(paperUrl)) {
+      console.log('[Sidepanel] Analysis already in progress for this paper, skipping');
+      setOperationQueueMessage('Analysis already in progress for this paper');
       setHasQueuedOperations(true);
       setTimeout(() => {
         setHasQueuedOperations(false);
@@ -459,7 +494,8 @@ export function Sidepanel() {
     }
 
     try {
-      setIsAnalyzing(true);
+      // Add to analyzing papers Set
+      setAnalyzingPapers(prev => new Set(prev).add(paperUrl));
       console.log('Starting paper analysis for:', paperUrl);
 
       const response = await chrome.runtime.sendMessage({
@@ -489,15 +525,20 @@ export function Sidepanel() {
         setOperationQueueMessage('');
       }, 3000);
     } finally {
-      setIsAnalyzing(false);
+      // Remove from analyzing papers Set
+      setAnalyzingPapers(prev => {
+        const next = new Set(prev);
+        next.delete(paperUrl);
+        return next;
+      });
     }
   }
 
   async function triggerGlossaryGeneration(paperUrl: string) {
-    // Guard: Don't retrigger if already generating
-    if (isGeneratingGlossary) {
-      console.log('[Sidepanel] Glossary generation already in progress, skipping');
-      setOperationQueueMessage('Glossary generation already in progress');
+    // Guard: Don't retrigger if already generating for THIS paper
+    if (glossaryGeneratingPapers.has(paperUrl)) {
+      console.log('[Sidepanel] Glossary generation already in progress for this paper, skipping');
+      setOperationQueueMessage('Glossary generation already in progress for this paper');
       setHasQueuedOperations(true);
       setTimeout(() => {
         setHasQueuedOperations(false);
@@ -507,7 +548,8 @@ export function Sidepanel() {
     }
 
     try {
-      setIsGeneratingGlossary(true);
+      // Add to glossary generating papers Set
+      setGlossaryGeneratingPapers(prev => new Set(prev).add(paperUrl));
       console.log('Starting glossary generation for:', paperUrl);
 
       const response = await chrome.runtime.sendMessage({
@@ -551,7 +593,12 @@ export function Sidepanel() {
         setOperationQueueMessage('');
       }, 3000);
     } finally {
-      setIsGeneratingGlossary(false);
+      // Remove from glossary generating papers Set
+      setGlossaryGeneratingPapers(prev => {
+        const next = new Set(prev);
+        next.delete(paperUrl);
+        return next;
+      });
     }
   }
 
@@ -767,6 +814,19 @@ Source: ${paper.url}
 
       if (success) {
         console.log('[Sidepanel] Paper deleted successfully');
+
+        // Clean up generation state for deleted paper
+        const deletedPaperUrl = storedPaper.url;
+        setAnalyzingPapers(prev => {
+          const next = new Set(prev);
+          next.delete(deletedPaperUrl);
+          return next;
+        });
+        setGlossaryGeneratingPapers(prev => {
+          const next = new Set(prev);
+          next.delete(deletedPaperUrl);
+          return next;
+        });
 
         // Remove from allPapers array
         const newAllPapers = allPapers.filter((_, idx) => idx !== currentPaperIndex);
@@ -1096,9 +1156,9 @@ Source: ${paper.url}
                   <div>
                     <p class="font-medium text-gray-900 text-sm mb-1">Analysis</p>
                     <p class="text-xs text-gray-600">
-                      {isAnalyzing ? 'Analyzing methodology, confounders, implications, and limitations...' : 'View comprehensive paper analysis'}
+                      {(storedPaper?.url && analyzingPapers.has(storedPaper.url)) ? 'Analyzing methodology, confounders, implications, and limitations...' : 'View comprehensive paper analysis'}
                     </p>
-                    {isAnalyzing && <Loader size={16} class="animate-spin text-blue-600 mt-2" />}
+                    {(storedPaper?.url && analyzingPapers.has(storedPaper.url)) && <Loader size={16} class="animate-spin text-blue-600 mt-2" />}
                   </div>
                 </div>
 
@@ -1135,7 +1195,7 @@ Source: ${paper.url}
                 }`}
               >
                 <span>Analysis</span>
-                {isAnalyzing && <Loader size={14} class="animate-spin" />}
+                {(storedPaper?.url && analyzingPapers.has(storedPaper.url)) && <Loader size={14} class="animate-spin" />}
               </button>
               <button
                 onClick={() => setActiveTab('qa')}
@@ -1156,7 +1216,7 @@ Source: ${paper.url}
                 }`}
               >
                 <span>Glossary</span>
-                {isGeneratingGlossary && <Loader size={14} class="animate-spin" />}
+                {(storedPaper?.url && glossaryGeneratingPapers.has(storedPaper.url)) && <Loader size={14} class="animate-spin" />}
               </button>
               <button
                 onClick={() => setActiveTab('original')}
@@ -1175,7 +1235,7 @@ Source: ${paper.url}
               {/* Analysis Tab Content (reuse existing) */}
               {activeTab === 'analysis' && (
                 <>
-                  {isAnalyzing && !analysis && (
+                  {(storedPaper?.url && analyzingPapers.has(storedPaper.url)) && !analysis && (
                     <div class="card">
                       <div class="flex flex-col items-center justify-center gap-4 py-12">
                         <Loader size={32} class="animate-spin text-blue-600" />
@@ -1190,7 +1250,7 @@ Source: ${paper.url}
                     </div>
                   )}
 
-                  {!isAnalyzing && !analysis && (
+                  {!(storedPaper?.url && analyzingPapers.has(storedPaper.url)) && !analysis && (
                     <div class="card text-center py-8">
                       <TrendingUp size={32} class="mx-auto mb-3 text-gray-400" />
                       <p class="text-sm text-gray-600">Analysis will begin automatically</p>
@@ -1802,11 +1862,11 @@ Source: ${paper.url}
                 activeTab === 'analysis'
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-600 hover:text-gray-800'
-              } ${!analysis && !isAnalyzing ? 'opacity-50' : ''}`}
-              title={isAnalyzing ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : ''}
+              } ${!analysis && !(storedPaper?.url && analyzingPapers.has(storedPaper.url)) ? 'opacity-50' : ''}`}
+              title={(storedPaper?.url && analyzingPapers.has(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : ''}
             >
               <span>Analysis</span>
-              {isAnalyzing && <Loader size={14} class="animate-spin" />}
+              {(storedPaper?.url && analyzingPapers.has(storedPaper.url)) && <Loader size={14} class="animate-spin" />}
             </button>
             <button
               onClick={() => setActiveTab('qa')}
@@ -1825,11 +1885,11 @@ Source: ${paper.url}
                 activeTab === 'glossary'
                   ? 'border-blue-600 text-blue-600'
                   : 'border-transparent text-gray-600 hover:text-gray-800'
-              } ${!glossary && !isGeneratingGlossary ? 'opacity-50' : ''}`}
-              title={isGeneratingGlossary ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : ''}
+              } ${!glossary && !(storedPaper?.url && glossaryGeneratingPapers.has(storedPaper.url)) ? 'opacity-50' : ''}`}
+              title={(storedPaper?.url && glossaryGeneratingPapers.has(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : ''}
             >
               <span>Glossary</span>
-              {isGeneratingGlossary && <Loader size={14} class="animate-spin" />}
+              {(storedPaper?.url && glossaryGeneratingPapers.has(storedPaper.url)) && <Loader size={14} class="animate-spin" />}
             </button>
             <button
               onClick={() => setActiveTab('original')}
@@ -1876,7 +1936,7 @@ Source: ${paper.url}
             {activeTab === 'analysis' && (
               <>
                 {/* Loading State */}
-                {isAnalyzing && !analysis && (
+                {(storedPaper?.url && analyzingPapers.has(storedPaper.url)) && !analysis && (
                   <div class="card">
                     <div class="flex flex-col items-center justify-center gap-4 py-12">
                       <Loader size={32} class="animate-spin text-blue-600" />
@@ -2246,7 +2306,7 @@ Source: ${paper.url}
               <div class="card">
                 {glossary ? (
                   <GlossaryList terms={glossary.terms} />
-                ) : isGeneratingGlossary ? (
+                ) : (storedPaper?.url && glossaryGeneratingPapers.has(storedPaper.url)) ? (
                   <div class="text-center py-8">
                     <Loader size={32} class="text-blue-600 mx-auto mb-3 animate-spin" />
                     <p class="text-gray-600">Generating glossary of terms...</p>
