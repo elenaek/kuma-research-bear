@@ -39,6 +39,7 @@ import { OriginalPaperTab } from './components/OriginalPaperTab.tsx';
 import { PaperNavigationBar } from './components/ui/PaperNavigationBar.tsx';
 import { OperationBanner } from './components/ui/OperationBanner.tsx';
 import { TabButton } from './components/ui/TabButton.tsx';
+import { TabDropdown, TabOption } from './components/ui/TabDropdown.tsx';
 import { EmptyState } from './components/ui/EmptyState.tsx';
 import { LoadingButton } from './components/ui/LoadingButton.tsx';
 import { DebugPanel } from './components/DebugPanel.tsx';
@@ -840,18 +841,21 @@ Source: ${paper.url}
     return (
       <div class="h-screen flex flex-col bg-gray-50">
         {/* Header */}
-        <header class="bg-white border-b border-gray-200 px-6 py-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2"><PawPrint size={20} class="text-gray-400" /> Kuma</h1>
-              <p class="text-sm text-gray-600">
-                {isCheckingStorage ? '🐻 Kuma is checking paper storage...' : '🐻 Kuma found the paper stored and is ready for analysis'}
+        <header class="bg-white border-b border-gray-200 px-responsive py-3">
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex-1 min-w-0">
+              <h1 class="text-responsive-lg font-bold text-gray-800 flex items-center gap-2">
+                <PawPrint size={18} class="text-gray-400 flex-shrink-0" />
+                <span class="truncate">Kuma</span>
+              </h1>
+              <p class="text-responsive-xs text-gray-600">
+                {isCheckingStorage ? '🐻 Checking storage...' : '🐻 Ready for analysis'}
               </p>
             </div>
             <button
               onClick={handleManualRefresh}
               disabled={isCheckingStorage}
-              class="btn btn-secondary px-3 py-2 text-sm hover:cursor-pointer"
+              class="btn btn-secondary px-2 py-2 text-sm hover:cursor-pointer flex-shrink-0"
               title="Refresh storage status"
             >
               <RefreshCw size={16} class={isCheckingStorage ? 'animate-spin' : ''} />
@@ -861,7 +865,7 @@ Source: ${paper.url}
 
         {/* Content */}
         <div class="flex-1 overflow-auto">
-          <div class="max-w-4xl mx-auto p-6">
+          <div class="max-w-4xl mx-auto px-responsive py-responsive">
             {/* Paper Navigation Bar */}
             <PaperNavigationBar
               papers={paperNavigation.allPapers}
@@ -917,33 +921,76 @@ Source: ${paper.url}
             />
 
             {/* Tabs */}
-            <div class="flex gap-2 mb-4 border-b border-gray-200">
-              <TabButton
-                active={activeTab === 'analysis'}
-                onClick={() => setActiveTab('analysis')}
-                loading={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-              >
-                Analysis
-              </TabButton>
-              <TabButton
-                active={activeTab === 'qa'}
-                onClick={() => setActiveTab('qa')}
-              >
-                Q&A
-              </TabButton>
-              <TabButton
-                active={activeTab === 'glossary'}
-                onClick={() => setActiveTab('glossary')}
-                loading={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-              >
-                Glossary
-              </TabButton>
-              <TabButton
-                active={activeTab === 'original'}
-                onClick={() => setActiveTab('original')}
-              >
-                Abstract
-              </TabButton>
+            {/* Dropdown for narrow screens */}
+            <div class="mb-4 hide-on-wide">
+              <TabDropdown
+                tabs={[
+                  {
+                    id: 'analysis',
+                    label: 'Analysis',
+                    active: activeTab === 'analysis',
+                    loading: storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false,
+                    onClick: () => setActiveTab('analysis'),
+                  },
+                  {
+                    id: 'qa',
+                    label: 'Q&A',
+                    active: activeTab === 'qa',
+                    onClick: () => setActiveTab('qa'),
+                  },
+                  {
+                    id: 'glossary',
+                    label: 'Glossary',
+                    active: activeTab === 'glossary',
+                    loading: storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false,
+                    onClick: () => setActiveTab('glossary'),
+                  },
+                  {
+                    id: 'original',
+                    label: 'Abstract',
+                    active: activeTab === 'original',
+                    onClick: () => setActiveTab('original'),
+                  },
+                ]}
+                activeTabLabel={
+                  activeTab === 'analysis' ? 'Analysis' :
+                  activeTab === 'qa' ? 'Q&A' :
+                  activeTab === 'glossary' ? 'Glossary' :
+                  'Abstract'
+                }
+              />
+            </div>
+
+            {/* Horizontal tabs for wide screens */}
+            <div class="mb-4 border-b border-gray-200 -mx-responsive hide-on-narrow">
+              <div class="flex gap-1 overflow-x-auto px-responsive scrollbar-hide" style="scrollbar-width: none; -ms-overflow-style: none;">
+                <TabButton
+                  active={activeTab === 'analysis'}
+                  onClick={() => setActiveTab('analysis')}
+                  loading={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+                >
+                  Analysis
+                </TabButton>
+                <TabButton
+                  active={activeTab === 'qa'}
+                  onClick={() => setActiveTab('qa')}
+                >
+                  Q&A
+                </TabButton>
+                <TabButton
+                  active={activeTab === 'glossary'}
+                  onClick={() => setActiveTab('glossary')}
+                  loading={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
+                >
+                  Glossary
+                </TabButton>
+                <TabButton
+                  active={activeTab === 'original'}
+                  onClick={() => setActiveTab('original')}
+                >
+                  Abstract
+                </TabButton>
+              </div>
             </div>
 
             {/* Tab Content */}
@@ -998,24 +1045,27 @@ Source: ${paper.url}
   return (
     <div class="h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <header class="bg-white border-b border-gray-200 px-6 py-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2"><PawPrint size={20} class="text-gray-400" /> Kuma</h1>
-            <p class="text-sm text-gray-600">A bear that helps you understand research papers </p>
+      <header class="bg-white border-b border-gray-200 px-responsive py-3">
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <h1 class="text-responsive-lg font-bold text-gray-800 flex items-center gap-2">
+              <PawPrint size={18} class="text-gray-400 flex-shrink-0" />
+              <span class="truncate">Kuma</span>
+            </h1>
+            <p class="text-responsive-xs text-gray-600 hidden sm:block">A bear that helps you understand research papers</p>
           </div>
-          <button
+          {/* <button
             onClick={() => setShowDebug(!showDebug)}
-            class="text-xs px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded"
+            class="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded flex-shrink-0"
           >
-            {showDebug ? 'Hide' : 'Show'} Debug
-          </button>
+            {showDebug ? 'Hide' : 'Show'}
+          </button> */}
         </div>
       </header>
 
       {/* Content */}
       <div class="flex-1 overflow-auto">
-        <div class="max-w-4xl mx-auto p-6 pt-2">
+        <div class="max-w-4xl mx-auto px-responsive py-responsive">
           {/* Debug Panel */}
           <DebugPanel
             show={showDebug}
@@ -1071,51 +1121,114 @@ Source: ${paper.url}
           <PaperInfoCard paper={data?.paper || null} storedPaper={storedPaper} />
 
           {/* Tabs */}
-          <div class="flex gap-2 mb-4 border-b border-gray-200">
-            <TabButton
-              active={activeTab === 'summary'}
-              onClick={() => setActiveTab('summary')}
-            >
-              Summary
-            </TabButton>
-            <TabButton
-              active={activeTab === 'explanation'}
-              onClick={() => setActiveTab('explanation')}
-            >
-              Explanation
-            </TabButton>
-            <TabButton
-              active={activeTab === 'analysis'}
-              onClick={() => setActiveTab('analysis')}
-              loading={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-              disabled={!analysis && !(storedPaper?.url && operationState.isAnalyzing(storedPaper.url))}
-              title={(storedPaper?.url && operationState.isAnalyzing(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : ''}
-            >
-              Analysis
-            </TabButton>
-            <TabButton
-              active={activeTab === 'qa'}
-              onClick={() => setActiveTab('qa')}
-              disabled={!storedPaper}
-              title={!storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper'}
-            >
-              Q&A
-            </TabButton>
-            <TabButton
-              active={activeTab === 'glossary'}
-              onClick={() => setActiveTab('glossary')}
-              loading={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-              disabled={!glossary && !(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url))}
-              title={(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : ''}
-            >
-              Glossary
-            </TabButton>
-            <TabButton
-              active={activeTab === 'original'}
-              onClick={() => setActiveTab('original')}
-            >
-              Original
-            </TabButton>
+          {/* Dropdown for narrow screens */}
+          <div class="mb-4 hide-on-wide text-center">
+            <TabDropdown
+              tabs={[
+                {
+                  id: 'summary',
+                  label: 'Summary',
+                  active: activeTab === 'summary',
+                  onClick: () => setActiveTab('summary'),
+                },
+                {
+                  id: 'explanation',
+                  label: 'Explanation',
+                  active: activeTab === 'explanation',
+                  onClick: () => setActiveTab('explanation'),
+                },
+                {
+                  id: 'analysis',
+                  label: 'Analysis',
+                  active: activeTab === 'analysis',
+                  loading: storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false,
+                  disabled: !analysis && !(storedPaper?.url && operationState.isAnalyzing(storedPaper.url)),
+                  title: (storedPaper?.url && operationState.isAnalyzing(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : '',
+                  onClick: () => setActiveTab('analysis'),
+                },
+                {
+                  id: 'qa',
+                  label: 'Q&A',
+                  active: activeTab === 'qa',
+                  disabled: !storedPaper,
+                  title: !storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper',
+                  onClick: () => setActiveTab('qa'),
+                },
+                {
+                  id: 'glossary',
+                  label: 'Glossary',
+                  active: activeTab === 'glossary',
+                  loading: storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false,
+                  disabled: !glossary && !(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)),
+                  title: (storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : '',
+                  onClick: () => setActiveTab('glossary'),
+                },
+                {
+                  id: 'original',
+                  label: 'Original',
+                  active: activeTab === 'original',
+                  onClick: () => setActiveTab('original'),
+                },
+              ]}
+              activeTabLabel={
+                activeTab === 'summary' ? 'Summary' :
+                activeTab === 'explanation' ? 'Explanation' :
+                activeTab === 'analysis' ? 'Analysis' :
+                activeTab === 'qa' ? 'Q&A' :
+                activeTab === 'glossary' ? 'Glossary' :
+                'Original'
+              }
+            />
+          </div>
+
+          {/* Horizontal tabs for wide screens */}
+          <div class="mb-4 border-b border-gray-200 -mx-responsive hide-on-narrow">
+            <div class="flex gap-1 overflow-x-auto px-responsive scrollbar-hide" style="scrollbar-width: none; -ms-overflow-style: none;">
+              <TabButton
+                active={activeTab === 'summary'}
+                onClick={() => setActiveTab('summary')}
+              >
+                Summary
+              </TabButton>
+              <TabButton
+                active={activeTab === 'explanation'}
+                onClick={() => setActiveTab('explanation')}
+              >
+                Explanation
+              </TabButton>
+              <TabButton
+                active={activeTab === 'analysis'}
+                onClick={() => setActiveTab('analysis')}
+                loading={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+                disabled={!analysis && !(storedPaper?.url && operationState.isAnalyzing(storedPaper.url))}
+                title={(storedPaper?.url && operationState.isAnalyzing(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : ''}
+              >
+                Analysis
+              </TabButton>
+              <TabButton
+                active={activeTab === 'qa'}
+                onClick={() => setActiveTab('qa')}
+                disabled={!storedPaper}
+                title={!storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper'}
+              >
+                Q&A
+              </TabButton>
+              <TabButton
+                active={activeTab === 'glossary'}
+                onClick={() => setActiveTab('glossary')}
+                loading={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
+                disabled={!glossary && !(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url))}
+                title={(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : ''}
+              >
+                Glossary
+              </TabButton>
+              <TabButton
+                active={activeTab === 'original'}
+                onClick={() => setActiveTab('original')}
+              >
+                Original
+              </TabButton>
+            </div>
           </div>
 
           {/* Tab Content */}

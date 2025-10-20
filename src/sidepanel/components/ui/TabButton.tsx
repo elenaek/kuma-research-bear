@@ -20,7 +20,7 @@ export function TabButton(props: TabButtonProps) {
   return (
     <button
       onClick={onClick}
-      class={`px-4 py-2 font-medium border-b-2 flex items-center gap-2 relative overflow-hidden ${
+      class={`px-3 sm:px-4 py-2 font-medium border-b-2 flex items-center gap-1 sm:gap-2 relative overflow-hidden whitespace-nowrap text-sm sm:text-base ${
         active
           ? 'border-blue-600 text-blue-600'
           : 'border-transparent text-gray-600 hover:text-gray-800 hover:bg-gray-50'
@@ -32,7 +32,7 @@ export function TabButton(props: TabButtonProps) {
       disabled={disabled}
     >
       <span class="relative z-10">{children}</span>
-      {loading && <Loader size={14} class="animate-spin spinner-fade-in" />}
+      {loading && <Loader size={12} class="animate-spin spinner-fade-in sm:w-3.5 sm:h-3.5" />}
 
       {/* Animated underline */}
       {active && (

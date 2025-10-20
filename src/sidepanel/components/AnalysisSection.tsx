@@ -50,11 +50,11 @@ export function AnalysisSection(props: AnalysisSectionProps) {
       {/* Methodology Analysis */}
       <div class="card animate-scale-in">
         <div class="flex items-center gap-2 mb-3">
-          <FileText size={18} class="text-blue-600" />
-          <h3 class="text-base font-semibold text-gray-900">Methodology</h3>
+          <FileText size={16} class="text-blue-600 flex-shrink-0 sm:w-4.5 sm:h-4.5" />
+          <h3 class="text-responsive-base font-semibold text-gray-900">Methodology</h3>
         </div>
 
-        <div class="space-y-3">
+        <div class="space-y-2 sm:space-y-3">
           <div>
             <p class="text-sm font-medium text-gray-700 mb-1">
               Study Type
@@ -132,11 +132,11 @@ export function AnalysisSection(props: AnalysisSectionProps) {
       {/* Confounders & Biases */}
       <div class="card animate-scale-in" style={{ animationDelay: '100ms' }}>
         <div class="flex items-center gap-2 mb-3">
-          <AlertTriangle size={18} class="text-orange-600" />
-          <h3 class="text-lg font-semibold text-gray-900">Confounders & Biases</h3>
+          <AlertTriangle size={16} class="text-orange-600 flex-shrink-0 sm:w-4.5 sm:h-4.5" />
+          <h3 class="text-responsive-base font-semibold text-gray-900">Confounders & Biases</h3>
         </div>
 
-        <div class="space-y-3">
+        <div class="space-y-2 sm:space-y-3">
           <div>
             <p class="text-base font-medium text-gray-700 mb-1">
               Identified Confounders
@@ -187,11 +187,11 @@ export function AnalysisSection(props: AnalysisSectionProps) {
       {/* Implications */}
       <div class="card animate-scale-in" style={{ animationDelay: '200ms' }}>
         <div class="flex items-center gap-2 mb-3">
-          <TrendingUp size={18} class="text-blue-600" />
-          <h3 class="text-base font-semibold text-gray-900">Implications</h3>
+          <TrendingUp size={16} class="text-blue-600 flex-shrink-0 sm:w-4.5 sm:h-4.5" />
+          <h3 class="text-responsive-base font-semibold text-gray-900">Implications</h3>
         </div>
 
-        <div class="space-y-3">
+        <div class="space-y-2 sm:space-y-3">
           <div>
             <p class="text-sm font-medium text-gray-700 mb-1">
               Significance
@@ -235,11 +235,11 @@ export function AnalysisSection(props: AnalysisSectionProps) {
       {/* Limitations */}
       <div class="card animate-scale-in" style={{ animationDelay: '300ms' }}>
         <div class="flex items-center gap-2 mb-3">
-          <AlertCircle size={18} class="text-red-600" />
-          <h3 class="text-base font-semibold text-gray-900">Limitations</h3>
+          <AlertCircle size={16} class="text-red-600 flex-shrink-0 sm:w-4.5 sm:h-4.5" />
+          <h3 class="text-responsive-base font-semibold text-gray-900">Limitations</h3>
         </div>
 
-        <div class="space-y-3">
+        <div class="space-y-2 sm:space-y-3">
           <div>
             <p class="text-sm font-medium text-gray-700 mb-1">
               Study Limitations

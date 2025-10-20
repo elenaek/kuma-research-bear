@@ -11,15 +11,17 @@ export function GlossaryCard({ term }: GlossaryCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div class="border border-gray-200 rounded-md hover:shadow-sm transition-shadow hover:cursor-pointer">
+    <div class="border border-gray-200 rounded-md hover:shadow-sm transition-shadow hover:cursor-pointer" style={{ overflow: 'visible' }}>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         class="w-full text-left focus:outline-none rounded hover:cursor-pointer p-3"
+        style={{ overflow: 'visible' }}
+        title={`${term.acronym} - ${term.longForm}: ${term.definition}`}
         aria-expanded={isExpanded}
         aria-controls={`glossary-content-${term.acronym}`}
       >
         <div class="flex items-center justify-between">
-          <div class="flex items-center gap-1.5 flex-grow">
+          <div class="flex items-center gap-1.5 flex-grow truncate">
             <span class="text-base font-bold text-blue-600">{term.acronym}</span>
             <span class="text-gray-400 text-sm">—</span>
             <span class="text-sm text-gray-700 truncate">{term.longForm}</span>
@@ -162,7 +164,7 @@ export function GlossaryList({ terms }: GlossaryListProps) {
 
       {/* Term Cards */}
       {filteredTerms.length > 0 ? (
-        <div class="space-y-1.5">
+        <div class="space-y-1.5" style={{ overflow: 'visible' }}>
           {filteredTerms.map((term, index) => (
             <GlossaryCard key={`${term.acronym}-${index}`} term={term} />
           ))}

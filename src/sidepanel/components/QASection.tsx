@@ -21,8 +21,8 @@ export function QASection(props: QASectionProps) {
   return (
     <>
       <div class="card animate-scale-in">
-        <h3 class="text-base font-semibold text-gray-900 mb-3">Ask a Question</h3>
-        <div class="flex gap-2 mb-3">
+        <h3 class="text-responsive-base font-semibold text-gray-900 mb-3">Ask a Question</h3>
+        <div class="flex flex-col xs:flex-row gap-2 mb-3">
           <input
             type="text"
             value={question}
@@ -30,13 +30,13 @@ export function QASection(props: QASectionProps) {
             onKeyPress={(e) => e.key === 'Enter' && !isAsking && onAskQuestion()}
             placeholder="Ask anything about this paper..."
             disabled={isAsking}
-            class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+            class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 min-h-[44px]"
             style={{ transition: 'all var(--duration-normal) var(--ease-out)' }}
           />
           <button
             onClick={onAskQuestion}
             disabled={!question.trim() || isAsking}
-            class="btn btn-primary px-4 hover:cursor-pointer"
+            class="btn btn-primary px-4 hover:cursor-pointer w-full xs:w-auto"
           >
             {isAsking ? (
               <Loader size={16} class="animate-spin spinner-fade-in" />
@@ -45,8 +45,8 @@ export function QASection(props: QASectionProps) {
             )}
           </button>
         </div>
-        <p class="text-xs text-gray-500 animate-fade-in" style={{ animationDuration: '1000ms' }}>
-          Kuma will search through {storedPaper?.chunkCount} content chunks to find relevant information.
+        <p class="text-responsive-xs text-gray-500 animate-fade-in" style={{ animationDuration: '1000ms' }}>
+          Kuma will search through {storedPaper?.chunkCount} content chunks
         </p>
       </div>
 

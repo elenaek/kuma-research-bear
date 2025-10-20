@@ -27,18 +27,18 @@ export function PaperInfoCard(props: PaperInfoCardProps) {
   );
 
   return (
-    <div class="card mb-6 animate-slide-in-up">
+    <div class="card mb-4 sm:mb-6 animate-slide-in-up">
       {/* Title and Badges */}
-      <div class="flex items-start justify-between gap-4 mb-3">
-        <h2 class="text-lg font-semibold text-gray-900 flex-1">{paper.title}</h2>
-        <div class="flex gap-2 shrink-0">
+      <div class="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4 mb-3">
+        <h2 class="text-responsive-lg font-semibold text-gray-900 flex-1 min-w-0">{paper.title}</h2>
+        <div class="flex gap-2 flex-wrap sm:shrink-0">
           {hasDetailedMetadata && (
-            <span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 capitalize animate-fade-in" style={{ animationDelay: '100ms' }}>
+            <span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 capitalize animate-fade-in whitespace-nowrap" style={{ animationDelay: '100ms' }}>
               {paper.source.replace('-', ' ')}
             </span>
           )}
           {storedPaper && (
-            <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 flex items-center gap-1 animate-scale-in" style={{ animationDelay: '150ms' }}>
+            <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 flex items-center gap-1 animate-scale-in whitespace-nowrap" style={{ animationDelay: '150ms' }}>
               <Database size={12} />
               Stored
             </span>
@@ -47,7 +47,7 @@ export function PaperInfoCard(props: PaperInfoCardProps) {
       </div>
 
       {/* Authors */}
-      <p class="text-sm text-gray-600 mb-4">{paper.authors.join(', ')}</p>
+      <p class="text-responsive-sm text-gray-600 mb-3 sm:mb-4">{paper.authors.join(', ')}</p>
 
       {/* Metadata Grid */}
       {(paper.metadata || storedPaper) && (
@@ -141,12 +141,12 @@ export function PaperInfoCard(props: PaperInfoCardProps) {
       )}
 
       {/* Action Links */}
-      <div class="flex gap-3">
+      <div class="flex flex-col xs:flex-row gap-2 xs:gap-3">
         <a
           href={paper.url}
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-blue-600 font-medium"
+          class="inline-flex items-center gap-1 text-responsive-sm text-gray-600 hover:text-blue-600 font-medium"
           style={{
             transition: 'all var(--duration-normal) var(--ease-out)',
           }}
@@ -175,7 +175,7 @@ export function PaperInfoCard(props: PaperInfoCardProps) {
             href={paper.metadata.pdfUrl}
             target="_blank"
             rel="noopener noreferrer"
-            class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-blue-600 font-medium"
+            class="inline-flex items-center gap-1 text-responsive-sm text-gray-600 hover:text-blue-600 font-medium"
             style={{
               transition: 'all var(--duration-normal) var(--ease-out)',
             }}
