@@ -87,29 +87,16 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
     const explanation = await aiService.explainAbstract(detectResponse.paper.abstract, explainContextId);
     const summary = await aiService.generateSummary(detectResponse.paper.title, detectResponse.paper.abstract, explainContextId);
 
-    // Store explanation in chrome.storage (for quick access/backwards compatibility)
-    await chrome.storage.local.set({
-      lastExplanation: {
-        paper: detectResponse.paper,
-        explanation,
-        summary,
-        timestamp: Date.now(),
-      },
-      currentPaper: detectResponse.paper,
-    });
-
-    // Also store in IndexedDB per-paper for persistence
-    try {
-      const storedPaperForExplanation = await getPaperByUrl(detectResponse.paper.url);
-      if (storedPaperForExplanation) {
-        const { updatePaperExplanation } = await import('../../utils/dbService.ts');
-        await updatePaperExplanation(storedPaperForExplanation.id, explanation, summary);
-        console.log('[Orchestrator] ✓ Explanation stored in IndexedDB');
-      }
-    } catch (dbError) {
-      console.warn('[Orchestrator] Failed to store explanation in IndexedDB:', dbError);
-      // Don't fail the whole operation if IndexedDB update fails
+    // Store in IndexedDB per-paper (single source of truth)
+    // If storage fails, let the error propagate - we can't mark as "complete" if data isn't saved
+    const storedPaperForExplanation = await getPaperByUrl(detectResponse.paper.url);
+    if (!storedPaperForExplanation) {
+      throw new Error('Paper not found in storage. Cannot save explanation.');
     }
+
+    const { updatePaperExplanation } = await import('../../utils/dbService.ts');
+    await updatePaperExplanation(storedPaperForExplanation.id, explanation, summary);
+    console.log('[Orchestrator] ✓ Explanation stored in IndexedDB');
 
     updateOperationState(tabId, {
       isDetecting: false,
@@ -150,33 +137,20 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
         aiService.generateGlossary(paperContent, storedPaper.title, glossaryContextId)
       ]);
 
-      // Store analysis in chrome.storage (for quick access/backwards compatibility)
-      await chrome.storage.local.set({
-        lastAnalysis: {
-          paper: storedPaper,
-          analysis,
-          timestamp: Date.now(),
-        },
-      });
-
-      // Store both analysis and glossary in IndexedDB
-      try {
-        const { updatePaperAnalysis, updatePaperGlossary } = await import('../../utils/dbService.ts');
-        await Promise.all([
-          updatePaperAnalysis(storedPaper.id, analysis),
-          updatePaperGlossary(storedPaper.id, glossary)
-        ]);
-        console.log('[Orchestrator] ✓ Analysis and glossary stored in IndexedDB');
-      } catch (dbError) {
-        console.warn('[Orchestrator] Failed to store analysis/glossary in IndexedDB:', dbError);
-        // Don't fail the whole operation if IndexedDB update fails
-      }
+      // Store both analysis and glossary in IndexedDB (single source of truth)
+      // If storage fails, let the error propagate - we can't mark as "complete" if data isn't saved
+      const { updatePaperAnalysis, updatePaperGlossary } = await import('../../utils/dbService.ts');
+      await Promise.all([
+        updatePaperAnalysis(storedPaper.id, analysis),
+        updatePaperGlossary(storedPaper.id, glossary)
+      ]);
+      console.log('[Orchestrator] ✓ Analysis and glossary stored in IndexedDB');
 
       updateOperationState(tabId, {
         isDetecting: false,
         isExplaining: false,
-        isAnalyzing: true,
-        isGeneratingGlossary: true,
+        isAnalyzing: false,
+        isGeneratingGlossary: false,
         analysisProgress: '🐻 Kuma has finished analyzing the research paper! (Analysis complete!)',
         glossaryProgress: '🐻 Kuma has finished extracting terms! (Glossary complete!)',
         // Update completion tracking (all 4 features now complete!)
@@ -186,27 +160,6 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
         hasGlossary: true,
         completionPercentage: 100,
       });
-
-      setTimeout(() =>{
-        // Get current state to preserve completion status
-        const currentState = operationStateService.getState(tabId);
-        updateOperationState(tabId, {
-          isDetecting: false,
-          isExplaining: false,
-          isAnalyzing: false,
-          isGeneratingGlossary: false,
-          analysisProgress: '',
-          glossaryProgress: '',
-          error: null,
-          // Preserve the isPaperStored and completion tracking fields
-          isPaperStored: currentState.isPaperStored,
-          hasExplanation: currentState.hasExplanation,
-          hasSummary: currentState.hasSummary,
-          hasAnalysis: currentState.hasAnalysis,
-          hasGlossary: currentState.hasGlossary,
-          completionPercentage: currentState.completionPercentage,
-        });
-      }, 5000);
     } else {
       updateOperationState(tabId, {
         isDetecting: false,

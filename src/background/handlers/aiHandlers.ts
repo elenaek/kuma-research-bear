@@ -62,9 +62,6 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
       broadcastStateChange(state);
     }
 
-    // Set flag to indicate explanation is in progress (for backwards compatibility)
-    await chrome.storage.local.set({ isExplaining: true });
-
     // Generate context ID based on tab ID if available
     const contextId = tabId ? `tab-${tabId}-explain` : 'default-explain';
 
@@ -81,41 +78,28 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
       broadcastStateChange(state);
     }
 
-    // Store the explanation in chrome.storage (for quick access/backwards compatibility)
-    await chrome.storage.local.set({
-      lastExplanation: {
-        paper,
-        explanation,
-        summary,
-        timestamp: Date.now(),
-      },
-      isExplaining: false, // Clear flag when done
-    });
+    // Store in IndexedDB per-paper (single source of truth)
+    // If storage fails, let the error propagate - we can't mark as "complete" if data isn't saved
+    const storedPaper = await getPaperByUrl(paper.url);
+    if (!storedPaper) {
+      throw new Error('Paper not found in storage. Cannot save explanation.');
+    }
 
-    // Also store in IndexedDB per-paper for persistence
-    try {
-      const storedPaper = await getPaperByUrl(paper.url);
-      if (storedPaper) {
-        const { updatePaperExplanation } = await import('../../utils/dbService.ts');
-        await updatePaperExplanation(storedPaper.id, explanation, summary);
-        console.log('[AIHandlers] ✓ Explanation stored in IndexedDB');
+    const { updatePaperExplanation } = await import('../../utils/dbService.ts');
+    await updatePaperExplanation(storedPaper.id, explanation, summary);
+    console.log('[AIHandlers] ✓ Explanation stored in IndexedDB');
 
-        // Update completion tracking in operation state
-        if (tabId) {
-          const status = await paperStatusService.checkPaperStatus(storedPaper.url);
-          operationStateService.updateState(tabId, {
-            hasExplanation: status.hasExplanation,
-            hasSummary: status.hasSummary,
-            hasAnalysis: status.hasAnalysis,
-            hasGlossary: status.hasGlossary,
-            completionPercentage: status.completionPercentage,
-          });
-          console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
-        }
-      }
-    } catch (dbError) {
-      console.warn('[AIHandlers] Failed to store explanation in IndexedDB:', dbError);
-      // Don't fail the whole operation if IndexedDB update fails
+    // Update completion tracking in operation state
+    if (tabId) {
+      const status = await paperStatusService.checkPaperStatus(storedPaper.url);
+      operationStateService.updateState(tabId, {
+        hasExplanation: status.hasExplanation,
+        hasSummary: status.hasSummary,
+        hasAnalysis: status.hasAnalysis,
+        hasGlossary: status.hasGlossary,
+        completionPercentage: status.completionPercentage,
+      });
+      console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
     }
 
     return { success: true, explanation, summary };
@@ -130,8 +114,6 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
       broadcastStateChange(state);
     }
 
-    // Clear flag on error
-    await chrome.storage.local.set({ isExplaining: false });
     throw explainError;
   }
 }
@@ -243,38 +225,27 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
       // Get the stored paper for storage operations
       const storedPaper = await getPaperByUrl(paperUrl);
 
-      if (storedPaper) {
-        // Store analysis result in chrome.storage (for quick access/backwards compatibility)
-        await chrome.storage.local.set({
-          lastAnalysis: {
-            paper: storedPaper,
-            analysis,
-            timestamp: Date.now(),
-          },
+      // Store in IndexedDB per-paper (single source of truth)
+      // If storage fails, let the error propagate - we can't mark as "complete" if data isn't saved
+      if (!storedPaper) {
+        throw new Error('Paper not found in storage. Cannot save analysis.');
+      }
+
+      const { updatePaperAnalysis } = await import('../../utils/dbService.ts');
+      await updatePaperAnalysis(storedPaper.id, analysis);
+      console.log('[AIHandlers] ✓ Analysis stored in IndexedDB');
+
+      // Update completion tracking in operation state
+      if (tabId) {
+        const status = await paperStatusService.checkPaperStatus(storedPaper.url);
+        operationStateService.updateState(tabId, {
+          hasExplanation: status.hasExplanation,
+          hasSummary: status.hasSummary,
+          hasAnalysis: status.hasAnalysis,
+          hasGlossary: status.hasGlossary,
+          completionPercentage: status.completionPercentage,
         });
-
-        // Also store in IndexedDB per-paper for persistence
-        try {
-          const { updatePaperAnalysis } = await import('../../utils/dbService.ts');
-          await updatePaperAnalysis(storedPaper.id, analysis);
-          console.log('[AIHandlers] ✓ Analysis stored in IndexedDB');
-
-          // Update completion tracking in operation state
-          if (tabId) {
-            const status = await paperStatusService.checkPaperStatus(storedPaper.url);
-            operationStateService.updateState(tabId, {
-              hasExplanation: status.hasExplanation,
-              hasSummary: status.hasSummary,
-              hasAnalysis: status.hasAnalysis,
-              hasGlossary: status.hasGlossary,
-              completionPercentage: status.completionPercentage,
-            });
-            console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
-          }
-        } catch (dbError) {
-          console.warn('[AIHandlers] Failed to store analysis in IndexedDB:', dbError);
-          // Don't fail the whole operation if IndexedDB update fails
-        }
+        console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
       }
 
       // Update operation state to show completion
@@ -385,29 +356,27 @@ export async function handleGenerateGlossary(payload: any, tabId?: number): Prom
       // Get the stored paper for storage operations
       const storedPaper = await getPaperByUrl(paperUrl);
 
-      if (storedPaper) {
-        // Store in IndexedDB with the paper
-        try {
-          const { updatePaperGlossary } = await import('../../utils/dbService.ts');
-          await updatePaperGlossary(storedPaper.id, glossary);
-          console.log('[AIHandlers] ✓ Glossary stored in IndexedDB');
+      // Store in IndexedDB with the paper
+      // If storage fails, let the error propagate - we can't mark as "complete" if data isn't saved
+      if (!storedPaper) {
+        throw new Error('Paper not found in storage. Cannot save glossary.');
+      }
 
-          // Update completion tracking in operation state
-          if (tabId) {
-            const status = await paperStatusService.checkPaperStatus(storedPaper.url);
-            operationStateService.updateState(tabId, {
-              hasExplanation: status.hasExplanation,
-              hasSummary: status.hasSummary,
-              hasAnalysis: status.hasAnalysis,
-              hasGlossary: status.hasGlossary,
-              completionPercentage: status.completionPercentage,
-            });
-            console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
-          }
-        } catch (dbError) {
-          console.warn('[AIHandlers] Failed to store glossary in IndexedDB:', dbError);
-          // Don't fail the whole operation if IndexedDB update fails
-        }
+      const { updatePaperGlossary } = await import('../../utils/dbService.ts');
+      await updatePaperGlossary(storedPaper.id, glossary);
+      console.log('[AIHandlers] ✓ Glossary stored in IndexedDB');
+
+      // Update completion tracking in operation state
+      if (tabId) {
+        const status = await paperStatusService.checkPaperStatus(storedPaper.url);
+        operationStateService.updateState(tabId, {
+          hasExplanation: status.hasExplanation,
+          hasSummary: status.hasSummary,
+          hasAnalysis: status.hasAnalysis,
+          hasGlossary: status.hasGlossary,
+          completionPercentage: status.completionPercentage,
+        });
+        console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
       }
 
       console.log('[AIHandlers] ✓ Glossary generation complete');

@@ -32,7 +32,7 @@ interface UseOperationStateReturn {
   completionPercentage: number;
 
   // Actions
-  checkOperationState: (tabId: number) => Promise<void>;
+  checkOperationState: (tabId: number, expectedUrl?: string) => Promise<void>;
   setDetectionStatus: (status: string | null) => void;
   setIsDetecting: (value: boolean) => void;
   setCompletionStatus: (status: {
@@ -112,7 +112,7 @@ export function useOperationState(): UseOperationStateReturn {
     };
   }, []);
 
-  async function checkOperationState(tabId: number) {
+  async function checkOperationState(tabId: number, expectedUrl?: string) {
     try {
       const response = await chrome.runtime.sendMessage({
         type: MessageType.GET_OPERATION_STATE,
@@ -126,9 +126,12 @@ export function useOperationState(): UseOperationStateReturn {
         setIsAnalyzing(state.isAnalyzing);
         setIsGeneratingGlossary(state.isGeneratingGlossary);
 
-        // Only load completion status if there's actually a current paper in the state
-        // This prevents stale cached completion data from overwriting database truth
-        if (state.currentPaper) {
+        // Only load completion status if there's a current paper AND it matches the expected URL
+        // This prevents wrong paper's completion status from overwriting database truth
+        const shouldLoadCompletion = state.currentPaper &&
+          (!expectedUrl || state.currentPaper.url === expectedUrl);
+
+        if (shouldLoadCompletion) {
           if (state.hasExplanation !== undefined) setHasExplanation(state.hasExplanation);
           if (state.hasSummary !== undefined) setHasSummary(state.hasSummary);
           if (state.hasAnalysis !== undefined) setHasAnalysis(state.hasAnalysis);
@@ -138,9 +141,13 @@ export function useOperationState(): UseOperationStateReturn {
             hasExplanation: state.hasExplanation,
             hasAnalysis: state.hasAnalysis,
             completionPercentage: state.completionPercentage,
+            matchesExpectedUrl: !expectedUrl || state.currentPaper.url === expectedUrl,
           });
         } else {
-          console.log('[useOperationState] Skipping completion status (no current paper in background state)');
+          const reason = !state.currentPaper
+            ? 'no current paper in background state'
+            : 'URL mismatch (preventing overwrite)';
+          console.log(`[useOperationState] Skipping completion status (${reason})`);
         }
 
         console.log('[useOperationState] Loaded operation state:', state);

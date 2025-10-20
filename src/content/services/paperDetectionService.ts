@@ -20,10 +20,7 @@ export async function detectAndStorePaper(): Promise<ResearchPaper | null> {
     if (paper) {
       console.log('[PaperDetection] Research paper detected:', paper.title);
 
-      // Store in chrome.storage.local for access by other components
-      await chrome.storage.local.set({ currentPaper: paper });
-
-      // Store in IndexedDB via background worker
+      // Store in IndexedDB via background worker (single source of truth)
       await storePaperSimple(paper);
 
       return paper;
@@ -48,8 +45,6 @@ export async function detectPaperWithAIOnly(): Promise<ResearchPaper | null> {
 
     if (paper) {
       console.log('[PaperDetection] AI-detected paper:', paper.title);
-      // Store in chrome.storage.local for access by other components
-      await chrome.storage.local.set({ currentPaper: paper });
     }
 
     return paper;

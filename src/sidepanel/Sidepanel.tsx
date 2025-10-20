@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader, PawPrint, ChevronLeft, ChevronRight, Trash2, Settings, ChevronDown, ChevronUp } from 'lucide-preact';
 import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, GlossaryResult } from '../types/index.ts';
 import { MarkdownRenderer } from '../components/MarkdownRenderer.tsx';
@@ -47,6 +47,9 @@ export function Sidepanel() {
   const [isCheckingStorage, setIsCheckingStorage] = useState(false);
   const [isExplainingInBackground, setIsExplainingInBackground] = useState(false);
   const [storedPaper, setStoredPaper] = useState<StoredPaper | null>(null);
+
+  // Ref to track current paper URL (avoids stale closure in listener)
+  const currentPaperUrlRef = useRef<string | null>(null);
 
   // Q&A state
   const [question, setQuestion] = useState('');
@@ -97,17 +100,16 @@ export function Sidepanel() {
     loadExplanation();
   }, 300); // 300ms debounce delay
 
+  // Update ref when storedPaper changes (for listener to use latest value)
+  useEffect(() => {
+    currentPaperUrlRef.current = storedPaper?.url || null;
+  }, [storedPaper]);
+
   useEffect(() => {
     loadExplanation();
 
-    // Create storage listener using StorageService
-    const storageListener = StorageService.createStorageListener(
-      (isExplaining) => setIsExplainingInBackground(isExplaining),
-      () => debouncedLoadExplanation()
-    );
-
-    // Create operation state listener using StorageService
-    const messageListener = StorageService.createOperationStateListener((state) => {
+    // Create operation state listener for OPERATION_STATE_CHANGED broadcasts
+    const messageListener = StorageService.createOperationStateListener(async (state) => {
       // Update banner states
       setIsExplainingInBackground(state.isExplaining);
 
@@ -127,53 +129,101 @@ export function Sidepanel() {
         } else {
           operationState.removeGlossaryGeneratingPaper(paperUrl);
         }
+
+        // Reload paper from IndexedDB when operations complete
+        // This keeps all papers in the sidepanel synchronized
+        try {
+          const freshPaper = await ChromeService.getPaperByUrl(paperUrl);
+
+          if (freshPaper) {
+            console.log('[Sidepanel] Reloading paper from IndexedDB after operation update:', freshPaper.title);
+
+            // Update in allPapers array
+            paperNavigation.setAllPapers(prevPapers =>
+              prevPapers.map(p => p.url === paperUrl ? freshPaper : p)
+            );
+
+            // If this is the currently viewed paper, update display states
+            // Call setState functions sequentially (not nested) to avoid timing issues
+            // Use ref to avoid stale closure bug
+            const isCurrentPaper = currentPaperUrlRef.current === paperUrl;
+
+            if (isCurrentPaper) {
+              // Update stored paper reference
+              setStoredPaper(freshPaper);
+
+              // Update data (explanation/summary)
+              if (freshPaper.explanation && freshPaper.summary) {
+                setData({
+                  paper: freshPaper,
+                  explanation: freshPaper.explanation,
+                  summary: freshPaper.summary,
+                });
+              }
+
+              // Update analysis
+              if (freshPaper.analysis) {
+                setAnalysis(freshPaper.analysis);
+              }
+
+              // Update glossary
+              if (freshPaper.glossary) {
+                setGlossary(freshPaper.glossary);
+              }
+
+              console.log('[Sidepanel] ✓ Updated currently viewed paper with fresh data');
+            }
+          }
+        } catch (error) {
+          console.error('[Sidepanel] Error reloading paper on operation update:', error);
+        }
       }
     });
 
-    // Register listeners and get cleanup function
-    const cleanup = StorageService.registerListeners(storageListener, messageListener);
+    // Register message listener and get cleanup function
+    chrome.runtime.onMessage.addListener(messageListener);
 
-    return cleanup;
+    return () => {
+      chrome.runtime.onMessage.removeListener(messageListener);
+    };
   }, []);
 
   // Use checkForStoredPaper from hook
   const { checkForStoredPaper } = paperData;
 
   async function collectDebugInfo() {
-    const result = await chrome.storage.local.get(['lastExplanation', 'lastAnalysis', 'currentPaper']);
     const debugData: any = {
       timestamp: new Date().toLocaleString(),
-      chromeStorage: {
-        hasCurrentPaper: !!result.currentPaper,
-        currentPaperUrl: result.currentPaper?.url || 'N/A',
-        currentPaperTitle: result.currentPaper?.title || 'N/A',
-        hasLastExplanation: !!result.lastExplanation,
-        lastExplanationUrl: result.lastExplanation?.paper?.url || 'N/A',
-        hasLastAnalysis: !!result.lastAnalysis,
-      },
       sidepanelState: {
         viewState,
         hasData: !!data,
         dataUrl: data?.paper?.url || 'N/A',
         hasStoredPaper: !!storedPaper,
         storedPaperId: storedPaper?.id || 'N/A',
+        storedPaperUrl: storedPaper?.url || 'N/A',
+        storedPaperTitle: storedPaper?.title || 'N/A',
         storedPaperChunkCount: storedPaper?.chunkCount || 0,
         hasAnalysis: !!analysis,
+        hasGlossary: !!glossary,
         isAnalyzingCurrentPaper: storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false,
         isCheckingStorage,
       },
     };
 
     // Try to get paper from IndexedDB
-    if (result.currentPaper?.url) {
+    if (storedPaper?.url) {
       try {
-        const stored = await ChromeService.getPaperByUrl(result.currentPaper.url);
+        const stored = await ChromeService.getPaperByUrl(storedPaper.url);
         debugData.indexedDB = {
-          queryUrl: result.currentPaper.url,
+          queryUrl: storedPaper.url,
           found: !!stored,
           storedPaperId: stored?.id || 'N/A',
           storedPaperTitle: stored?.title || 'N/A',
           chunkCount: stored?.chunkCount || 0,
+          hasExplanation: !!stored?.explanation,
+          hasSummary: !!stored?.summary,
+          hasAnalysis: !!stored?.analysis,
+          hasGlossary: !!stored?.glossary,
         };
       } catch (error) {
         debugData.indexedDB = {
@@ -193,9 +243,12 @@ export function Sidepanel() {
       paperNavigation.setAllPapers(papers);
       console.log('[Sidepanel] Loaded', papers.length, 'papers from IndexedDB');
 
+      // Get current tab URL
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const currentUrl = tab?.url;
+
       // Query current operation state from background
       try {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab?.id) {
           const stateResponse = await ChromeService.getOperationState(tab.id);
 
@@ -222,126 +275,73 @@ export function Sidepanel() {
         console.warn('[Sidepanel] Could not load operation state:', stateError);
       }
 
-      const result = await chrome.storage.local.get(['lastExplanation', 'lastAnalysis', 'currentPaper', 'isExplaining']);
-
-      // Also check old isExplaining flag for backwards compatibility
-      if (result.isExplaining) {
-        console.log('[Sidepanel] Explanation in progress (legacy flag)');
-        setIsExplainingInBackground(true);
-      }
-
       // Collect debug info
       await collectDebugInfo();
 
-      // NEW: If no explanation but paper was detected, check if it's stored
-      if (!result.lastExplanation && result.currentPaper) {
-        console.log('[Sidepanel] No explanation yet, checking if paper is stored...');
-        setIsCheckingStorage(true);
-
-        try {
-          const stored = await checkForStoredPaper(result.currentPaper.url);
-
-          if (stored) {
-            console.log('[Sidepanel] Paper is stored! Enabling Analysis and Q&A tabs.');
-            setStoredPaper(stored);
-            setData({
-              paper: result.currentPaper,
-              explanation: { originalText: '', explanation: '', timestamp: 0 },
-              summary: { summary: '', keyPoints: [], timestamp: 0 }
-            });
-            setViewState('stored-only');
-
-            // Auto-trigger analysis for stored paper (only if not already analyzing this paper)
-            if (!operationState.isAnalyzing(result.currentPaper.url) && (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.currentPaper.url)) {
-              console.log('[Sidepanel] Auto-triggering analysis for stored paper...');
-              debouncedTriggerAnalysis(result.currentPaper.url);
-            }
-          } else {
-            console.log('[Sidepanel] Paper not stored yet after retries.');
-            setViewState('empty');
-          }
-        } catch (dbError) {
-          console.error('[Sidepanel] Could not check paper storage status:', dbError);
-          setViewState('empty');
-        } finally {
-          setIsCheckingStorage(false);
-        }
-        return;
-      }
-
-      if (!result.lastExplanation) {
+      // Query IndexedDB for paper matching current tab URL (single source of truth)
+      if (!currentUrl) {
+        console.log('[Sidepanel] No current URL, showing empty state');
         setViewState('empty');
         return;
       }
 
-      // Check if paper is stored in IndexedDB with retry logic
-      console.log('[Sidepanel] Checking storage for explained paper...');
+      console.log('[Sidepanel] Checking IndexedDB for paper at URL:', currentUrl);
       setIsCheckingStorage(true);
 
       try {
-        const stored = await checkForStoredPaper(result.lastExplanation.paper.url);
-        setStoredPaper(stored);
+        const stored = await checkForStoredPaper(currentUrl);
 
         if (stored) {
-          console.log('[Sidepanel] ✓ Paper is stored, Q&A enabled');
+          console.log('[Sidepanel] ✓ Paper found in IndexedDB:', stored.title);
+          setStoredPaper(stored);
+          setQaHistory(stored.qaHistory || []);
 
-          // Prioritize loading from StoredPaper fields, fall back to chrome.storage
-          const explanationData: ExplanationData = {
-            paper: result.lastExplanation.paper,
-            explanation: stored.explanation || result.lastExplanation.explanation,
-            summary: stored.summary || result.lastExplanation.summary,
-          };
-          setData(explanationData);
+          // Load all data from stored paper
+          if (stored.explanation && stored.summary) {
+            console.log('[Sidepanel] Loading explanation and summary from IndexedDB');
+            setData({
+              paper: stored,
+              explanation: stored.explanation,
+              summary: stored.summary,
+            });
+            setViewState('content');
+          } else {
+            console.log('[Sidepanel] Paper stored but no explanation yet');
+            setData({
+              paper: stored,
+              explanation: { originalText: '', explanation: '', timestamp: 0 },
+              summary: { summary: '', keyPoints: [], timestamp: 0 }
+            });
+            setViewState('stored-only');
+          }
 
-          // Load analysis from StoredPaper or chrome.storage
+          // Load analysis from IndexedDB
           if (stored.analysis) {
-            console.log('[Sidepanel] Loading analysis from StoredPaper');
+            console.log('[Sidepanel] Loading analysis from IndexedDB');
             setAnalysis(stored.analysis);
-          } else if (result.lastAnalysis) {
-            console.log('[Sidepanel] Loading analysis from chrome.storage');
-            setAnalysis(result.lastAnalysis.analysis);
+          } else {
+            console.log('[Sidepanel] No analysis found for this paper');
+            setAnalysis(null);
           }
 
-          // Load glossary from StoredPaper
+          // Load glossary from IndexedDB
           if (stored.glossary) {
-            console.log('[Sidepanel] Loading glossary from StoredPaper');
+            console.log('[Sidepanel] Loading glossary from IndexedDB');
             setGlossary(stored.glossary);
-          }
-
-          // Auto-trigger analysis if paper is stored and no analysis exists yet (only if not already analyzing this paper)
-          if (!stored.analysis && !operationState.isAnalyzing(result.lastExplanation.paper.url) && (!result.lastAnalysis || result.lastAnalysis.paper?.url !== result.lastExplanation.paper.url)) {
-            console.log('[Sidepanel] Paper is stored, triggering automatic analysis...');
-            triggerAnalysis(result.lastExplanation.paper.url);
-          }
-
-          // Auto-trigger glossary generation if paper is stored and no glossary exists yet (only if not already generating for this paper)
-          if (!stored.glossary && !operationState.isGeneratingGlossary(result.lastExplanation.paper.url)) {
-            console.log('[Sidepanel] Paper is stored, triggering automatic glossary generation...');
-            triggerGlossaryGeneration(result.lastExplanation.paper.url);
+          } else {
+            console.log('[Sidepanel] No glossary found for this paper');
+            setGlossary(null);
           }
         } else {
-          console.log('[Sidepanel] Paper not stored, Q&A disabled');
-
-          // Paper not stored, use chrome.storage data
-          setData(result.lastExplanation);
-
-          // Load analysis if available
-          if (result.lastAnalysis) {
-            setAnalysis(result.lastAnalysis.analysis);
-          }
+          console.log('[Sidepanel] No paper found for current URL');
+          setViewState('empty');
         }
       } catch (dbError) {
-        console.error('[Sidepanel] Could not check paper storage status:', dbError);
-        // Fallback to chrome.storage if IndexedDB check fails
-        setData(result.lastExplanation);
-        if (result.lastAnalysis) {
-          setAnalysis(result.lastAnalysis.analysis);
-        }
+        console.error('[Sidepanel] Error loading from IndexedDB:', dbError);
+        setViewState('empty');
       } finally {
         setIsCheckingStorage(false);
       }
-
-      setViewState('content');
     } catch (error) {
       console.error('Error loading explanation:', error);
       setViewState('empty');
@@ -536,9 +536,7 @@ Source: ${paper.url}
 
   async function handleRegenerate() {
     try {
-      const result = await chrome.storage.local.get(['currentPaper']);
-
-      if (!result.currentPaper) {
+      if (!storedPaper) {
         alert('No paper found. Please detect a paper first.');
         return;
       }
@@ -546,7 +544,7 @@ Source: ${paper.url}
       setIsRegenerating(true);
       setViewState('loading');
 
-      const response = await ChromeService.explainPaper(result.currentPaper);
+      const response = await ChromeService.explainPaper(storedPaper);
 
       if (response.success) {
         await loadExplanation();
@@ -608,22 +606,14 @@ Source: ${paper.url}
     // Load Q&A history for new paper
     setQaHistory(paperToUse.qaHistory || []);
 
-    // Try to load explanation and analysis for this paper
-    const result = await chrome.storage.local.get(['lastExplanation', 'lastAnalysis']);
-
-    // Prioritize loading from StoredPaper fields, fall back to chrome.storage
+    // Load explanation and summary from IndexedDB (single source of truth)
     if (paperToUse.explanation && paperToUse.summary) {
-      console.log('[Sidepanel] Loading explanation from StoredPaper');
+      console.log('[Sidepanel] Loading explanation from IndexedDB');
       setData({
         paper: paperToUse,
         explanation: paperToUse.explanation,
         summary: paperToUse.summary,
       });
-      setActiveTab('summary');
-      setViewState('content');
-    } else if (result.lastExplanation?.paper?.url === paperToUse.url) {
-      console.log('[Sidepanel] Loading explanation from chrome.storage');
-      setData(result.lastExplanation);
       setActiveTab('summary');
       setViewState('content');
     } else {
@@ -638,13 +628,10 @@ Source: ${paper.url}
       setViewState('stored-only');
     }
 
-    // Load analysis from fresh StoredPaper data or chrome.storage
+    // Load analysis from IndexedDB (single source of truth)
     if (paperToUse.analysis) {
-      console.log('[Sidepanel] Loading analysis from StoredPaper (fresh data)');
+      console.log('[Sidepanel] Loading analysis from IndexedDB');
       setAnalysis(paperToUse.analysis);
-    } else if (result.lastAnalysis?.paper?.url === paperToUse.url) {
-      console.log('[Sidepanel] Loading analysis from chrome.storage');
-      setAnalysis(result.lastAnalysis.analysis);
     } else {
       // Paper switching should NOT auto-trigger analysis (prevents retrigger bug)
       // Analysis is only auto-triggered during initial load in loadExplanation()
@@ -652,9 +639,9 @@ Source: ${paper.url}
       setAnalysis(null);
     }
 
-    // Load glossary from fresh StoredPaper data
+    // Load glossary from IndexedDB (single source of truth)
     if (paperToUse.glossary) {
-      console.log('[Sidepanel] Loading glossary for paper:', paperToUse.title);
+      console.log('[Sidepanel] Loading glossary from IndexedDB');
       setGlossary(paperToUse.glossary);
     } else {
       // Paper switching should NOT auto-trigger glossary generation (prevents retrigger bug)
@@ -716,10 +703,6 @@ Source: ${paper.url}
       setQaHistory([]);
       setViewState('empty');
 
-      // Clear Chrome storage
-      await chrome.storage.local.remove(['lastExplanation', 'lastAnalysis', 'currentPaper']);
-      console.log('[Sidepanel] Cleared Chrome storage');
-
       if (successCount < paperNavigation.allPapers.length) {
         alert(`Deleted ${successCount} out of ${paperNavigation.allPapers.length} papers. Some papers could not be deleted.`);
       }
@@ -734,31 +717,28 @@ Source: ${paper.url}
   }
 
   async function handleClearAllStorage() {
-    if (!confirm('Clear all Chrome storage? This will remove any ghost papers and reset the sidepanel to a clean state.')) {
+    if (!confirm('Reset sidepanel state? This will reload all data from IndexedDB.')) {
       return;
     }
 
     try {
-      console.log('[Sidepanel] Clearing all Chrome storage...');
-
-      // Clear Chrome storage
-      await chrome.storage.local.remove(['lastExplanation', 'lastAnalysis', 'currentPaper']);
-      console.log('[Sidepanel] ✓ Chrome storage cleared');
+      console.log('[Sidepanel] Resetting sidepanel state...');
 
       // Reset all component state
       setData(null);
       setAnalysis(null);
+      setGlossary(null);
       setQaHistory([]);
       setStoredPaper(null);
       setViewState('empty');
 
-      // Reload to verify everything is cleared
+      // Reload from IndexedDB (single source of truth)
       await loadExplanation();
 
-      alert('Chrome storage cleared successfully. If you still see ghost papers, try reloading the extension.');
+      console.log('[Sidepanel] ✓ Sidepanel state reset and reloaded from IndexedDB');
     } catch (error) {
-      console.error('[Sidepanel] Error clearing storage:', error);
-      alert('Failed to clear storage. Please try again.');
+      console.error('[Sidepanel] Error resetting state:', error);
+      alert('Failed to reset state. Please try again.');
     }
   }
 

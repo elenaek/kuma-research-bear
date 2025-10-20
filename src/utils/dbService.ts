@@ -357,7 +357,7 @@ export async function updatePaperQAHistory(paperId: string, qaHistory: any[]): P
     if (!paper) {
       console.error('Paper not found for Q&A history update:', paperId);
       db.close();
-      return false;
+      throw new Error(`Paper not found for Q&A history update: ${paperId}`);
     }
 
     // Update the paper with new Q&A history
@@ -378,7 +378,7 @@ export async function updatePaperQAHistory(paperId: string, qaHistory: any[]): P
   } catch (error) {
     db.close();
     console.error('Error updating Q&A history:', error);
-    return false;
+    throw error;
   }
 }
 
@@ -406,7 +406,7 @@ export async function updatePaperExplanation(
     if (!paper) {
       console.error('Paper not found for explanation update:', paperId);
       db.close();
-      return false;
+      throw new Error(`Paper not found for explanation update: ${paperId}`);
     }
 
     // Update the paper with explanation and summary
@@ -428,7 +428,7 @@ export async function updatePaperExplanation(
   } catch (error) {
     db.close();
     console.error('Error updating explanation:', error);
-    return false;
+    throw error;
   }
 }
 
@@ -439,8 +439,8 @@ export async function updatePaperAnalysis(paperId: string, analysis: any): Promi
   const db = await initDB();
 
   try {
-    // Get the paper first
-    const transaction = db.transaction([PAPERS_STORE], 'readonly');
+    // Use single readwrite transaction for atomic read-modify-write
+    const transaction = db.transaction([PAPERS_STORE], 'readwrite');
     const store = transaction.objectStore(PAPERS_STORE);
 
     const paper = await new Promise<StoredPaper | null>((resolve) => {
@@ -452,17 +452,16 @@ export async function updatePaperAnalysis(paperId: string, analysis: any): Promi
     if (!paper) {
       console.error('Paper not found for analysis update:', paperId);
       db.close();
-      return false;
+      throw new Error(`Paper not found for analysis update: ${paperId}`);
     }
 
     // Update the paper with analysis
     paper.analysis = analysis;
     paper.lastAccessedAt = Date.now();
 
-    const updateTransaction = db.transaction([PAPERS_STORE], 'readwrite');
-    const updateStore = updateTransaction.objectStore(PAPERS_STORE);
+    // Write in the same transaction (prevents race conditions)
     await new Promise<void>((resolve, reject) => {
-      const request = updateStore.put(paper);
+      const request = store.put(paper);
       request.onsuccess = () => resolve();
       request.onerror = () => reject(new Error('Failed to update analysis'));
     });
@@ -473,7 +472,7 @@ export async function updatePaperAnalysis(paperId: string, analysis: any): Promi
   } catch (error) {
     db.close();
     console.error('Error updating analysis:', error);
-    return false;
+    throw error;
   }
 }
 
@@ -484,8 +483,8 @@ export async function updatePaperGlossary(paperId: string, glossary: any): Promi
   const db = await initDB();
 
   try {
-    // Get the paper first
-    const transaction = db.transaction([PAPERS_STORE], 'readonly');
+    // Use single readwrite transaction for atomic read-modify-write
+    const transaction = db.transaction([PAPERS_STORE], 'readwrite');
     const store = transaction.objectStore(PAPERS_STORE);
 
     const paper = await new Promise<StoredPaper | null>((resolve) => {
@@ -497,17 +496,16 @@ export async function updatePaperGlossary(paperId: string, glossary: any): Promi
     if (!paper) {
       console.error('Paper not found for glossary update:', paperId);
       db.close();
-      return false;
+      throw new Error(`Paper not found for glossary update: ${paperId}`);
     }
 
     // Update the paper with glossary
     paper.glossary = glossary;
     paper.lastAccessedAt = Date.now();
 
-    const updateTransaction = db.transaction([PAPERS_STORE], 'readwrite');
-    const updateStore = updateTransaction.objectStore(PAPERS_STORE);
+    // Write in the same transaction (prevents race conditions)
     await new Promise<void>((resolve, reject) => {
-      const request = updateStore.put(paper);
+      const request = store.put(paper);
       request.onsuccess = () => resolve();
       request.onerror = () => reject(new Error('Failed to update glossary'));
     });
@@ -518,7 +516,7 @@ export async function updatePaperGlossary(paperId: string, glossary: any): Promi
   } catch (error) {
     db.close();
     console.error('Error updating glossary:', error);
-    return false;
+    throw error;
   }
 }
 

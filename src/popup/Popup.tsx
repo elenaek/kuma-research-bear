@@ -47,7 +47,9 @@ export function Popup() {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
       // Step 1: Check database for stored paper (if URL exists)
+      let paperUrl: string | undefined;
       if (tab.url) {
+        paperUrl = tab.url;
         console.log('[Popup] Checking database for stored paper:', tab.url);
         const status = await paperStatus.checkStoredPaper(tab.url);
 
@@ -64,9 +66,9 @@ export function Popup() {
         }
       }
 
-      // Step 2: Check background for active operations
+      // Step 2: Check background for active operations (pass URL to prevent overwriting completion status)
       if (tab.id) {
-        await operationState.checkOperationState(tab.id);
+        await operationState.checkOperationState(tab.id, paperUrl);
       }
     } catch (error) {
       console.error('[Popup] Failed to check initial state:', error);
