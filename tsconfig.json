@@ -12,7 +12,9 @@
     "allowSyntheticDefaultImports": true,
     "types": ["chrome", "vite/client"],
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
