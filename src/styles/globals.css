@@ -1,6 +1,25 @@
 @import "tailwindcss";
+
+/* ============================================
+   Animation Variables & Foundations
+   ============================================ */
+:root {
+  /* Animation Timing */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 350ms;
+  --duration-slower: 500ms;
+
+  /* Easing Functions */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
 html {
   scrollbar-width: thin;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -10,6 +29,123 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* ============================================
+   Animation Keyframes
+   ============================================ */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ============================================
+   Utility Animation Classes
+   ============================================ */
+.animate-fade-in {
+  animation: fadeIn var(--duration-normal) var(--ease-out);
+}
+
+.animate-slide-in-up {
+  animation: slideInUp var(--duration-normal) var(--ease-out);
+}
+
+.animate-slide-in-down {
+  animation: slideInDown var(--duration-normal) var(--ease-out);
+}
+
+.animate-scale-in {
+  animation: scaleIn var(--duration-normal) var(--ease-out);
+}
+
+.animate-slide-in-right {
+  animation: slideInRight var(--duration-normal) var(--ease-out);
+}
+
+/* Staggered animations for lists */
+.stagger-item {
+  animation: fadeIn var(--duration-normal) var(--ease-out) backwards;
+}
+
+.stagger-item:nth-child(1) { animation-delay: 0ms; }
+.stagger-item:nth-child(2) { animation-delay: 50ms; }
+.stagger-item:nth-child(3) { animation-delay: 100ms; }
+.stagger-item:nth-child(4) { animation-delay: 150ms; }
+.stagger-item:nth-child(5) { animation-delay: 200ms; }
+.stagger-item:nth-child(n+6) { animation-delay: 250ms; }
+
+/* ============================================
+   Button Styles with Enhanced Interactions
+   ============================================ */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -18,8 +154,9 @@ body {
   padding: 0.5rem 1rem;
   border-radius: 0.5rem;
   font-weight: 500;
-  transition-property: all;
-  transition-duration: 200ms;
+  transition: all var(--duration-normal) var(--ease-out);
+  position: relative;
+  overflow: hidden;
 }
 
 .btn:disabled {
@@ -27,13 +164,25 @@ body {
   cursor: not-allowed;
 }
 
+.btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.btn:not(:disabled):active {
+  transform: translateY(0) scale(0.98);
+  transition-duration: var(--duration-fast);
+}
+
 .btn-primary {
   background-color: #0284c7;
   color: white;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .btn-primary:hover:not(:disabled) {
   background-color: #0369a1;
+  box-shadow: 0 10px 15px -3px rgba(2, 132, 199, 0.2), 0 4px 6px -2px rgba(2, 132, 199, 0.1);
 }
 
 .btn-primary:active:not(:disabled) {
@@ -43,16 +192,29 @@ body {
 .btn-success {
   background-color: #32964d;
   color: white;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.btn-success:hover:not(:disabled) {
+  background-color: #2d8645;
+  box-shadow: 0 10px 15px -3px rgba(50, 150, 77, 0.2), 0 4px 6px -2px rgba(50, 150, 77, 0.1);
 }
 
 .btn-kuma-working {
   background-color: #9c6640;
   color: white;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.btn-kuma-working:hover:not(:disabled) {
+  background-color: #8a5938;
+  box-shadow: 0 10px 15px -3px rgba(156, 102, 64, 0.2), 0 4px 6px -2px rgba(156, 102, 64, 0.1);
 }
 
 .btn-secondary {
   background-color: #f3f4f6;
   color: #374151;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 .btn-secondary:hover:not(:disabled) {
@@ -63,12 +225,27 @@ body {
   background-color: #d1d5db;
 }
 
+/* ============================================
+   Card Styles with Enhanced Interactions
+   ============================================ */
 .card {
   background-color: white;
   border-radius: 0.5rem;
   border: 1px solid #e5e7eb;
   padding: 1rem;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+/* Interactive cards (with onclick or interactive elements) */
+.card-interactive {
+  cursor: pointer;
+}
+
+.card-interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border-color: #d1d5db;
 }
 
 .status-dot {
@@ -235,4 +412,51 @@ body {
   visibility: visible;
   opacity: 1;
   transition-delay: 0.3s;
+}
+
+/* ============================================
+   Enhanced Input Styles
+   ============================================ */
+input[type="text"],
+input[type="search"],
+textarea,
+select {
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+input[type="text"]:focus,
+input[type="search"]:focus,
+textarea:focus,
+select:focus {
+  transform: scale(1.01);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* ============================================
+   Tab Content Transitions
+   ============================================ */
+.tab-content {
+  animation: fadeIn var(--duration-normal) var(--ease-out);
+}
+
+.tab-content-enter {
+  animation: slideInUp var(--duration-normal) var(--ease-out);
+}
+
+/* ============================================
+   Loading States
+   ============================================ */
+.loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    #f3f4f6 0%,
+    #e5e7eb 50%,
+    #f3f4f6 100%
+  );
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+.spinner-fade-in {
+  animation: fadeIn var(--duration-fast) var(--ease-out);
 }

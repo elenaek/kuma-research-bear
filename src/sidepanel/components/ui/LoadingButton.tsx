@@ -38,12 +38,14 @@ export function LoadingButton(props: LoadingButtonProps) {
       title={title}
     >
       {loading ? (
-        <>
+        <div class="flex items-center gap-2 spinner-fade-in">
           <Loader size={16} class="animate-spin" />
           {loadingText && <span>{loadingText}</span>}
-        </>
+        </div>
       ) : (
-        children
+        <div class="flex items-center gap-2">
+          {children}
+        </div>
       )}
     </button>
   );

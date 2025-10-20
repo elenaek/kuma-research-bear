@@ -27,18 +27,18 @@ export function PaperInfoCard(props: PaperInfoCardProps) {
   );
 
   return (
-    <div class="card mb-6">
+    <div class="card mb-6 animate-slide-in-up">
       {/* Title and Badges */}
       <div class="flex items-start justify-between gap-4 mb-3">
         <h2 class="text-lg font-semibold text-gray-900 flex-1">{paper.title}</h2>
         <div class="flex gap-2 shrink-0">
           {hasDetailedMetadata && (
-            <span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 capitalize">
+            <span class="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 capitalize animate-fade-in" style={{ animationDelay: '100ms' }}>
               {paper.source.replace('-', ' ')}
             </span>
           )}
           {storedPaper && (
-            <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 flex items-center gap-1">
+            <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 flex items-center gap-1 animate-scale-in" style={{ animationDelay: '150ms' }}>
               <Database size={12} />
               Stored
             </span>
@@ -146,9 +146,27 @@ export function PaperInfoCard(props: PaperInfoCardProps) {
           href={paper.url}
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-700 font-medium"
+          class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-blue-600 font-medium"
+          style={{
+            transition: 'all var(--duration-normal) var(--ease-out)',
+          }}
+          onMouseEnter={(e) => {
+            const icon = e.currentTarget.querySelector('svg');
+            if (icon) {
+              (icon as SVGElement).style.transform = 'translateX(2px) translateY(-2px)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            const icon = e.currentTarget.querySelector('svg');
+            if (icon) {
+              (icon as SVGElement).style.transform = 'translateX(0) translateY(0)';
+            }
+          }}
         >
-          <ExternalLink size={14} />
+          <ExternalLink
+            size={14}
+            style={{ transition: 'transform var(--duration-normal) var(--ease-out)' }}
+          />
           {hasDetailedMetadata ? 'View Original' : 'View Original Paper'}
         </a>
 
@@ -157,9 +175,27 @@ export function PaperInfoCard(props: PaperInfoCardProps) {
             href={paper.metadata.pdfUrl}
             target="_blank"
             rel="noopener noreferrer"
-            class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-700 font-medium"
+            class="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-blue-600 font-medium"
+            style={{
+              transition: 'all var(--duration-normal) var(--ease-out)',
+            }}
+            onMouseEnter={(e) => {
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'translateY(-2px)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'translateY(0)';
+              }
+            }}
           >
-            <Download size={14} />
+            <Download
+              size={14}
+              style={{ transition: 'transform var(--duration-normal) var(--ease-out)' }}
+            />
             Download PDF
           </a>
         )}

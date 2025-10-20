@@ -950,35 +950,43 @@ Source: ${paper.url}
             <div class="space-y-4">
               {/* Analysis Tab Content */}
               {activeTab === 'analysis' && (
-                <AnalysisSection
-                  analysis={analysis}
-                  isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-                />
+                <div class="tab-content space-y-4">
+                  <AnalysisSection
+                    analysis={analysis}
+                    isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+                  />
+                </div>
               )}
 
               {/* Q&A Tab Content */}
               {activeTab === 'qa' && (
-                <QASection
-                  question={question}
-                  setQuestion={setQuestion}
-                  isAsking={isAsking}
-                  qaHistory={qaHistory}
-                  storedPaper={storedPaper}
-                  onAskQuestion={handleAskQuestion}
-                />
+                <div class="tab-content space-y-4">
+                  <QASection
+                    question={question}
+                    setQuestion={setQuestion}
+                    isAsking={isAsking}
+                    qaHistory={qaHistory}
+                    storedPaper={storedPaper}
+                    onAskQuestion={handleAskQuestion}
+                  />
+                </div>
               )}
 
               {/* Glossary Tab */}
               {activeTab === 'glossary' && (
-                <GlossarySection
-                  glossary={glossary}
-                  isGenerating={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-                />
+                <div class="tab-content space-y-4">
+                  <GlossarySection
+                    glossary={glossary}
+                    isGenerating={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
+                  />
+                </div>
               )}
 
               {/* Original Tab */}
               {activeTab === 'original' && (
-                <OriginalPaperTab paper={data?.paper || null} />
+                <div class="tab-content space-y-4">
+                  <OriginalPaperTab paper={data?.paper || null} />
+                </div>
               )}
             </div>
           </div>
@@ -1112,37 +1120,53 @@ Source: ${paper.url}
 
           {/* Tab Content */}
           <div class="space-y-4">
-            {activeTab === 'summary' && <SummaryTab summary={data?.summary || null} />}
+            {activeTab === 'summary' && (
+              <div class="tab-content space-y-4">
+                <SummaryTab summary={data?.summary || null} />
+              </div>
+            )}
 
-            {activeTab === 'explanation' && <ExplanationTab explanation={data?.explanation || null} />}
+            {activeTab === 'explanation' && (
+              <div class="tab-content space-y-4">
+                <ExplanationTab explanation={data?.explanation || null} />
+              </div>
+            )}
 
             {activeTab === 'analysis' && (
-              <AnalysisSection
-                analysis={analysis}
-                isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-              />
+              <div class="tab-content space-y-4">
+                <AnalysisSection
+                  analysis={analysis}
+                  isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+                />
+              </div>
             )}
 
             {activeTab === 'qa' && (
-              <QASection
-                question={question}
-                setQuestion={setQuestion}
-                isAsking={isAsking}
-                qaHistory={qaHistory}
-                storedPaper={storedPaper}
-                onAskQuestion={handleAskQuestion}
-              />
+              <div class="tab-content space-y-4">
+                <QASection
+                  question={question}
+                  setQuestion={setQuestion}
+                  isAsking={isAsking}
+                  qaHistory={qaHistory}
+                  storedPaper={storedPaper}
+                  onAskQuestion={handleAskQuestion}
+                />
+              </div>
             )}
 
             {activeTab === 'glossary' && (
-              <GlossarySection
-                glossary={glossary}
-                isGenerating={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-              />
+              <div class="tab-content space-y-4">
+                <GlossarySection
+                  glossary={glossary}
+                  isGenerating={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
+                />
+              </div>
             )}
 
             {activeTab === 'original' && (
-              <OriginalPaperTab paper={data?.paper || null} />
+              <div class="tab-content space-y-4">
+                <OriginalPaperTab paper={data?.paper || null} />
+              </div>
             )}
           </div>
 

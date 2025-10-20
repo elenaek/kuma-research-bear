@@ -20,7 +20,7 @@ export function QASection(props: QASectionProps) {
 
   return (
     <>
-      <div class="card">
+      <div class="card animate-scale-in">
         <h3 class="text-base font-semibold text-gray-900 mb-3">Ask a Question</h3>
         <div class="flex gap-2 mb-3">
           <input
@@ -31,6 +31,7 @@ export function QASection(props: QASectionProps) {
             placeholder="Ask anything about this paper..."
             disabled={isAsking}
             class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+            style={{ transition: 'all var(--duration-normal) var(--ease-out)' }}
           />
           <button
             onClick={onAskQuestion}
@@ -38,13 +39,13 @@ export function QASection(props: QASectionProps) {
             class="btn btn-primary px-4 hover:cursor-pointer"
           >
             {isAsking ? (
-              <Loader size={16} class="animate-spin" />
+              <Loader size={16} class="animate-spin spinner-fade-in" />
             ) : (
               'Ask'
             )}
           </button>
         </div>
-        <p class="text-xs text-gray-500">
+        <p class="text-xs text-gray-500 animate-fade-in" style={{ animationDuration: '1000ms' }}>
           Kuma will search through {storedPaper?.chunkCount} content chunks to find relevant information.
         </p>
       </div>
@@ -53,7 +54,7 @@ export function QASection(props: QASectionProps) {
       {qaHistory.length > 0 ? (
         <div class="space-y-4">
           {qaHistory.map((qa, idx) => (
-            <div key={idx} class="card">
+            <div key={idx} class="card stagger-item" style={{ animationDelay: `${idx * 50}ms` }}>
               {/* Question */}
               <div class="mb-3 pb-3 border-b border-gray-200">
                 <p class="text-sm font-semibold text-gray-900 mb-1">Question:</p>

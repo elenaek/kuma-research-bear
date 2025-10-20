@@ -48,7 +48,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
   return (
     <>
       {/* Methodology Analysis */}
-      <div class="card">
+      <div class="card animate-scale-in">
         <div class="flex items-center gap-2 mb-3">
           <FileText size={18} class="text-blue-600" />
           <h3 class="text-base font-semibold text-gray-900">Methodology</h3>
@@ -130,7 +130,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
       </div>
 
       {/* Confounders & Biases */}
-      <div class="card">
+      <div class="card animate-scale-in" style={{ animationDelay: '100ms' }}>
         <div class="flex items-center gap-2 mb-3">
           <AlertTriangle size={18} class="text-orange-600" />
           <h3 class="text-lg font-semibold text-gray-900">Confounders & Biases</h3>
@@ -185,7 +185,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
       </div>
 
       {/* Implications */}
-      <div class="card">
+      <div class="card animate-scale-in" style={{ animationDelay: '200ms' }}>
         <div class="flex items-center gap-2 mb-3">
           <TrendingUp size={18} class="text-blue-600" />
           <h3 class="text-base font-semibold text-gray-900">Implications</h3>
@@ -233,7 +233,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
       </div>
 
       {/* Limitations */}
-      <div class="card">
+      <div class="card animate-scale-in" style={{ animationDelay: '300ms' }}>
         <div class="flex items-center gap-2 mb-3">
           <AlertCircle size={18} class="text-red-600" />
           <h3 class="text-base font-semibold text-gray-900">Limitations</h3>

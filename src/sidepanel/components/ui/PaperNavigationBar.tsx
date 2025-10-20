@@ -39,7 +39,7 @@ export function PaperNavigationBar(props: PaperNavigationBarProps) {
   }
 
   return (
-    <div class="card mb-4 bg-gray-50">
+    <div class="card mb-4 bg-gray-50 animate-slide-in-up">
       <div class="flex items-center justify-between gap-3">
         {/* Previous Button */}
         <button
@@ -56,6 +56,7 @@ export function PaperNavigationBar(props: PaperNavigationBarProps) {
           value={currentIndex}
           onChange={(e) => onSelect(parseInt((e.target as HTMLSelectElement).value))}
           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          style={{ transition: 'all var(--duration-normal) var(--ease-out)' }}
         >
           {papers.map((paper, idx) => (
             <option key={paper.id} value={idx}>
@@ -65,7 +66,7 @@ export function PaperNavigationBar(props: PaperNavigationBarProps) {
         </select>
 
         {/* Paper Counter */}
-        <span class="text-sm text-gray-600 whitespace-nowrap">
+        <span class="text-sm text-gray-600 whitespace-nowrap animate-fade-in">
           {currentIndex + 1} of {papers.length}
         </span>
 
@@ -86,7 +87,7 @@ export function PaperNavigationBar(props: PaperNavigationBarProps) {
           class="btn btn-secondary px-3 py-2 text-red-600 hover:bg-red-50 hover:cursor-pointer"
           title="Delete Paper"
         >
-          {isDeleting ? <Loader size={16} class="animate-spin" /> : <Trash2 size={16} />}
+          {isDeleting ? <Loader size={16} class="animate-spin spinner-fade-in" /> : <Trash2 size={16} />}
         </button>
       </div>
 

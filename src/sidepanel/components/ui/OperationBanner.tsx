@@ -59,13 +59,13 @@ export function OperationBanner(props: OperationBannerProps) {
   const Icon = CustomIcon || styles.icon;
 
   return (
-    <div class={`card mb-4 ${styles.bg} ${styles.border}`}>
+    <div class={`card mb-4 ${styles.bg} ${styles.border} animate-slide-in-down`}>
       <div class="flex items-center gap-3">
         <Icon size={status === 'loading' ? 24 : 20} class={styles.iconClass} />
         <div class="flex-1">
           <p class={`text-sm font-medium ${styles.textColor}`}>{title}</p>
           {subtitle && (
-            <p class={`text-xs ${styles.textColor} mt-1`}>{subtitle}</p>
+            <p class={`text-xs ${styles.textColor} mt-1 animate-fade-in`} style={{ animationDelay: '100ms' }}>{subtitle}</p>
           )}
         </div>
       </div>

@@ -20,16 +20,27 @@ export function TabButton(props: TabButtonProps) {
   return (
     <button
       onClick={onClick}
-      class={`px-4 py-2 font-medium transition-colors border-b-2 flex items-center gap-2 ${
+      class={`px-4 py-2 font-medium border-b-2 flex items-center gap-2 relative overflow-hidden ${
         active
           ? 'border-blue-600 text-blue-600'
-          : 'border-transparent text-gray-600 hover:text-gray-800'
-      } ${disabled ? 'opacity-50' : ''}`}
+          : 'border-transparent text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+      style={{
+        transition: 'all var(--duration-normal) var(--ease-out)'
+      }}
       title={title}
       disabled={disabled}
     >
-      <span>{children}</span>
-      {loading && <Loader size={14} class="animate-spin" />}
+      <span class="relative z-10">{children}</span>
+      {loading && <Loader size={14} class="animate-spin spinner-fade-in" />}
+
+      {/* Animated underline */}
+      {active && (
+        <div
+          class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 animate-slide-in-right"
+          style={{ borderBottom: 'none' }}
+        />
+      )}
     </button>
   );
 }
