@@ -1,5 +1,6 @@
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer.tsx';
 import { SummaryResult } from '../../../types/index.ts';
+import { CollapsibleSection } from '../ui/CollapsibleSection.tsx';
 
 interface SummaryTabProps {
   summary: SummaryResult | null;
@@ -18,13 +19,11 @@ export function SummaryTab(props: SummaryTabProps) {
 
   return (
     <>
-      <div class="card">
-        <h3 class="text-base font-semibold text-gray-900 mb-3">Quick Summary</h3>
+      <CollapsibleSection title="Quick Summary" defaultOpen={true}>
         <MarkdownRenderer content={summary.summary || ''} />
-      </div>
+      </CollapsibleSection>
 
-      <div class="card">
-        <h3 class="text-base font-semibold text-gray-900 mb-3">Key Points</h3>
+      <CollapsibleSection title="Key Points" defaultOpen={true}>
         <ul class="space-y-2">
           {summary.keyPoints.map((point, index) => (
             <li key={index} class="flex gap-2 text-gray-700">
@@ -33,7 +32,7 @@ export function SummaryTab(props: SummaryTabProps) {
             </li>
           ))}
         </ul>
-      </div>
+      </CollapsibleSection>
     </>
   );
 }

@@ -79,6 +79,7 @@ export function Sidepanel() {
   const [question, setQuestion] = useState('');
   const [isAsking, setIsAsking] = useState(false);
   const [qaHistory, setQaHistory] = useState<QuestionAnswer[]>([]);
+  const [newlyAddedQAIndex, setNewlyAddedQAIndex] = useState<number | null>(null);
 
   // Delete all state
   const [isDeletingAll, setIsDeletingAll] = useState(false);
@@ -126,6 +127,13 @@ export function Sidepanel() {
   useEffect(() => {
     currentPaperUrlRef.current = storedPaper?.url || null;
   }, [storedPaper]);
+
+  // Reset newly added Q&A index when navigating away from Q&A tab
+  useEffect(() => {
+    if (activeTab !== 'qa') {
+      setNewlyAddedQAIndex(null);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     loadExplanation();
@@ -553,6 +561,11 @@ export function Sidepanel() {
         setQaHistory(newHistory);
         setQuestion(''); // Clear input
 
+        // If user is on Q&A tab when answer arrives, mark it as newly added
+        if (activeTab === 'qa') {
+          setNewlyAddedQAIndex(0); // New answer is at index 0 (prepended to array)
+        }
+
         // Save Q&A history to database
         if (storedPaper) {
           await ChromeService.updatePaperQAHistory(storedPaper.id, newHistory);
@@ -901,14 +914,14 @@ Source: ${paper.url}
             )}
 
             {/* Explanation In Progress Banner */}
-            {isExplainingInBackground && (
+            {/* {isExplainingInBackground && (
               <OperationBanner
                 status="loading"
                 title="🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)"
                 subtitle="Generating summary and simplified explanation. This usually takes 10-20 seconds"
                 gradient={true}
               />
-            )}
+            )} */}
 
             {/* Paper Info Card */}
             <PaperInfoCard paper={data?.paper || null} storedPaper={storedPaper} />
@@ -1015,6 +1028,7 @@ Source: ${paper.url}
                     qaHistory={qaHistory}
                     storedPaper={storedPaper}
                     onAskQuestion={handleAskQuestion}
+                    newlyAddedQAIndex={newlyAddedQAIndex}
                   />
                 </div>
               )}
@@ -1108,14 +1122,14 @@ Source: ${paper.url}
           )}
 
           {/* Explanation In Progress Banner */}
-          {isExplainingInBackground && (
+          {/* {isExplainingInBackground && (
             <OperationBanner
               status="loading"
               title="🐻 Kuma is explaining the paper..."
               subtitle="Generating summary and simplified explanation. This usually takes 10-20 seconds"
               gradient={true}
             />
-          )}
+          )} */}
 
           {/* Paper Info Card */}
           <PaperInfoCard paper={data?.paper || null} storedPaper={storedPaper} />
@@ -1263,6 +1277,7 @@ Source: ${paper.url}
                   qaHistory={qaHistory}
                   storedPaper={storedPaper}
                   onAskQuestion={handleAskQuestion}
+                  newlyAddedQAIndex={newlyAddedQAIndex}
                 />
               </div>
             )}

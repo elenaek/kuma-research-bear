@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { ChevronDown, ChevronUp, BookOpen, Search, X } from 'lucide-preact';
 import { Tooltip } from './Tooltip.tsx';
-import { GlossaryTerm, StudyContext } from '../types/index.ts';
+import { GlossaryTerm } from '../types/index.ts';
 
 interface GlossaryCardProps {
   term: GlossaryTerm;

@@ -1,4 +1,5 @@
 import { ResearchPaper } from '../../types/index.ts';
+import { CollapsibleSection } from './ui/CollapsibleSection.tsx';
 
 interface OriginalPaperTabProps {
   paper: ResearchPaper | null;
@@ -16,11 +17,10 @@ export function OriginalPaperTab(props: OriginalPaperTabProps) {
   }
 
   return (
-    <div class="card">
-      <h3 class="text-base font-semibold text-gray-900 mb-3">Original Abstract</h3>
+    <CollapsibleSection title="Original Abstract" defaultOpen={true}>
       <div class="text-gray-700 leading-relaxed">
         {paper.abstract}
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }

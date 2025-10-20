@@ -1,4 +1,6 @@
 import { Loader } from 'lucide-preact';
+import { useState } from 'preact/hooks';
+import { ChevronDown, ChevronUp } from 'lucide-preact';
 import { QuestionAnswer, StoredPaper } from '../../types/index.ts';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
 
@@ -9,6 +11,78 @@ interface QASectionProps {
   qaHistory: QuestionAnswer[];
   storedPaper: StoredPaper | null;
   onAskQuestion: () => void;
+  newlyAddedQAIndex?: number | null;
+}
+
+interface QACardProps {
+  qa: QuestionAnswer;
+  index: number;
+  defaultOpen: boolean;
+}
+
+/**
+ * Individual Q&A Card Component
+ * Collapsible card for each question-answer pair
+ */
+function QACard(props: QACardProps) {
+  const { qa, index, defaultOpen } = props;
+  const [isExpanded, setIsExpanded] = useState(defaultOpen);
+
+  return (
+    <div class="card stagger-item" style={{ animationDelay: `${index * 50}ms` }}>
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        class="w-full text-left focus:outline-none hover:cursor-pointer"
+        aria-expanded={isExpanded}
+      >
+        <div class="flex items-start justify-between gap-2 mb-3 pb-3 border-b border-gray-200">
+          <div class="flex-grow">
+            <p class="text-sm font-semibold text-gray-900 mb-1">Question:</p>
+            <p class="text-sm text-gray-700">{qa.question}</p>
+          </div>
+          <div class="flex-shrink-0 mt-1">
+            {isExpanded ? (
+              <ChevronUp size={16} class="text-gray-500" />
+            ) : (
+              <ChevronDown size={16} class="text-gray-500" />
+            )}
+          </div>
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div class="animate-fadeIn">
+          {/* Answer */}
+          <div class="mb-3">
+            <p class="text-sm font-semibold text-gray-900 mb-1">Answer:</p>
+            <MarkdownRenderer content={qa.answer} className="text-sm" />
+          </div>
+
+          {/* Sources */}
+          {qa.sources.length > 0 && (
+            <div class="pt-3 border-t border-gray-200">
+              <p class="text-xs font-medium text-gray-600 mb-1">Sources:</p>
+              <div class="flex flex-wrap gap-1">
+                {qa.sources.map((source, sIdx) => (
+                  <span
+                    key={sIdx}
+                    class="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700"
+                  >
+                    {source}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Timestamp */}
+          <div class="mt-2 text-xs text-gray-500">
+            {new Date(qa.timestamp).toLocaleString()}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -16,7 +90,7 @@ interface QASectionProps {
  * Displays question input form and Q&A history
  */
 export function QASection(props: QASectionProps) {
-  const { question, setQuestion, isAsking, qaHistory, storedPaper, onAskQuestion } = props;
+  const { question, setQuestion, isAsking, qaHistory, storedPaper, onAskQuestion, newlyAddedQAIndex } = props;
 
   return (
     <>
@@ -54,41 +128,12 @@ export function QASection(props: QASectionProps) {
       {qaHistory.length > 0 ? (
         <div class="space-y-4">
           {qaHistory.map((qa, idx) => (
-            <div key={idx} class="card stagger-item" style={{ animationDelay: `${idx * 50}ms` }}>
-              {/* Question */}
-              <div class="mb-3 pb-3 border-b border-gray-200">
-                <p class="text-sm font-semibold text-gray-900 mb-1">Question:</p>
-                <p class="text-sm text-gray-700">{qa.question}</p>
-              </div>
-
-              {/* Answer */}
-              <div class="mb-3">
-                <p class="text-sm font-semibold text-gray-900 mb-1">Answer:</p>
-                <MarkdownRenderer content={qa.answer} className="text-sm" />
-              </div>
-
-              {/* Sources */}
-              {qa.sources.length > 0 && (
-                <div class="pt-3 border-t border-gray-200">
-                  <p class="text-xs font-medium text-gray-600 mb-1">Sources:</p>
-                  <div class="flex flex-wrap gap-1">
-                    {qa.sources.map((source, sIdx) => (
-                      <span
-                        key={sIdx}
-                        class="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700"
-                      >
-                        {source}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Timestamp */}
-              <div class="mt-2 text-xs text-gray-500">
-                {new Date(qa.timestamp).toLocaleString()}
-              </div>
-            </div>
+            <QACard
+              key={idx}
+              qa={qa}
+              index={idx}
+              defaultOpen={idx === newlyAddedQAIndex}
+            />
           ))}
         </div>
       ) : (

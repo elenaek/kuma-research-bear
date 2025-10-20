@@ -1,5 +1,6 @@
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer.tsx';
 import { ExplanationResult } from '../../../types/index.ts';
+import { CollapsibleSection } from '../ui/CollapsibleSection.tsx';
 
 interface ExplanationTabProps {
   explanation: ExplanationResult | null;
@@ -17,9 +18,8 @@ export function ExplanationTab(props: ExplanationTabProps) {
   }
 
   return (
-    <div class="card">
-      <h3 class="text-base font-semibold text-gray-900 mb-3">Simplified Explanation</h3>
+    <CollapsibleSection title="Simplified Explanation" defaultOpen={true}>
       <MarkdownRenderer content={explanation.explanation || ''} />
-    </div>
+    </CollapsibleSection>
   );
 }
