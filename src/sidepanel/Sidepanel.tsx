@@ -100,9 +100,9 @@ export function Sidepanel() {
       // Load all paper data (synchronized with navigation)
       await loadPaperData(paper);
     },
-    onPaperDelete: () => {
+    onPaperDelete: (deletedPaper) => {
       // Clean up generation state for deleted paper
-      const deletedPaperUrl = storedPaper?.url;
+      const deletedPaperUrl = deletedPaper.url;
       if (deletedPaperUrl) {
         operationState.clearAnalyzingPaper(deletedPaperUrl);
         operationState.clearGlossaryGeneratingPaper(deletedPaperUrl);
@@ -157,10 +157,20 @@ export function Sidepanel() {
           const freshPaper = await ChromeService.getPaperByUrl(paperUrl);
 
           if (freshPaper) {
-            // Update in allPapers array
-            paperNavigation.setAllPapers(prevPapers =>
-              prevPapers.map(p => p.url === paperUrl ? freshPaper : p)
-            );
+            // Check if allPapers is currently empty
+            const currentPapers = paperNavigation.allPapers;
+
+            if (currentPapers.length === 0) {
+              // If empty, retrieve all papers from IndexedDB
+              console.log('[Sidepanel] allPapers is empty, fetching all papers from IndexedDB');
+              const allPapers = await ChromeService.getAllPapers();
+              paperNavigation.setAllPapers(allPapers);
+            } else {
+              // Otherwise, update the specific paper in the array
+              paperNavigation.setAllPapers(prevPapers =>
+                prevPapers.map(p => p.url === paperUrl ? freshPaper : p)
+              );
+            }
 
             // If this is the currently viewed paper, update display states
             // Call setState functions sequentially (not nested) to avoid timing issues
@@ -720,12 +730,8 @@ Source: ${paper.url}
 
   async function handleDeletePaper() {
     // Use hook's delete function with current paper and QA history
+    // The hook handles navigation to next paper internally
     await paperNavigation.handleDeletePaper(storedPaper, qaHistory);
-
-    // If papers remain, load the new current paper's data
-    if (paperNavigation.allPapers.length > 0) {
-      await switchToPaper(paperNavigation.currentPaperIndex, paperNavigation.allPapers);
-    }
   }
 
   function handlePrevPaper() {

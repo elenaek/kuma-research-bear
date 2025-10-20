@@ -4,7 +4,7 @@ import * as ChromeService from '../../services/ChromeService.ts';
 
 interface UsePaperNavigationProps {
   onPaperSwitch?: (paper: StoredPaper) => Promise<void>;
-  onPaperDelete?: () => void;
+  onPaperDelete?: (deletedPaper: StoredPaper) => void;
   onAllPapersDeleted?: () => void;
 }
 
@@ -113,9 +113,9 @@ export function usePaperNavigation(props: UsePaperNavigationProps = {}): UsePape
       if (success) {
         console.log('[usePaperNavigation] Paper deleted successfully');
 
-        // Notify callback
+        // Notify callback with the deleted paper
         if (onPaperDelete) {
-          onPaperDelete();
+          onPaperDelete(currentPaper);
         }
 
         // Remove from allPapers array
@@ -129,10 +129,14 @@ export function usePaperNavigation(props: UsePaperNavigationProps = {}): UsePape
             onAllPapersDeleted();
           }
         } else {
-          // Switch to previous paper, or first if we deleted the first
-          const newIndex = Math.max(0, currentPaperIndex - 1);
-          setCurrentPaperIndex(newIndex);
+          // Calculate new index: stay at same index to view "next" paper,
+          // unless we deleted the last paper (then go to new last paper)
+          const newIndex = currentPaperIndex >= newAllPapers.length
+            ? newAllPapers.length - 1  // Deleted last paper, go to new last
+            : currentPaperIndex;       // Stay at same index (next paper slides into position)
+
           // Pass newAllPapers directly to avoid race condition with state updates
+          // Note: switchToPaper will set currentPaperIndex internally
           await switchToPaper(newIndex, newAllPapers);
         }
       } else {
