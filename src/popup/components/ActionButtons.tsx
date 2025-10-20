@@ -89,7 +89,7 @@ export function ActionButtons({
         }
       >
         <PanelRight size={16} />
-        {isSidepanelOpen ? 'Open in Sidepanel' : 'Open Sidepanel'}
+        {isSidepanelOpen ? 'Open in Sidepanel' : 'Open in Sidepanel'}
       </button>
     </div>
   );

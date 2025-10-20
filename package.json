@@ -31,6 +31,7 @@
     "vite-plugin-web-extension": "^4.1.6"
   },
   "dependencies": {
+    "@lottiefiles/dotlottie-web": "0.54.1",
     "@preact/preset-vite": "2.10.2",
     "autoprefixer": "10.4.21",
     "dompurify": "3.3.0",

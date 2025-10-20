@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useState, useRef } from 'preact/hooks';
 import * as ChromeService from '../services/ChromeService.ts';
 import { useAIStatus } from './hooks/useAIStatus.ts';
 import { useOperationState } from './hooks/useOperationState.ts';
@@ -7,8 +7,11 @@ import { Header } from './components/Header.tsx';
 import { AIStatusCard } from './components/AIStatusCard.tsx';
 import { PaperInfoCard } from './components/PaperInfoCard.tsx';
 import { ActionButtons } from './components/ActionButtons.tsx';
+import { LottieAnimationHandle } from './components/LottieAnimation.tsx';
 
 export function Popup() {
+  // Ref for Lottie animation control
+  const lottieRef = useRef<LottieAnimationHandle>(null);
   // Track current tab info for filtering operation state broadcasts
   const [currentTabUrl, setCurrentTabUrl] = useState<string | undefined>();
   const [currentTabId, setCurrentTabId] = useState<number | undefined>();
@@ -139,6 +142,9 @@ export function Popup() {
 
   async function handleDetectPaper() {
     try {
+      // Trigger Lottie animation
+      lottieRef.current?.playOnce();
+
       operationState.setIsDetecting(true);
       operationState.setDetectionStatus('🐻 Kuma is foraging for research papers... (Detecting paper)');
 
@@ -162,7 +168,6 @@ export function Popup() {
       // If successful, state updates will come via OPERATION_STATE_CHANGED listener
     } catch (error: any) {
       console.error('[Popup] Detection failed:', error);
-
       // Handle content script not ready
       if (error.message?.includes('Receiving end does not exist')) {
         operationState.setDetectionStatus('⚠️ Content script not ready. Please refresh the page and try again.');
@@ -191,11 +196,21 @@ export function Popup() {
     }
   }
 
+  // Determine if Lottie animation should auto-start looping
+  const isOperationActive =
+    operationState.isDetecting ||
+    operationState.isExplaining ||
+    operationState.isAnalyzing ||
+    operationState.isGeneratingGlossary;
+
+  const isComplete = operationState.completionPercentage === 100;
+  const shouldAutoLoop = isOperationActive || isComplete;
+
   return (
-    <div class="w-90 bg-gradient-to-br from-gray-50 to-gray-100">
+    <div class="w-90 max-h-80 bg-gradient-to-br from-gray-50 to-gray-100">
       <div class="p-6">
         {/* Header */}
-        <Header />
+        <Header ref={lottieRef} autoStartLoop={shouldAutoLoop} />
 
         {/* AI Status Card */}
         <AIStatusCard

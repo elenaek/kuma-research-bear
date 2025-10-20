@@ -13,11 +13,15 @@ export default defineConfig({
         'src/sidepanel/sidepanel.html',
       ],
     }),
-    // Copy PDF.js worker to dist folder
+    // Copy PDF.js worker and DotLottie WASM to dist folder
     viteStaticCopy({
       targets: [
         {
           src: 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs',
+          dest: '.',
+        },
+        {
+          src: 'node_modules/@lottiefiles/dotlottie-web/dist/dotlottie-player.wasm',
           dest: '.',
         },
       ],
