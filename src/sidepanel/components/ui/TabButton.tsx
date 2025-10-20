@@ -32,7 +32,7 @@ export function TabButton(props: TabButtonProps) {
       disabled={disabled}
     >
       <span class="relative z-10">{children}</span>
-      {loading && <Loader size={12} class="animate-spin spinner-fade-in sm:w-3.5 sm:h-3.5" />}
+      {loading && <Loader size={12} class="animate-spin sm:w-3.5 sm:h-3.5" />}
 
       {/* Animated underline */}
       {active && (

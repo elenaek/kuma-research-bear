@@ -87,7 +87,7 @@ export function PaperNavigationBar(props: PaperNavigationBarProps) {
           class="btn btn-secondary px-2 py-2 text-red-600 hover:bg-red-50 hover:cursor-pointer flex-shrink-0"
           title="Delete Paper"
         >
-          {isDeleting ? <Loader size={16} class="animate-spin spinner-fade-in" /> : <Trash2 size={16} />}
+          {isDeleting ? <Loader size={16} class="animate-spin" /> : <Trash2 size={16} />}
         </button>
       </div>
 

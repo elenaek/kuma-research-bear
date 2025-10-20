@@ -2,31 +2,9 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import { 
   Copy, 
   RefreshCw, 
-  ExternalLink, 
   FileText, 
-  Calendar, 
-  BookOpen, 
-  Hash, 
-  Download, 
-  Database, 
-  Clock, 
-  AlertCircle, 
-  CheckCircle, 
-  TrendingUp, 
-  AlertTriangle, 
-  Loader, 
-  PawPrint, 
-  ChevronLeft, 
-  ChevronRight, 
-  Trash2, 
-  Settings, 
-  ChevronDown, 
-  ChevronUp 
 } from 'lucide-preact';
 import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, GlossaryResult, MessageType } from '../types/index.ts';
-import { MarkdownRenderer } from '../components/MarkdownRenderer.tsx';
-import { Tooltip } from '../components/Tooltip.tsx';
-import { GlossaryList } from '../components/GlossaryCard.tsx';
 import { useDebounce } from './hooks/useDebounce.ts';
 import { usePaperNavigation } from './hooks/usePaperNavigation.ts';
 import { useOperationState } from './hooks/useOperationState.ts';
@@ -34,15 +12,14 @@ import { usePaperData } from './hooks/usePaperData.ts';
 import { QASection } from './components/QASection.tsx';
 import { AnalysisSection } from './components/AnalysisSection.tsx';
 import { GlossarySection } from './components/GlossarySection.tsx';
-import { PaperManagement } from './components/PaperManagement.tsx';
 import { OriginalPaperTab } from './components/OriginalPaperTab.tsx';
-import { PaperNavigationBar } from './components/ui/PaperNavigationBar.tsx';
 import { OperationBanner } from './components/ui/OperationBanner.tsx';
 import { TabButton } from './components/ui/TabButton.tsx';
-import { TabDropdown, TabOption } from './components/ui/TabDropdown.tsx';
+import { TabDropdown } from './components/ui/TabDropdown.tsx';
 import { IntegratedHeader } from './components/ui/IntegratedHeader.tsx';
 import { EmptyState } from './components/ui/EmptyState.tsx';
 import { LoadingButton } from './components/ui/LoadingButton.tsx';
+import { LottieLoader } from './components/ui/LottieLoader.tsx';
 import { DebugPanel } from './components/DebugPanel.tsx';
 import { PaperInfoCard } from './components/PaperInfoCard.tsx';
 import { AvailableFeaturesCard } from './components/AvailableFeaturesCard.tsx';
@@ -825,7 +802,7 @@ Source: ${paper.url}
     return (
       <div class="h-screen flex items-center justify-center bg-gray-50">
         <div class="text-center">
-          <div class="inline-block animate-spin rounded-full h-12 w-12 border-4 border-gray-200 border-t-blue-600 mb-4" />
+          <LottieLoader path="/lotties/kuma-thinking.lottie" size={120} className="mb-4 mx-auto" />
           {isCheckingStorage ? (
             <div>
               <p class="text-gray-600 font-medium">Kuma is retrieving papers from storage...</p>

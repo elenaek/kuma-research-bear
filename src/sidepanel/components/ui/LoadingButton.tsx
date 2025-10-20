@@ -38,7 +38,7 @@ export function LoadingButton(props: LoadingButtonProps) {
       title={title}
     >
       {loading ? (
-        <div class="flex items-center gap-2 spinner-fade-in">
+        <div class="flex items-center gap-2">
           <Loader size={16} class="animate-spin" />
           {loadingText && <span>{loadingText}</span>}
         </div>

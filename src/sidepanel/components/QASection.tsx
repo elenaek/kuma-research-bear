@@ -136,7 +136,7 @@ export function QASection(props: QASectionProps) {
             class="btn btn-primary px-4 hover:cursor-pointer w-full xs:w-auto"
           >
             {isAsking ? (
-              <Loader size={16} class="animate-spin spinner-fade-in" />
+              <Loader size={16} class="animate-spin" />
             ) : (
               'Ask'
             )}

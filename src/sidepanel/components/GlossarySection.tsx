@@ -1,6 +1,7 @@
-import { BookOpen, Loader } from 'lucide-preact';
+import { BookOpen } from 'lucide-preact';
 import { GlossaryResult } from '../../types/index.ts';
 import { GlossaryList } from '../../components/GlossaryCard.tsx';
+import { LottieLoader } from './ui/LottieLoader.tsx';
 
 interface GlossarySectionProps {
   glossary: GlossaryResult | null;
@@ -28,7 +29,7 @@ export function GlossarySection(props: GlossarySectionProps) {
     return (
       <div class="card">
         <div class="text-center py-8">
-          <Loader size={32} class="text-blue-600 mx-auto mb-3 animate-spin" />
+          <LottieLoader path="/lotties/kuma-thinking.lottie" size={64} className="mx-auto mb-3" />
           <p class="text-gray-600">Generating glossary of terms...</p>
         </div>
       </div>

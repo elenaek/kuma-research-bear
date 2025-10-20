@@ -1,8 +1,9 @@
-import { FileText, AlertTriangle, TrendingUp, AlertCircle, CheckCircle, Loader } from 'lucide-preact';
+import { FileText, AlertTriangle, TrendingUp, AlertCircle, CheckCircle } from 'lucide-preact';
 import { PaperAnalysisResult } from '../../types/index.ts';
 import { Tooltip } from '../../components/Tooltip.tsx';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
 import { CollapsibleSection } from './ui/CollapsibleSection.tsx';
+import { LottieLoader } from './ui/LottieLoader.tsx';
 
 interface AnalysisSectionProps {
   analysis: PaperAnalysisResult | null;
@@ -19,9 +20,9 @@ export function AnalysisSection(props: AnalysisSectionProps) {
   // Loading state
   if (isAnalyzing && !analysis) {
     return (
-      <div class="card" style={{ animationDuration: '2000ms' }}>
+      <div class="card">
         <div class="flex flex-col items-center justify-center gap-4 py-12">
-          <Loader size={32} class="animate-spin text-blue-600" />
+          <LottieLoader path="/lotties/kuma-thinking.lottie" size={80} />
           <div class="text-center">
             <p class="text-base font-medium text-gray-900 mb-2">Analyzing Paper...</p>
             <p class="text-sm text-gray-600">
