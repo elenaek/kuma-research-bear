@@ -1,5 +1,5 @@
 import { Loader } from 'lucide-preact';
-import { useState } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp } from 'lucide-preact';
 import { QuestionAnswer, StoredPaper } from '../../types/index.ts';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
@@ -27,9 +27,32 @@ interface QACardProps {
 function QACard(props: QACardProps) {
   const { qa, index, defaultOpen } = props;
   const [isExpanded, setIsExpanded] = useState(defaultOpen);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const prevExpandedRef = useRef(defaultOpen);
+
+  // Auto-scroll when Q&A card expands
+  useEffect(() => {
+    const wasExpanded = prevExpandedRef.current;
+    const isNowExpanded = isExpanded;
+
+    // Only scroll when transitioning from collapsed to expanded
+    if (!wasExpanded && isNowExpanded && containerRef.current) {
+      // Small delay to allow expand animation to start
+      setTimeout(() => {
+        containerRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest'
+        });
+      }, 100);
+    }
+
+    // Update previous state
+    prevExpandedRef.current = isExpanded;
+  }, [isExpanded]);
 
   return (
-    <div class="card stagger-item" style={{ animationDelay: `${index * 50}ms` }}>
+    <div ref={containerRef} class="card stagger-item" style={{ animationDelay: `${index * 50}ms` }}>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         class="w-full text-left focus:outline-none hover:cursor-pointer"

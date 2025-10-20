@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp } from 'lucide-preact';
 import { ComponentChildren } from 'preact';
 
@@ -9,6 +9,7 @@ interface CollapsibleSectionProps {
   defaultOpen?: boolean;
   children: ComponentChildren;
   titleClassName?: string;
+  autoScrollOnExpand?: boolean;
 }
 
 /**
@@ -22,13 +23,37 @@ export function CollapsibleSection(props: CollapsibleSectionProps) {
     iconColor = 'text-blue-600',
     defaultOpen = false,
     children,
-    titleClassName = 'text-base font-semibold text-gray-900'
+    titleClassName = 'text-base font-semibold text-gray-900',
+    autoScrollOnExpand = true
   } = props;
 
   const [isExpanded, setIsExpanded] = useState(defaultOpen);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const prevExpandedRef = useRef(defaultOpen);
+
+  // Auto-scroll when section expands
+  useEffect(() => {
+    const wasExpanded = prevExpandedRef.current;
+    const isNowExpanded = isExpanded;
+
+    // Only scroll when transitioning from collapsed to expanded
+    if (!wasExpanded && isNowExpanded && autoScrollOnExpand && containerRef.current) {
+      // Small delay to allow expand animation to start
+      setTimeout(() => {
+        containerRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest'
+        });
+      }, 100);
+    }
+
+    // Update previous state
+    prevExpandedRef.current = isExpanded;
+  }, [isExpanded, autoScrollOnExpand]);
 
   return (
-    <div class="card">
+    <div ref={containerRef} class="card">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
         class="w-full text-left focus:outline-none hover:cursor-pointer"
