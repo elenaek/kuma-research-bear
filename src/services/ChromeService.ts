@@ -523,3 +523,44 @@ export async function resetAI(): Promise<AIInitResponse> {
     return { success: false, error: String(error) };
   }
 }
+
+/**
+ * UI Operations
+ */
+
+/**
+ * Check if the sidepanel is currently open
+ */
+export async function isSidepanelOpen(): Promise<boolean> {
+  console.log('[ChromeService] Checking if sidepanel is open');
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.CHECK_SIDEPANEL_OPEN,
+    });
+
+    const isOpen = response?.isOpen || false;
+    console.log('[ChromeService] Sidepanel open status:', isOpen);
+    return isOpen;
+  } catch (error) {
+    console.error('[ChromeService] Error checking sidepanel status:', error);
+    return false;
+  }
+}
+
+/**
+ * Navigate the sidepanel to a specific paper by URL
+ */
+export async function navigateSidepanelToPaper(url: string): Promise<void> {
+  console.log('[ChromeService] Navigating sidepanel to paper:', url);
+
+  try {
+    await chrome.runtime.sendMessage({
+      type: MessageType.NAVIGATE_TO_PAPER,
+      payload: { url },
+    });
+    console.log('[ChromeService] ✓ Navigation message sent');
+  } catch (error) {
+    console.error('[ChromeService] Error navigating sidepanel:', error);
+  }
+}

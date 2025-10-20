@@ -1,6 +1,29 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
-import { Copy, RefreshCw, ExternalLink, FileText, Calendar, BookOpen, Hash, Download, Database, Clock, AlertCircle, CheckCircle, TrendingUp, AlertTriangle, Loader, PawPrint, ChevronLeft, ChevronRight, Trash2, Settings, ChevronDown, ChevronUp } from 'lucide-preact';
-import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, GlossaryResult } from '../types/index.ts';
+import { 
+  Copy, 
+  RefreshCw, 
+  ExternalLink, 
+  FileText, 
+  Calendar, 
+  BookOpen, 
+  Hash, 
+  Download, 
+  Database, 
+  Clock, 
+  AlertCircle, 
+  CheckCircle, 
+  TrendingUp, 
+  AlertTriangle, 
+  Loader, 
+  PawPrint, 
+  ChevronLeft, 
+  ChevronRight, 
+  Trash2, 
+  Settings, 
+  ChevronDown, 
+  ChevronUp 
+} from 'lucide-preact';
+import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, GlossaryResult, MessageType } from '../types/index.ts';
 import { MarkdownRenderer } from '../components/MarkdownRenderer.tsx';
 import { Tooltip } from '../components/Tooltip.tsx';
 import { GlossaryList } from '../components/GlossaryCard.tsx';
@@ -74,10 +97,8 @@ export function Sidepanel() {
   const paperData = usePaperData();
   const paperNavigation = usePaperNavigation({
     onPaperSwitch: async (paper) => {
-      // Update stored paper and load data
-      setStoredPaper(paper);
-      // Load Q&A history
-      setQaHistory(paper.qaHistory || []);
+      // Load all paper data (synchronized with navigation)
+      await loadPaperData(paper);
     },
     onPaperDelete: () => {
       // Clean up generation state for deleted paper
@@ -176,11 +197,38 @@ export function Sidepanel() {
       }
     });
 
-    // Register message listener and get cleanup function
+    // Create navigation message listener for NAVIGATE_TO_PAPER
+    const navigationListener = async (message: any) => {
+      if (message.type === MessageType.NAVIGATE_TO_PAPER) {
+        const targetUrl = message.payload?.url;
+        if (!targetUrl) return;
+
+        console.log('[Sidepanel] Received navigation request for URL:', targetUrl);
+
+        // Fetch fresh papers from ChromeService to avoid stale closure
+        const papers = await ChromeService.getAllPapers();
+        console.log('[Sidepanel] Fetched', papers.length, 'papers for navigation');
+
+        const paperIndex = papers.findIndex(p => p.url === targetUrl);
+
+        if (paperIndex !== -1) {
+          console.log('[Sidepanel] Navigating to paper at index:', paperIndex);
+          // Update allPapers and navigate using fresh array (avoid state timing)
+          paperNavigation.setAllPapers(papers);
+          await paperNavigation.switchToPaper(paperIndex, papers);
+        } else {
+          console.warn('[Sidepanel] Paper not found for URL:', targetUrl);
+        }
+      }
+    };
+
+    // Register message listeners
     chrome.runtime.onMessage.addListener(messageListener);
+    chrome.runtime.onMessage.addListener(navigationListener);
 
     return () => {
       chrome.runtime.onMessage.removeListener(messageListener);
+      chrome.runtime.onMessage.removeListener(navigationListener);
     };
   }, []);
 
@@ -230,6 +278,50 @@ export function Sidepanel() {
 
     setDebugInfo(debugData);
     return debugData;
+  }
+
+  /**
+   * Reusable function to load all paper data into display state
+   * Ensures synchronization between navigation and content
+   */
+  async function loadPaperData(paper: StoredPaper) {
+    console.log('[Sidepanel] Loading paper data:', paper.title);
+
+    setStoredPaper(paper);
+    setQaHistory(paper.qaHistory || []);
+
+    // Load explanation and summary
+    if (paper.explanation && paper.summary) {
+      setData({
+        paper: paper,
+        explanation: paper.explanation,
+        summary: paper.summary,
+      });
+      setViewState('content');
+    } else {
+      setData({
+        paper: paper,
+        explanation: { originalText: '', explanation: '', timestamp: 0 },
+        summary: { summary: '', keyPoints: [], timestamp: 0 }
+      });
+      setViewState('stored-only');
+    }
+
+    // Load analysis
+    if (paper.analysis) {
+      console.log('[Sidepanel] Loading analysis from paper');
+      setAnalysis(paper.analysis);
+    } else {
+      setAnalysis(null);
+    }
+
+    // Load glossary
+    if (paper.glossary) {
+      console.log('[Sidepanel] Loading glossary from paper');
+      setGlossary(paper.glossary);
+    } else {
+      setGlossary(null);
+    }
   }
 
   async function loadExplanation() {
@@ -288,46 +380,28 @@ export function Sidepanel() {
         const stored = await checkForStoredPaper(currentUrl);
 
         if (stored) {
-          setStoredPaper(stored);
-          setQaHistory(stored.qaHistory || []);
-
-          // Load all data from stored paper
-          if (stored.explanation && stored.summary) {
-            setData({
-              paper: stored,
-              explanation: stored.explanation,
-              summary: stored.summary,
-            });
-            setViewState('content');
-          } else {
-            setData({
-              paper: stored,
-              explanation: { originalText: '', explanation: '', timestamp: 0 },
-              summary: { summary: '', keyPoints: [], timestamp: 0 }
-            });
-            setViewState('stored-only');
+          // Sync navigation selector to the loaded paper
+          const paperIndex = papers.findIndex(p => p.id === stored.id);
+          if (paperIndex !== -1) {
+            paperNavigation.setCurrentPaperIndex(paperIndex);
+            console.log('[Sidepanel] Synced navigation to paper index:', paperIndex);
           }
 
-          // Load analysis from IndexedDB
-          if (stored.analysis) {
-            console.log('[Sidepanel] Loading analysis from IndexedDB');
-            setAnalysis(stored.analysis);
-          } else {
-            console.log('[Sidepanel] No analysis found for this paper');
-            setAnalysis(null);
-          }
-
-          // Load glossary from IndexedDB
-          if (stored.glossary) {
-            console.log('[Sidepanel] Loading glossary from IndexedDB');
-            setGlossary(stored.glossary);
-          } else {
-            console.log('[Sidepanel] No glossary found for this paper');
-            setGlossary(null);
-          }
+          // Load all paper data
+          await loadPaperData(stored);
         } else {
-          console.log('[Sidepanel] No paper found for current URL');
-          setViewState('empty');
+          // No paper found for current URL - check if we have any papers to show as fallback
+          if (papers.length > 0) {
+            console.log('[Sidepanel] No paper for current URL, loading first paper as fallback');
+            // Set navigation to first paper
+            paperNavigation.setCurrentPaperIndex(0);
+            // Load all paper data
+            await loadPaperData(papers[0]);
+          } else {
+            // Truly no papers in database - show empty state
+            console.log('[Sidepanel] No papers in database');
+            setViewState('empty');
+          }
         }
       } catch (dbError) {
         console.error('[Sidepanel] Error loading from IndexedDB:', dbError);

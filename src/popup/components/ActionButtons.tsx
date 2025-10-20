@@ -8,6 +8,8 @@ interface ActionButtonsProps {
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
   isPaperStored: boolean;
+  isSidepanelOpen: boolean;
+  currentUrlHasPaper: boolean;
   onDetectPaper: () => void;
   onOpenSidepanel: () => void;
 }
@@ -23,6 +25,8 @@ export function ActionButtons({
   isAnalyzing,
   isGeneratingGlossary,
   isPaperStored,
+  isSidepanelOpen,
+  currentUrlHasPaper,
   onDetectPaper,
   onOpenSidepanel,
 }: ActionButtonsProps) {
@@ -74,10 +78,18 @@ export function ActionButtons({
       {/* Open Sidepanel Button */}
       <button
         onClick={onOpenSidepanel}
+        disabled={isSidepanelOpen && !currentUrlHasPaper}
         class="btn btn-secondary w-full hover:cursor-pointer"
+        title={
+          isSidepanelOpen && !currentUrlHasPaper
+            ? 'No paper stored for this URL'
+            : isSidepanelOpen
+            ? 'Navigate sidepanel to this paper'
+            : 'Open sidepanel'
+        }
       >
         <PanelRight size={16} />
-        Open Sidepanel
+        {isSidepanelOpen ? 'Open in Sidepanel' : 'Open Sidepanel'}
       </button>
     </div>
   );

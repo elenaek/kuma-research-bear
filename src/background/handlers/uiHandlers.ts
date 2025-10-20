@@ -14,3 +14,18 @@ export async function handleOpenSidepanel(tabId?: number): Promise<any> {
     return { success: false, error: 'No tab ID available' };
   }
 }
+
+/**
+ * Check if the sidepanel is currently open
+ */
+export async function handleCheckSidepanelOpen(): Promise<{ isOpen: boolean }> {
+  try {
+    const sidePanelContexts = await chrome.runtime.getContexts({
+      contextTypes: ['SIDE_PANEL' as chrome.runtime.ContextType],
+    });
+    return { isOpen: sidePanelContexts.length > 0 };
+  } catch (error) {
+    console.error('[uiHandlers] Error checking sidepanel state:', error);
+    return { isOpen: false };
+  }
+}

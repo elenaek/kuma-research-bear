@@ -13,6 +13,10 @@ export function Popup() {
   const [currentTabUrl, setCurrentTabUrl] = useState<string | undefined>();
   const [currentTabId, setCurrentTabId] = useState<number | undefined>();
 
+  // Track sidepanel state for dynamic button behavior
+  const [isSidepanelOpen, setIsSidepanelOpen] = useState(false);
+  const [currentUrlHasPaper, setCurrentUrlHasPaper] = useState(false);
+
   // Custom hooks
   const aiStatus = useAIStatus();
   const operationState = useOperationState(currentTabUrl, currentTabId);
@@ -63,6 +67,41 @@ export function Popup() {
     };
   }, [paperStatus.paper?.url]);
 
+  // Listen for OPERATION_STATE_CHANGED to update sidepanel button reactively
+  useEffect(() => {
+    const listener = async (message: any) => {
+      if (message.type === 'OPERATION_STATE_CHANGED') {
+        // When operation state changes, re-check button state
+        // This enables the button when a paper is stored/explained
+        await updateSidepanelButtonState();
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(listener);
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(listener);
+    };
+  }, []);
+
+  // Helper function to update sidepanel button state
+  async function updateSidepanelButtonState() {
+    try {
+      // Check sidepanel open state
+      const isOpen = await ChromeService.isSidepanelOpen();
+      setIsSidepanelOpen(isOpen);
+
+      // Check if current URL has paper
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab.url) {
+        const hasPaper = await ChromeService.isPaperStoredInDB(tab.url);
+        setCurrentUrlHasPaper(hasPaper);
+      }
+    } catch (error) {
+      console.error('[Popup] Error updating sidepanel button state:', error);
+    }
+  }
+
   async function checkInitialState() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -90,6 +129,9 @@ export function Popup() {
       if (tab.id) {
         await operationState.checkOperationState(tab.id, paperUrl);
       }
+
+      // Step 3: Update sidepanel button state
+      await updateSidepanelButtonState();
     } catch (error) {
       console.error('[Popup] Failed to check initial state:', error);
     }
@@ -137,7 +179,11 @@ export function Popup() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-      if (tab.id) {
+      if (isSidepanelOpen && currentUrlHasPaper && tab.url) {
+        // Navigate existing sidepanel to this paper
+        await ChromeService.navigateSidepanelToPaper(tab.url);
+      } else if (tab.id) {
+        // Open sidepanel
         await chrome.sidePanel.open({ tabId: tab.id });
       }
     } catch (error) {
@@ -188,6 +234,8 @@ export function Popup() {
           isAnalyzing={operationState.isAnalyzing}
           isGeneratingGlossary={operationState.isGeneratingGlossary}
           isPaperStored={paperStatus.isPaperStored}
+          isSidepanelOpen={isSidepanelOpen}
+          currentUrlHasPaper={currentUrlHasPaper}
           onDetectPaper={handleDetectPaper}
           onOpenSidepanel={handleOpenSidepanel}
         />

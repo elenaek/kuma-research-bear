@@ -102,6 +102,10 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         sendResponse(await uiHandlers.handleOpenSidepanel(sender.tab?.id));
         break;
 
+      case MessageType.CHECK_SIDEPANEL_OPEN:
+        sendResponse(await uiHandlers.handleCheckSidepanelOpen());
+        break;
+
       // Database Operations
       case MessageType.STORE_PAPER_IN_DB:
         const tabId = message.payload.tabId || sender.tab?.id;
