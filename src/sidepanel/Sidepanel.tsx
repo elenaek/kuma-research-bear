@@ -157,20 +157,11 @@ export function Sidepanel() {
           const freshPaper = await ChromeService.getPaperByUrl(paperUrl);
 
           if (freshPaper) {
-            // Check if allPapers is currently empty
-            const currentPapers = paperNavigation.allPapers;
-
-            if (currentPapers.length === 0) {
-              // If empty, retrieve all papers from IndexedDB
-              console.log('[Sidepanel] allPapers is empty, fetching all papers from IndexedDB');
-              const allPapers = await ChromeService.getAllPapers();
-              paperNavigation.setAllPapers(allPapers);
-            } else {
-              // Otherwise, update the specific paper in the array
-              paperNavigation.setAllPapers(prevPapers =>
-                prevPapers.map(p => p.url === paperUrl ? freshPaper : p)
-              );
-            }
+            // Always fetch fresh papers from IndexedDB (single source of truth)
+            // This avoids stale closure issues with paperNavigation.allPapers
+            console.log('[Sidepanel] Operation completed, refreshing all papers from IndexedDB');
+            const allPapers = await ChromeService.getAllPapers();
+            paperNavigation.setAllPapers(allPapers);
 
             // If this is the currently viewed paper, update display states
             // Call setState functions sequentially (not nested) to avoid timing issues

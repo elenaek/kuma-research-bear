@@ -11,10 +11,10 @@ export function GlossaryCard({ term }: GlossaryCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div class="border border-gray-200 rounded-md p-2 hover:shadow-sm transition-shadow hover:cursor-pointer">
+    <div class="border border-gray-200 rounded-md hover:shadow-sm transition-shadow hover:cursor-pointer">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        class="w-full text-left focus:outline-none focus:ring-2 focus:ring-blue-500 rounded hover:cursor-pointer"
+        class="w-full text-left focus:outline-none rounded hover:cursor-pointer p-3"
         aria-expanded={isExpanded}
         aria-controls={`glossary-content-${term.acronym}`}
       >
@@ -38,24 +38,24 @@ export function GlossaryCard({ term }: GlossaryCardProps) {
       {isExpanded && (
         <div
           id={`glossary-content-${term.acronym}`}
-          class="ml-2 mt-2 pt-2 border-t border-gray-100 space-y-2 animate-fadeIn cursor-default hover:cursor-default"
+          class="p-4 border-t border-gray-100 space-y-2 animate-fadeIn cursor-default hover:cursor-default"
         >
           <div>
-            <h4 class="text-xs font-semibold text-gray-700 mb-0.5">Definition</h4>
+            <h4 class="text-xs font-semibold text-gray-700 mb-1">Definition</h4>
             <p class="text-xs text-gray-600">{term.definition}</p>
           </div>
 
-          <div>
-            <h4 class="text-xs font-semibold text-gray-700 mb-0.5">Study Context</h4>
+          <div class="mb-4">
+            <h4 class="text-xs font-semibold text-gray-700 mb-2">Study Context</h4>
             {term.studyContext.length === 1 && term.studyContext[0].sections.length === 1 ? (
               <div class="text-xs text-gray-600">
                 <p>{term.studyContext[0].context}</p>
-                <p class="text-xs text-gray-500 mt-0.5 italic">
+                <p class="text-xs text-gray-500 mt-1 italic">
                   Section: {term.studyContext[0].sections[0]}
                 </p>
               </div>
             ) : (
-              <div class="space-y-1">
+              <div class="space-y-2">
                 {term.studyContext.map((ctx, idx) => (
                   <div key={idx} class="text-xs">
                     <div class="flex items-start">
