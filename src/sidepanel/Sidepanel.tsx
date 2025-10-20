@@ -40,6 +40,7 @@ import { PaperNavigationBar } from './components/ui/PaperNavigationBar.tsx';
 import { OperationBanner } from './components/ui/OperationBanner.tsx';
 import { TabButton } from './components/ui/TabButton.tsx';
 import { TabDropdown, TabOption } from './components/ui/TabDropdown.tsx';
+import { IntegratedHeader } from './components/ui/IntegratedHeader.tsx';
 import { EmptyState } from './components/ui/EmptyState.tsx';
 import { LoadingButton } from './components/ui/LoadingButton.tsx';
 import { DebugPanel } from './components/DebugPanel.tsx';
@@ -853,56 +854,30 @@ Source: ${paper.url}
   if (viewState === 'stored-only') {
     return (
       <div class="h-screen flex flex-col bg-gray-50">
-        {/* Header */}
-        <header class="bg-white border-b border-gray-200 px-responsive py-3">
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex-1 min-w-0">
-              <h1 class="text-responsive-lg font-bold text-gray-800 flex items-center gap-2">
-                <PawPrint size={18} class="text-gray-400 flex-shrink-0" />
-                <span class="truncate">Kuma</span>
-              </h1>
-              <p class="text-responsive-xs text-gray-600">
-                {isCheckingStorage ? '🐻 Checking storage...' : '🐻 Ready for analysis'}
-              </p>
-            </div>
-            <button
-              onClick={handleManualRefresh}
-              disabled={isCheckingStorage}
-              class="btn btn-secondary px-2 py-2 text-sm hover:cursor-pointer flex-shrink-0"
-              title="Refresh storage status"
-            >
-              <RefreshCw size={16} class={isCheckingStorage ? 'animate-spin' : ''} />
-            </button>
-          </div>
-        </header>
+        {/* Integrated Header */}
+        <IntegratedHeader
+          papers={paperNavigation.allPapers}
+          currentIndex={paperNavigation.currentPaperIndex}
+          currentPaperTitle={storedPaper?.title}
+          isCheckingStorage={isCheckingStorage}
+          statusText={isCheckingStorage ? '🐻 Checking storage...' : '🐻 Ready for analysis'}
+          onPrevious={handlePrevPaper}
+          onNext={handleNextPaper}
+          onSelect={(index) => switchToPaper(index)}
+          onDeleteCurrent={handleDeletePaper}
+          isDeleting={paperNavigation.isDeleting}
+          showDeleteConfirm={paperNavigation.showDeleteConfirm}
+          onCancelDelete={() => paperNavigation.setShowDeleteConfirm(false)}
+          onDeleteAll={handleDeleteAllPapers}
+          isDeletingAll={isDeletingAll}
+          showDeleteAllConfirm={showDeleteAllConfirm}
+          onCancelDeleteAll={() => setShowDeleteAllConfirm(false)}
+          onRefresh={handleManualRefresh}
+        />
 
         {/* Content */}
         <div class="flex-1 overflow-auto">
           <div class="max-w-4xl mx-auto px-responsive py-responsive">
-            {/* Paper Navigation Bar */}
-            <PaperNavigationBar
-              papers={paperNavigation.allPapers}
-              currentIndex={paperNavigation.currentPaperIndex}
-              currentPaperTitle={storedPaper?.title}
-              onPrevious={handlePrevPaper}
-              onNext={handleNextPaper}
-              onSelect={(index) => switchToPaper(index)}
-              onDelete={handleDeletePaper}
-              isDeleting={paperNavigation.isDeleting}
-              showDeleteConfirm={paperNavigation.showDeleteConfirm}
-              onCancelDelete={() => paperNavigation.setShowDeleteConfirm(false)}
-            />
-
-            {/* Manage Papers Section */}
-            <PaperManagement
-              papers={paperNavigation.allPapers}
-              showManageSection={showManageSection}
-              onToggleManageSection={() => setShowManageSection(!showManageSection)}
-              onDeleteAll={handleDeleteAllPapers}
-              isDeletingAll={isDeletingAll}
-              showDeleteAllConfirm={showDeleteAllConfirm}
-              onCancelDeleteAll={() => setShowDeleteAllConfirm(false)}
-            />
 
             {/* Storage Checking Banner */}
             {isCheckingStorage && (
@@ -1058,24 +1033,24 @@ Source: ${paper.url}
 
   return (
     <div class="h-screen flex flex-col bg-gray-50">
-      {/* Header */}
-      <header class="bg-white border-b border-gray-200 px-responsive py-3">
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex-1 min-w-0">
-            <h1 class="text-responsive-lg font-bold text-gray-800 flex items-center gap-2">
-              <PawPrint size={18} class="text-gray-400 flex-shrink-0" />
-              <span class="truncate">Kuma</span>
-            </h1>
-            <p class="text-responsive-xs text-gray-600 hidden sm:block">A bear that helps you understand research papers</p>
-          </div>
-          {/* <button
-            onClick={() => setShowDebug(!showDebug)}
-            class="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded flex-shrink-0"
-          >
-            {showDebug ? 'Hide' : 'Show'}
-          </button> */}
-        </div>
-      </header>
+      {/* Integrated Header */}
+      <IntegratedHeader
+        papers={paperNavigation.allPapers}
+        currentIndex={paperNavigation.currentPaperIndex}
+        currentPaperTitle={storedPaper?.title}
+        subtitle="A bear that helps you understand research papers"
+        onPrevious={handlePrevPaper}
+        onNext={handleNextPaper}
+        onSelect={(index) => switchToPaper(index)}
+        onDeleteCurrent={handleDeletePaper}
+        isDeleting={paperNavigation.isDeleting}
+        showDeleteConfirm={paperNavigation.showDeleteConfirm}
+        onCancelDelete={() => paperNavigation.setShowDeleteConfirm(false)}
+        onDeleteAll={handleDeleteAllPapers}
+        isDeletingAll={isDeletingAll}
+        showDeleteAllConfirm={showDeleteAllConfirm}
+        onCancelDeleteAll={() => setShowDeleteAllConfirm(false)}
+      />
 
       {/* Content */}
       <div class="flex-1 overflow-auto">
@@ -1086,31 +1061,6 @@ Source: ${paper.url}
             debugInfo={debugInfo}
             onRefresh={collectDebugInfo}
             onClearStorage={handleClearAllStorage}
-          />
-
-          {/* Paper Navigation Bar */}
-          <PaperNavigationBar
-            papers={paperNavigation.allPapers}
-            currentIndex={paperNavigation.currentPaperIndex}
-            currentPaperTitle={storedPaper?.title}
-            onPrevious={handlePrevPaper}
-            onNext={handleNextPaper}
-            onSelect={(index) => switchToPaper(index)}
-            onDelete={handleDeletePaper}
-            isDeleting={paperNavigation.isDeleting}
-            showDeleteConfirm={paperNavigation.showDeleteConfirm}
-            onCancelDelete={() => paperNavigation.setShowDeleteConfirm(false)}
-          />
-
-          {/* Manage Papers Section */}
-          <PaperManagement
-            papers={paperNavigation.allPapers}
-            showManageSection={showManageSection}
-            onToggleManageSection={() => setShowManageSection(!showManageSection)}
-            onDeleteAll={handleDeleteAllPapers}
-            isDeletingAll={isDeletingAll}
-            showDeleteAllConfirm={showDeleteAllConfirm}
-            onCancelDeleteAll={() => setShowDeleteAllConfirm(false)}
           />
 
           {/* Operation Queue Banner */}
