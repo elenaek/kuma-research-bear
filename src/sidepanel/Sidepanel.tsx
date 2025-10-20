@@ -136,8 +136,6 @@ export function Sidepanel() {
           const freshPaper = await ChromeService.getPaperByUrl(paperUrl);
 
           if (freshPaper) {
-            console.log('[Sidepanel] Reloading paper from IndexedDB after operation update:', freshPaper.title);
-
             // Update in allPapers array
             paperNavigation.setAllPapers(prevPapers =>
               prevPapers.map(p => p.url === paperUrl ? freshPaper : p)
@@ -170,8 +168,6 @@ export function Sidepanel() {
               if (freshPaper.glossary) {
                 setGlossary(freshPaper.glossary);
               }
-
-              console.log('[Sidepanel] ✓ Updated currently viewed paper with fresh data');
             }
           }
         } catch (error) {
@@ -292,13 +288,11 @@ export function Sidepanel() {
         const stored = await checkForStoredPaper(currentUrl);
 
         if (stored) {
-          console.log('[Sidepanel] ✓ Paper found in IndexedDB:', stored.title);
           setStoredPaper(stored);
           setQaHistory(stored.qaHistory || []);
 
           // Load all data from stored paper
           if (stored.explanation && stored.summary) {
-            console.log('[Sidepanel] Loading explanation and summary from IndexedDB');
             setData({
               paper: stored,
               explanation: stored.explanation,
@@ -306,7 +300,6 @@ export function Sidepanel() {
             });
             setViewState('content');
           } else {
-            console.log('[Sidepanel] Paper stored but no explanation yet');
             setData({
               paper: stored,
               explanation: { originalText: '', explanation: '', timestamp: 0 },
@@ -798,19 +791,30 @@ Source: ${paper.url}
         {/* Content */}
         <div class="flex-1 overflow-auto">
           <div class="max-w-4xl mx-auto p-6">
-              {/* Paper Navigation Bar */}
-              <PaperNavigationBar
-                papers={paperNavigation.allPapers}
-                currentIndex={paperNavigation.currentPaperIndex}
-                currentPaperTitle={storedPaper?.title}
-                onPrevious={handlePrevPaper}
-                onNext={handleNextPaper}
-                onSelect={(index) => switchToPaper(index)}
-                onDelete={handleDeletePaper}
-                isDeleting={paperNavigation.isDeleting}
-                showDeleteConfirm={paperNavigation.showDeleteConfirm}
-                onCancelDelete={() => paperNavigation.setShowDeleteConfirm(false)}
-              />
+            {/* Paper Navigation Bar */}
+            <PaperNavigationBar
+              papers={paperNavigation.allPapers}
+              currentIndex={paperNavigation.currentPaperIndex}
+              currentPaperTitle={storedPaper?.title}
+              onPrevious={handlePrevPaper}
+              onNext={handleNextPaper}
+              onSelect={(index) => switchToPaper(index)}
+              onDelete={handleDeletePaper}
+              isDeleting={paperNavigation.isDeleting}
+              showDeleteConfirm={paperNavigation.showDeleteConfirm}
+              onCancelDelete={() => paperNavigation.setShowDeleteConfirm(false)}
+            />
+
+            {/* Manage Papers Section */}
+            <PaperManagement
+              papers={paperNavigation.allPapers}
+              showManageSection={showManageSection}
+              onToggleManageSection={() => setShowManageSection(!showManageSection)}
+              onDeleteAll={handleDeleteAllPapers}
+              isDeletingAll={isDeletingAll}
+              showDeleteAllConfirm={showDeleteAllConfirm}
+              onCancelDeleteAll={() => setShowDeleteAllConfirm(false)}
+            />
 
             {/* Storage Checking Banner */}
             {isCheckingStorage && (
@@ -906,17 +910,6 @@ Source: ${paper.url}
                 <OriginalPaperTab paper={data?.paper || null} />
               )}
             </div>
-
-            {/* Manage Papers Section */}
-            <PaperManagement
-              papers={paperNavigation.allPapers}
-              showManageSection={showManageSection}
-              onToggleManageSection={() => setShowManageSection(!showManageSection)}
-              onDeleteAll={handleDeleteAllPapers}
-              isDeletingAll={isDeletingAll}
-              showDeleteAllConfirm={showDeleteAllConfirm}
-              onCancelDeleteAll={() => setShowDeleteAllConfirm(false)}
-            />
           </div>
         </div>
       </div>

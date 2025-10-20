@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import * as ChromeService from '../services/ChromeService.ts';
 import { useAIStatus } from './hooks/useAIStatus.ts';
 import { useOperationState } from './hooks/useOperationState.ts';
@@ -9,10 +9,33 @@ import { PaperInfoCard } from './components/PaperInfoCard.tsx';
 import { ActionButtons } from './components/ActionButtons.tsx';
 
 export function Popup() {
+  // Track current tab info for filtering operation state broadcasts
+  const [currentTabUrl, setCurrentTabUrl] = useState<string | undefined>();
+  const [currentTabId, setCurrentTabId] = useState<number | undefined>();
+
   // Custom hooks
   const aiStatus = useAIStatus();
-  const operationState = useOperationState();
-  const paperStatus = usePaperStatus();
+  const operationState = useOperationState(currentTabUrl, currentTabId);
+  const paperStatus = usePaperStatus(currentTabUrl);
+
+  // Initialize current tab info IMMEDIATELY on mount (before broadcasts arrive)
+  useEffect(() => {
+    async function initializeTabInfo() {
+      try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab.url) {
+          setCurrentTabUrl(tab.url);
+        }
+        if (tab.id !== undefined) {
+          setCurrentTabId(tab.id);
+        }
+      } catch (error) {
+        console.error('[Popup] Failed to get tab info:', error);
+      }
+    }
+
+    initializeTabInfo();
+  }, []); // Empty deps - runs once on mount
 
   // Check operation state on mount
   useEffect(() => {
@@ -24,11 +47,9 @@ export function Popup() {
     const listener = (message: any) => {
       if (message.type === 'PAPER_DELETED') {
         const deletedPaperUrl = message.payload?.paperUrl;
-        console.log('[Popup] Paper deleted:', deletedPaperUrl);
 
         // Clear state if the deleted paper matches the current paper
         if (deletedPaperUrl && paperStatus.paper?.url === deletedPaperUrl) {
-          console.log('[Popup] Clearing state for deleted paper');
           operationState.clearState();
           paperStatus.clearPaper();
         }
@@ -50,7 +71,7 @@ export function Popup() {
       let paperUrl: string | undefined;
       if (tab.url) {
         paperUrl = tab.url;
-        console.log('[Popup] Checking database for stored paper:', tab.url);
+        // currentTabUrl already set in initialization effect on mount
         const status = await paperStatus.checkStoredPaper(tab.url);
 
         if (status.isStored) {
@@ -62,7 +83,6 @@ export function Popup() {
             hasGlossary: status.hasGlossary,
             completionPercentage: status.completionPercentage,
           });
-          console.log('[Popup] ✓ Stored paper found with completion:', status.completionPercentage + '%');
         }
       }
 

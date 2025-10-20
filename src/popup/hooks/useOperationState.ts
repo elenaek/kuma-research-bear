@@ -1,11 +1,16 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { MessageType } from '../../types/index.ts';
 
 interface OperationState {
+  tabId?: number;
   isDetecting: boolean;
   isExplaining: boolean;
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
+  currentPaper?: {
+    url: string;
+    title?: string;
+  };
   detectionProgress?: string;
   explanationProgress?: string;
   analysisProgress?: string;
@@ -48,8 +53,14 @@ interface UseOperationStateReturn {
 /**
  * Custom hook to track operation state (detecting, explaining, analyzing, glossary generation)
  * Listens to OPERATION_STATE_CHANGED messages from background
+ * @param currentTabUrl - Optional URL of the current tab to filter broadcasts
+ * @param currentTabId - Optional ID of the current tab to filter broadcasts
  */
-export function useOperationState(): UseOperationStateReturn {
+export function useOperationState(currentTabUrl?: string, currentTabId?: number): UseOperationStateReturn {
+  // Refs to track current tab info (for filtering broadcasts)
+  const currentTabUrlRef = useRef<string | null>(null);
+  const currentTabIdRef = useRef<number | null>(null);
+
   const [isDetecting, setIsDetecting] = useState(false);
   const [isExplaining, setIsExplaining] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -61,6 +72,12 @@ export function useOperationState(): UseOperationStateReturn {
   const [hasGlossary, setHasGlossary] = useState(false);
   const [completionPercentage, setCompletionPercentage] = useState(0);
 
+  // Update refs when currentTabUrl or currentTabId changes
+  useEffect(() => {
+    currentTabUrlRef.current = currentTabUrl || null;
+    currentTabIdRef.current = currentTabId !== undefined ? currentTabId : null;
+  }, [currentTabUrl, currentTabId]);
+
   // Listen for operation state changes from background
   useEffect(() => {
     const listener = (message: any) => {
@@ -68,7 +85,14 @@ export function useOperationState(): UseOperationStateReturn {
         const state: OperationState = message.payload?.state;
         if (!state) return;
 
-        console.log('[useOperationState] Operation state changed:', state);
+        // Filter: Only process broadcasts for current tab
+        const broadcastTabId = state.tabId;
+        const broadcastUrl = state.currentPaper?.url;
+
+        // Reject broadcasts from different tabs (using tabId for reliability)
+        if (currentTabIdRef.current !== null && broadcastTabId !== undefined && currentTabIdRef.current !== broadcastTabId) {
+          return;
+        }
 
         // Update UI based on state changes
         setIsDetecting(state.isDetecting);
@@ -121,6 +145,7 @@ export function useOperationState(): UseOperationStateReturn {
 
       if (response.success && response.state) {
         const state: OperationState = response.state;
+
         setIsDetecting(state.isDetecting);
         setIsExplaining(state.isExplaining);
         setIsAnalyzing(state.isAnalyzing);
@@ -137,20 +162,7 @@ export function useOperationState(): UseOperationStateReturn {
           if (state.hasAnalysis !== undefined) setHasAnalysis(state.hasAnalysis);
           if (state.hasGlossary !== undefined) setHasGlossary(state.hasGlossary);
           if (state.completionPercentage !== undefined) setCompletionPercentage(state.completionPercentage);
-          console.log('[useOperationState] Loaded completion status from background:', {
-            hasExplanation: state.hasExplanation,
-            hasAnalysis: state.hasAnalysis,
-            completionPercentage: state.completionPercentage,
-            matchesExpectedUrl: !expectedUrl || state.currentPaper.url === expectedUrl,
-          });
-        } else {
-          const reason = !state.currentPaper
-            ? 'no current paper in background state'
-            : 'URL mismatch (preventing overwrite)';
-          console.log(`[useOperationState] Skipping completion status (${reason})`);
         }
-
-        console.log('[useOperationState] Loaded operation state:', state);
 
         // Update UI based on current state
         if (state.isDetecting) {
@@ -186,7 +198,6 @@ export function useOperationState(): UseOperationStateReturn {
     setHasAnalysis(status.hasAnalysis);
     setHasGlossary(status.hasGlossary);
     setCompletionPercentage(status.completionPercentage);
-    console.log('[useOperationState] Completion status updated:', status);
   }
 
   /**
@@ -203,7 +214,6 @@ export function useOperationState(): UseOperationStateReturn {
     setHasAnalysis(false);
     setHasGlossary(false);
     setCompletionPercentage(0);
-    console.log('[useOperationState] State cleared');
   }
 
   return {
