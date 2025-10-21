@@ -530,13 +530,32 @@ export function Sidepanel() {
       setIsAsking(true);
       console.log('Asking question:', question);
 
-      const response = await ChromeService.askQuestion(data.paper.url, question.trim());
+      const sanitizedQuestion = question.trim();
+
+      const newQA = {
+        question: sanitizedQuestion,
+        answer: '',
+        sources: [],
+        timestamp: Date.now(),
+      };
+      
+      const newHistory = [newQA, ...qaHistory];
+      setQaHistory(newHistory);
+      if(activeTab === 'qa') {
+        setNewlyAddedQAIndex(0);
+      }
+
+      if (storedPaper) {
+        await ChromeService.updatePaperQAHistory(storedPaper.id, newHistory);
+      }
+
+      const response = await ChromeService.askQuestion(data.paper.url, sanitizedQuestion);
 
       if (response.success && response.answer) {
         console.log('✓ Question answered successfully');
-        // Add to history
-        const newHistory = [response.answer, ...qaHistory];
-        setQaHistory(newHistory);
+        // update history
+        const answeredHistory = [response.answer, ...qaHistory];
+        setQaHistory(answeredHistory);
         setQuestion(''); // Clear input
 
         // If user is on Q&A tab when answer arrives, mark it as newly added
@@ -546,13 +565,23 @@ export function Sidepanel() {
 
         // Save Q&A history to database
         if (storedPaper) {
-          await ChromeService.updatePaperQAHistory(storedPaper.id, newHistory);
+          await ChromeService.updatePaperQAHistory(storedPaper.id, answeredHistory);
         }
       } else {
         console.error('Question answering failed:', response.error);
+
         alert(`Failed to answer question: ${response.error}`);
       }
     } catch (error) {
+      const revertHistory = [...qaHistory];
+      setQaHistory(revertHistory);
+      if(activeTab === 'qa') {
+        setNewlyAddedQAIndex(revertHistory.length - 1);
+      }
+
+      if (storedPaper && revertHistory.length > 0) {
+        await ChromeService.updatePaperQAHistory(storedPaper.id, revertHistory);
+      }
       console.error('Error asking question:', error);
       alert('Failed to ask question. Please try again.');
     } finally {
@@ -828,186 +857,6 @@ Source: ${paper.url}
     );
   }
 
-  // if (viewState === 'stored-only') {
-  //   return (
-  //     <div class="h-screen flex flex-col bg-gray-50">
-  //       {/* Integrated Header */}
-  //       <IntegratedHeader
-  //         papers={paperNavigation.allPapers}
-  //         currentIndex={paperNavigation.currentPaperIndex}
-  //         currentPaperTitle={storedPaper?.title}
-  //         isCheckingStorage={isCheckingStorage}
-  //         statusText={isCheckingStorage ? '🐻 Checking storage...' : '🐻 Ready for analysis'}
-  //         onPrevious={handlePrevPaper}
-  //         onNext={handleNextPaper}
-  //         onSelect={(index) => switchToPaper(index)}
-  //         onDeleteCurrent={handleDeletePaper}
-  //         isDeleting={paperNavigation.isDeleting}
-  //         showDeleteConfirm={paperNavigation.showDeleteConfirm}
-  //         onCancelDelete={() => paperNavigation.setShowDeleteConfirm(false)}
-  //         onDeleteAll={handleDeleteAllPapers}
-  //         isDeletingAll={isDeletingAll}
-  //         showDeleteAllConfirm={showDeleteAllConfirm}
-  //         onCancelDeleteAll={() => setShowDeleteAllConfirm(false)}
-  //         onRefresh={handleManualRefresh}
-  //       />
-
-  //       {/* Content */}
-  //       <div class="flex-1 overflow-auto">
-  //         <div class="max-w-4xl mx-auto px-responsive py-responsive">
-
-  //           {/* Storage Checking Banner */}
-  //           {isCheckingStorage && (
-  //             <OperationBanner
-  //               status="loading"
-  //               title="🐻 Kuma is checking paper storage..."
-  //               subtitle="Retrying with exponential backoff (up to 5 attempts)"
-  //             />
-  //           )}
-
-  //           {/* Explanation In Progress Banner */}
-  //           {/* {isExplainingInBackground && (
-  //             <OperationBanner
-  //               status="loading"
-  //               title="🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)"
-  //               subtitle="Generating summary and simplified explanation. This usually takes 10-20 seconds"
-  //               gradient={true}
-  //             />
-  //           )} */}
-
-  //           {/* Paper Info Card */}
-  //           <PaperInfoCard paper={data?.paper || null} storedPaper={storedPaper} />
-
-
-  //           {/* Available Features */}
-  //           <AvailableFeaturesCard
-  //             storedPaper={storedPaper}
-  //             isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-  //           />
-
-  //           {/* Tabs */}
-  //           {/* Dropdown for narrow screens */}
-  //           <div class="mb-4 hide-on-wide">
-  //             <TabDropdown
-  //               tabs={[
-  //                 {
-  //                   id: 'analysis',
-  //                   label: 'Analysis',
-  //                   active: activeTab === 'analysis',
-  //                   loading: storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false,
-  //                   onClick: () => setActiveTab('analysis'),
-  //                 },
-  //                 {
-  //                   id: 'qa',
-  //                   label: 'Q&A',
-  //                   active: activeTab === 'qa',
-  //                   onClick: () => setActiveTab('qa'),
-  //                 },
-  //                 {
-  //                   id: 'glossary',
-  //                   label: 'Glossary',
-  //                   active: activeTab === 'glossary',
-  //                   loading: storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false,
-  //                   onClick: () => setActiveTab('glossary'),
-  //                 },
-  //                 {
-  //                   id: 'original',
-  //                   label: 'Abstract',
-  //                   active: activeTab === 'original',
-  //                   onClick: () => setActiveTab('original'),
-  //                 },
-  //               ]}
-  //               activeTabLabel={
-  //                 activeTab === 'analysis' ? 'Analysis' :
-  //                 activeTab === 'qa' ? 'Q&A' :
-  //                 activeTab === 'glossary' ? 'Glossary' :
-  //                 'Abstract'
-  //               }
-  //             />
-  //           </div>
-
-  //           {/* Horizontal tabs for wide screens */}
-  //           <div class="mb-4 border-b border-gray-200 -mx-responsive hide-on-narrow">
-  //             <div class="flex gap-1 overflow-x-auto px-responsive scrollbar-hide" style="scrollbar-width: none; -ms-overflow-style: none;">
-  //               <TabButton
-  //                 active={activeTab === 'analysis'}
-  //                 onClick={() => setActiveTab('analysis')}
-  //                 loading={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-  //               >
-  //                 Analysis
-  //               </TabButton>
-  //               <TabButton
-  //                 active={activeTab === 'qa'}
-  //                 onClick={() => setActiveTab('qa')}
-  //               >
-  //                 Q&A
-  //               </TabButton>
-  //               <TabButton
-  //                 active={activeTab === 'glossary'}
-  //                 onClick={() => setActiveTab('glossary')}
-  //                 loading={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-  //               >
-  //                 Glossary
-  //               </TabButton>
-  //               <TabButton
-  //                 active={activeTab === 'original'}
-  //                 onClick={() => setActiveTab('original')}
-  //               >
-  //                 Abstract
-  //               </TabButton>
-  //             </div>
-  //           </div>
-
-  //           {/* Tab Content */}
-  //           <div class="space-y-4">
-  //             {/* Analysis Tab Content */}
-  //             {activeTab === 'analysis' && (
-  //               <div class="tab-content space-y-4">
-  //                 <AnalysisSection
-  //                   analysis={analysis}
-  //                   isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-  //                 />
-  //               </div>
-  //             )}
-
-  //             {/* Q&A Tab Content */}
-  //             {activeTab === 'qa' && (
-  //               <div class="tab-content space-y-4">
-  //                 <QASection
-  //                   question={question}
-  //                   setQuestion={setQuestion}
-  //                   isAsking={isAsking}
-  //                   qaHistory={qaHistory}
-  //                   storedPaper={storedPaper}
-  //                   onAskQuestion={handleAskQuestion}
-  //                   newlyAddedQAIndex={newlyAddedQAIndex}
-  //                 />
-  //               </div>
-  //             )}
-
-  //             {/* Glossary Tab */}
-  //             {activeTab === 'glossary' && (
-  //               <div class="tab-content space-y-4">
-  //                 <GlossarySection
-  //                   glossary={glossary}
-  //                   isGenerating={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-  //                 />
-  //               </div>
-  //             )}
-
-  //             {/* Original Tab */}
-  //             {activeTab === 'original' && (
-  //               <div class="tab-content space-y-4">
-  //                 <OriginalPaperTab paper={data?.paper || null} />
-  //               </div>
-  //             )}
-  //           </div>
-  //         </div>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
   return (
     <div class="h-screen flex flex-col bg-gray-50">
       {/* Integrated Header */}
@@ -1153,7 +1002,8 @@ Source: ${paper.url}
                     active={activeTab === 'qa'}
                     onClick={() => setActiveTab('qa')}
                     disabled={!storedPaper}
-                    title={!storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper'}
+                    loading={isAsking}
+                    title={!storedPaper ? 'Paper must be stored to ask questions' : isAsking ? 'Kuma is thinking about your question...' : 'Ask questions about this paper'}
                   >
                     Q&A
                   </TabButton>

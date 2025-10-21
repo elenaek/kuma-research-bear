@@ -15,7 +15,7 @@ interface TabButtonProps {
  * Individual tab button with active state and optional loading indicator
  */
 export function TabButton(props: TabButtonProps) {
-  const { active, onClick, loading = false, disabled = false, title, children } = props;
+  const { active, onClick, loading = false, disabled = false, title, children} = props;
 
   return (
     <button

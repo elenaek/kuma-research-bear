@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp } from 'lucide-preact';
 import { QuestionAnswer, StoredPaper } from '../../types/index.ts';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
+import { LottieLoader } from './ui/LottieLoader.tsx';
 
 interface QASectionProps {
   question: string;
@@ -26,7 +27,7 @@ interface QACardProps {
  */
 function QACard(props: QACardProps) {
   const { qa, index, defaultOpen } = props;
-  const [isExpanded, setIsExpanded] = useState(defaultOpen);
+  const [isExpanded, setIsExpanded] = useState(qa.question.length > 0 && qa.answer.length === 0 ? true : defaultOpen);
   const containerRef = useRef<HTMLDivElement>(null);
   const prevExpandedRef = useRef(defaultOpen);
 
@@ -74,35 +75,47 @@ function QACard(props: QACardProps) {
       </button>
 
       {isExpanded && (
-        <div class="animate-fadeIn">
-          {/* Answer */}
-          <div class="mb-3">
-            <p class="text-sm font-semibold text-gray-900 mb-1">Answer:</p>
-            <MarkdownRenderer content={qa.answer} className="text-sm" />
-          </div>
+        qa.answer ? (
+          <>
+            <div class="animate-fadeIn" style={{ animationDuration: '1000ms' }}>
+              {/* Answer */}
+              <div class="mb-3">
+                <p class="text-sm font-semibold text-gray-900 mb-1">Answer:</p>
+                <MarkdownRenderer content={qa.answer} className="text-sm" />
+              </div>
 
-          {/* Sources */}
-          {qa.sources.length > 0 && (
-            <div class="pt-3 border-t border-gray-200">
-              <p class="text-xs font-medium text-gray-600 mb-1">Sources:</p>
-              <div class="flex flex-wrap gap-1">
-                {qa.sources.map((source, sIdx) => (
-                  <span
-                    key={sIdx}
-                    class="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700"
-                  >
-                    {source}
-                  </span>
-                ))}
+              {/* Sources */}
+              {qa.sources.length > 0 && (
+                <div class="pt-3 border-t border-gray-200">
+                  <p class="text-xs font-medium text-gray-600 mb-1">Sources:</p>
+                  <div class="flex flex-wrap gap-1">
+                    {qa.sources.map((source, sIdx) => (
+                      <span
+                        key={sIdx}
+                        class="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700"
+                      >
+                        {source}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Timestamp */}
+              <div class="mt-2 text-xs text-gray-500">
+                {new Date(qa.timestamp).toLocaleString()}
               </div>
             </div>
-          )}
-
-          {/* Timestamp */}
-          <div class="mt-2 text-xs text-gray-500">
-            {new Date(qa.timestamp).toLocaleString()}
-          </div>
+          </>
+        ) : (
+          <div class="text-center">
+            <LottieLoader path="/lotties/kuma-qanda.lottie" size={80} className="mx-auto mt-2 mb-3"/>
+            <p class="text-gray-900 font-medium text-base">Kuma is thinking about your question...</p>
+            <p class="text-sm text-gray-600 mb-2">
+              Researching an answer to your question using the research paper.
+            </p>
         </div>
+        )
       )}
     </div>
   );
