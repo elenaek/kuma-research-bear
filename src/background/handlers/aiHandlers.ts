@@ -65,8 +65,36 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
     // Generate context ID based on tab ID if available
     const contextId = tabId ? `tab-${tabId}-explain` : 'default-explain';
 
-    const explanation = await aiService.explainAbstract(paper.abstract, contextId);
-    const summary = await aiService.generateSummary(paper.title, paper.abstract, contextId);
+    // Get stored paper to check for hierarchical summary
+    const storedPaper = await getPaperByUrl(paper.url);
+    if (!storedPaper) {
+      throw new Error('Paper not found in storage. Cannot generate explanation.');
+    }
+
+    // Determine if we should use hierarchical summary (for large papers)
+    const THRESHOLD = 6000; // Use hierarchical summary if paper exceeds this
+    const shouldUseHierarchicalSummary =
+      storedPaper.hierarchicalSummary &&
+      storedPaper.fullText.length > THRESHOLD;
+
+    if (shouldUseHierarchicalSummary) {
+      console.log(`[AIHandlers] Paper is large (${storedPaper.fullText.length} chars), using hierarchical summary for comprehensive explanation`);
+    } else {
+      console.log(`[AIHandlers] Paper is small (${storedPaper.fullText.length} chars), using abstract-only approach`);
+    }
+
+    // Generate explanation and summary (with hierarchical summary for large papers)
+    const explanation = await aiService.explainAbstract(
+      paper.abstract,
+      contextId,
+      shouldUseHierarchicalSummary ? storedPaper.hierarchicalSummary : undefined
+    );
+    const summary = await aiService.generateSummary(
+      paper.title,
+      paper.abstract,
+      contextId,
+      shouldUseHierarchicalSummary ? storedPaper.hierarchicalSummary : undefined
+    );
 
     // Update operation state to show completion
     if (tabId) {
@@ -76,13 +104,6 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
         error: null,
       });
       broadcastStateChange(state);
-    }
-
-    // Store in IndexedDB per-paper (single source of truth)
-    // If storage fails, let the error propagate - we can't mark as "complete" if data isn't saved
-    const storedPaper = await getPaperByUrl(paper.url);
-    if (!storedPaper) {
-      throw new Error('Paper not found in storage. Cannot save explanation.');
     }
 
     const { updatePaperExplanation } = await import('../../utils/dbService.ts');
@@ -204,14 +225,31 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
 
       console.log(`[AIHandlers] Analyzing paper: ${storedPaper.title} with context: ${analysisContextId}`);
 
-      // Get paper chunks for comprehensive analysis
-      const chunks = await getPaperChunks(storedPaper.id);
+      // Check if hierarchical summary exists, if not create it
+      let hierarchicalSummary = storedPaper.hierarchicalSummary;
+      if (!hierarchicalSummary) {
+        console.log('[AIHandlers] No hierarchical summary found, generating one...');
+        try {
+          const fullText = storedPaper.fullText || storedPaper.abstract;
+          hierarchicalSummary = await aiService.createHierarchicalSummary(fullText, `${analysisContextId}-summary`);
 
-      // Use fullText for analysis (more complete than abstract)
-      const paperContent = storedPaper.fullText || storedPaper.abstract;
+          // Update stored paper with hierarchical summary for future use
+          const { updatePaper } = await import('../../utils/dbService.ts');
+          await updatePaper(storedPaper.id, { hierarchicalSummary });
+          console.log('[AIHandlers] ✓ Hierarchical summary generated and stored');
+        } catch (error) {
+          console.error('[AIHandlers] Failed to generate hierarchical summary, using truncated content:', error);
+          // Fallback to truncated content
+          hierarchicalSummary = (storedPaper.fullText || storedPaper.abstract).slice(0, 2000);
+        }
+      }
 
-      // Run comprehensive analysis with context ID
-      const analysis: PaperAnalysisResult = await aiService.analyzePaper(paperContent, analysisContextId);
+      // Run comprehensive analysis with hierarchical summary + RAG
+      const analysis: PaperAnalysisResult = await aiService.analyzePaper(
+        storedPaper.id,
+        hierarchicalSummary,
+        analysisContextId
+      );
 
       return analysis;
     })();

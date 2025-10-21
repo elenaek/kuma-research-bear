@@ -92,8 +92,8 @@ export async function storePaper(paper: ResearchPaper, fullText?: string, qaHist
       throw new Error('fullText must be provided when storing paper from background script context');
     }
 
-    // Create chunks with metadata using contentExtractor
-    const extractorChunks = chunkContent(extractedText, 1000, 200);
+    // Create chunks with metadata using contentExtractor (5000 chars with 1000 overlap for speed and context)
+    const extractorChunks = chunkContent(extractedText, 5000, 1000);
 
     // Transform to storage format with richer metadata
     const contentChunks: ContentChunk[] = extractorChunks.map((chunk, index) => ({
@@ -107,6 +107,19 @@ export async function storePaper(paper: ResearchPaper, fullText?: string, qaHist
       tokenCount: Math.ceil(chunk.content.length / 4),
     }));
 
+    // Generate hierarchical summary for full document coverage
+    console.log('[IndexedDB] Generating hierarchical summary for comprehensive analysis...');
+    let hierarchicalSummary: string | undefined;
+    try {
+      const { aiService } = await import('./aiService.ts');
+      hierarchicalSummary = await aiService.createHierarchicalSummary(extractedText, `paper-${paperId}`);
+      console.log('[IndexedDB] ✓ Hierarchical summary generated:', hierarchicalSummary.length, 'chars');
+    } catch (error) {
+      console.error('[IndexedDB] Failed to generate hierarchical summary:', error);
+      // Continue without hierarchical summary - analysis will still work but with reduced accuracy
+      hierarchicalSummary = undefined;
+    }
+
     // Create stored paper object
     const storedPaper: StoredPaper = {
       ...paper,
@@ -115,6 +128,7 @@ export async function storePaper(paper: ResearchPaper, fullText?: string, qaHist
       chunkCount: contentChunks.length,
       storedAt: Date.now(),
       lastAccessedAt: Date.now(),
+      hierarchicalSummary,
       qaHistory: qaHistory || [],
     };
 
@@ -334,6 +348,48 @@ export async function deletePaper(paperId: string): Promise<boolean> {
     db.close();
     console.error('Error deleting paper:', error);
     return false;
+  }
+}
+
+/**
+ * Update specific fields of a paper
+ * Generic update function for any paper fields
+ */
+export async function updatePaper(paperId: string, updates: Partial<StoredPaper>): Promise<boolean> {
+  const db = await initDB();
+
+  try {
+    const transaction = db.transaction([PAPERS_STORE], 'readwrite');
+    const store = transaction.objectStore(PAPERS_STORE);
+
+    const paper = await new Promise<StoredPaper | null>((resolve) => {
+      const request = store.get(paperId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+
+    if (!paper) {
+      console.error('Paper not found for update:', paperId);
+      db.close();
+      throw new Error(`Paper not found for update: ${paperId}`);
+    }
+
+    // Apply updates
+    const updatedPaper = { ...paper, ...updates, lastAccessedAt: Date.now() };
+
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put(updatedPaper);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to update paper'));
+    });
+
+    console.log(`✓ Updated paper: ${paper.title}`);
+    db.close();
+    return true;
+  } catch (error) {
+    db.close();
+    console.error('Error updating paper:', error);
+    throw error;
   }
 }
 
@@ -570,6 +626,60 @@ export async function getRelevantChunks(
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map(({ chunk }) => chunk);
+}
+
+/**
+ * Get relevant chunks by searching for multiple topic keywords
+ * Used for targeted analysis operations (methodology, limitations, etc.)
+ * Enhanced version of getRelevantChunks that searches for specific topics
+ */
+export async function getRelevantChunksByTopic(
+  paperId: string,
+  topics: string[],
+  limit: number = 3
+): Promise<ContentChunk[]> {
+  const chunks = await getPaperChunks(paperId);
+
+  console.log(`[RAG] Searching ${chunks.length} chunks for topics:`, topics);
+
+  // Score chunks by topic keyword relevance
+  const scoredChunks = chunks.map(chunk => {
+    const content = chunk.content.toLowerCase();
+    const section = chunk.section?.toLowerCase() || '';
+
+    let score = 0;
+
+    // Check each topic keyword
+    for (const topic of topics) {
+      const topicLower = topic.toLowerCase();
+
+      // Higher weight for section heading matches
+      if (section.includes(topicLower)) {
+        score += 10;
+      }
+
+      // Count occurrences in content
+      const matches = (content.match(new RegExp(topicLower, 'g')) || []).length;
+      score += matches * 2;
+
+      // Bonus for topic appearing in first 200 chars (likely important)
+      if (content.slice(0, 200).includes(topicLower)) {
+        score += 5;
+      }
+    }
+
+    return { chunk, score };
+  });
+
+  // Sort by score and return top chunks
+  const relevantChunks = scoredChunks
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ chunk }) => chunk);
+
+  console.log(`[RAG] Found ${relevantChunks.length} relevant chunks`);
+  return relevantChunks;
 }
 
 /**

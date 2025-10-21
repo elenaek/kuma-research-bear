@@ -199,8 +199,8 @@ export function extractSection(sectionName: string): string | null {
  */
 export function chunkContent(
   content: string,
-  chunkSize: number = 1000,
-  overlap: number = 200
+  chunkSize: number = 5000,
+  overlap: number = 1000
 ): ContentChunk[] {
   const chunks: ContentChunk[] = [];
 

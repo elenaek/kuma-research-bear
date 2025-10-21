@@ -133,7 +133,7 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
 
       // Run analysis and glossary generation in parallel
       const [analysis, glossary] = await Promise.all([
-        aiService.analyzePaper(paperContent, analysisContextId),
+        aiService.analyzePaper(storedPaper.id, storedPaper.hierarchicalSummary || '', analysisContextId),
         aiService.generateGlossary(paperContent, storedPaper.title, glossaryContextId)
       ]);
 

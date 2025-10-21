@@ -162,6 +162,7 @@ export interface StoredPaper extends ResearchPaper {
   chunkCount: number;
   storedAt: number;
   lastAccessedAt: number;
+  hierarchicalSummary?: string; // Compressed summary of entire paper (~2000 chars) for full document coverage
   qaHistory?: QuestionAnswer[]; // Q&A history for this paper
   explanation?: ExplanationResult; // Stored explanation for this paper
   summary?: SummaryResult; // Stored summary for this paper

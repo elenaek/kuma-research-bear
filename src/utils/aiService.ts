@@ -318,14 +318,40 @@ Important:
 
   /**
    * Explain a research paper abstract
+   * Optionally uses hierarchical summary for comprehensive explanation of large papers
    */
-  async explainAbstract(abstract: string, contextId: string = 'default'): Promise<ExplanationResult> {
+  async explainAbstract(
+    abstract: string,
+    contextId: string = 'default',
+    hierarchicalSummary?: string
+  ): Promise<ExplanationResult> {
     const systemPrompt = `You are a helpful research assistant that explains complex academic papers in simple terms.
 Your goal is to make research papers accessible to people without specialized knowledge.
 Break down technical jargon, use analogies when helpful, and focus on the key insights.
 Use markdown formatting to enhance readability (bold for key terms, bullet points for lists, etc.).`;
 
-    const input = `Please explain this research paper abstract in simple terms that anyone can understand.
+    // If hierarchical summary is provided, use it for richer context
+    let input: string;
+    if (hierarchicalSummary) {
+      console.log('[Explain] Using hierarchical summary for comprehensive explanation');
+      input = `Please explain this research paper in simple terms that anyone can understand.
+Use the full paper summary below to provide a comprehensive explanation that covers the entire study, not just the abstract.
+
+FULL PAPER SUMMARY:
+${hierarchicalSummary}
+
+ABSTRACT:
+${abstract}
+
+Use markdown formatting for better readability:
+- Use **bold** for important concepts or key terms
+- Use bullet points or numbered lists where appropriate
+- Use *italic* for emphasis
+- Keep paragraphs concise
+- Cover the key findings, methodology, and conclusions from the full paper`;
+    } else {
+      console.log('[Explain] Using abstract only (standard approach)');
+      input = `Please explain this research paper abstract in simple terms that anyone can understand.
 Use markdown formatting for better readability:
 - Use **bold** for important concepts or key terms
 - Use bullet points or numbered lists where appropriate
@@ -334,6 +360,7 @@ Use markdown formatting for better readability:
 
 Abstract:
 ${abstract}`;
+    }
 
     const explanation = await this.prompt(input, systemPrompt, undefined, contextId);
 
@@ -346,13 +373,44 @@ ${abstract}`;
 
   /**
    * Generate a summary of a paper
+   * Optionally uses hierarchical summary to capture entire paper (not just abstract)
    */
-  async generateSummary(title: string, abstract: string, contextId: string = 'default'): Promise<SummaryResult> {
+  async generateSummary(
+    title: string,
+    abstract: string,
+    contextId: string = 'default',
+    hierarchicalSummary?: string
+  ): Promise<SummaryResult> {
     const systemPrompt = `You are a research assistant that creates concise summaries of academic papers.
 Extract the most important information and present it clearly.
 Use markdown formatting to enhance readability.`;
 
-    const input = `Create a brief summary and list 3-5 key points from this paper.
+    // If hierarchical summary is provided, use it for comprehensive summary
+    let input: string;
+    if (hierarchicalSummary) {
+      console.log('[Summary] Using hierarchical summary for comprehensive key points');
+      input = `Create a brief summary and list 3-5 key points from this paper.
+Use the full paper summary below to ensure your key points reflect the entire study (methodology, results, conclusions), not just the abstract.
+
+Title: ${title}
+
+FULL PAPER SUMMARY:
+${hierarchicalSummary}
+
+ABSTRACT:
+${abstract}
+
+Format your response as:
+SUMMARY: [2-3 sentence summary with **bold** for key concepts]
+KEY POINTS:
+- [point 1]
+- [point 2]
+- [point 3]
+
+Include key findings and conclusions from the full paper, not just the introduction.`;
+    } else {
+      console.log('[Summary] Using abstract only (standard approach)');
+      input = `Create a brief summary and list 3-5 key points from this paper.
 Use markdown formatting for better readability (bold for key terms, etc.):
 
 Title: ${title}
@@ -365,6 +423,7 @@ KEY POINTS:
 - [point 1]
 - [point 2]
 - [point 3]`;
+    }
 
     const response = await this.prompt(input, systemPrompt, undefined, contextId);
 
@@ -734,15 +793,40 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
   /**
    * Analyze paper methodology
    * Examines study design, data collection, sample size, and statistical methods
+   * Uses hierarchical summary + RAG to find relevant methodology sections
    */
-  async analyzeMethodology(paperContent: string, contextId: string = 'analysis'): Promise<MethodologyAnalysis> {
+  async analyzeMethodology(
+    paperId: string,
+    hierarchicalSummary: string,
+    contextId: string = 'analysis'
+  ): Promise<MethodologyAnalysis> {
     const systemPrompt = `You are a research methodology expert. Analyze research papers for their study design, methods, and rigor.`;
 
-    const input = `Analyze the methodology of this research paper.
-Paper content:
-${paperContent.slice(0, 6000)}`;
-
     try {
+      // Import RAG function
+      const { getRelevantChunksByTopic } = await import('./dbService.ts');
+
+      // Find relevant chunks for methodology
+      const topics = ['methodology', 'methods', 'design', 'procedure', 'participants', 'sample', 'statistical'];
+      const relevantChunks = await getRelevantChunksByTopic(paperId, topics, 3);
+
+      // Combine hierarchical summary + relevant chunks
+      const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+
+      const context = `FULL PAPER SUMMARY:
+${hierarchicalSummary}
+
+DETAILED METHODOLOGY SECTIONS:
+${chunksText}`;
+
+      const input = `Analyze the methodology of this research paper using the full paper summary and detailed methodology sections below.
+
+${context}
+
+Provide a comprehensive analysis of the study design, methods, and rigor.`;
+
+      console.log('[Methodology Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
+
       const response = await this.prompt(input, systemPrompt, methodologyAnalysisSchema, contextId);
       return JSON.parse(response);
     } catch (error) {
@@ -762,16 +846,40 @@ ${paperContent.slice(0, 6000)}`;
   /**
    * Identify confounders and biases
    * Looks for potential confounding variables and methodological biases
+   * Uses hierarchical summary + RAG to find relevant sections
    */
-  async identifyConfounders(paperContent: string, contextId: string = 'analysis'): Promise<ConfounderAnalysis> {
+  async identifyConfounders(
+    paperId: string,
+    hierarchicalSummary: string,
+    contextId: string = 'analysis'
+  ): Promise<ConfounderAnalysis> {
     const systemPrompt = `You are a research quality expert specializing in identifying biases and confounding variables.`;
 
-    const input = `Identify potential confounders and biases in this research paper.
-
-Paper content:
-${paperContent.slice(0, 6000)}`;
-
     try {
+      // Import RAG function
+      const { getRelevantChunksByTopic } = await import('./dbService.ts');
+
+      // Find relevant chunks for confounders/biases
+      const topics = ['bias', 'confound', 'limitation', 'control', 'random', 'blinding', 'selection'];
+      const relevantChunks = await getRelevantChunksByTopic(paperId, topics, 3);
+
+      // Combine hierarchical summary + relevant chunks
+      const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+
+      const context = `FULL PAPER SUMMARY:
+${hierarchicalSummary}
+
+DETAILED SECTIONS (Methods, Limitations, Discussion):
+${chunksText}`;
+
+      const input = `Identify potential confounders and biases in this research paper using the full paper summary and detailed sections below.
+
+${context}
+
+Provide a comprehensive analysis of confounders, biases, and control measures.`;
+
+      console.log('[Confounder Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
+
       const response = await this.prompt(input, systemPrompt, confounderAnalysisSchema, contextId);
       return JSON.parse(response);
     } catch (error) {
@@ -787,15 +895,40 @@ ${paperContent.slice(0, 6000)}`;
   /**
    * Analyze implications and applications
    * Identifies real-world applications and significance
+   * Uses hierarchical summary + RAG to find relevant sections
    */
-  async analyzeImplications(paperContent: string, contextId: string = 'analysis'): Promise<ImplicationAnalysis> {
+  async analyzeImplications(
+    paperId: string,
+    hierarchicalSummary: string,
+    contextId: string = 'analysis'
+  ): Promise<ImplicationAnalysis> {
     const systemPrompt = `You are a research impact expert who identifies practical applications and significance of research.`;
 
-    const input = `Analyze the implications of this research paper.
-Paper content:
-${paperContent.slice(0, 6000)}`;
-
     try {
+      // Import RAG function
+      const { getRelevantChunksByTopic } = await import('./dbService.ts');
+
+      // Find relevant chunks for implications
+      const topics = ['implication', 'application', 'significance', 'discussion', 'conclusion', 'impact', 'future'];
+      const relevantChunks = await getRelevantChunksByTopic(paperId, topics, 3);
+
+      // Combine hierarchical summary + relevant chunks
+      const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+
+      const context = `FULL PAPER SUMMARY:
+${hierarchicalSummary}
+
+DETAILED SECTIONS (Results, Discussion, Conclusions):
+${chunksText}`;
+
+      const input = `Analyze the implications of this research paper using the full paper summary and detailed sections below.
+
+${context}
+
+Provide a comprehensive analysis of real-world applications, significance, and future research directions.`;
+
+      console.log('[Implications Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
+
       const response = await this.prompt(input, systemPrompt, implicationAnalysisSchema, contextId);
       return JSON.parse(response);
     } catch (error) {
@@ -811,16 +944,40 @@ ${paperContent.slice(0, 6000)}`;
   /**
    * Identify limitations
    * Extracts and explains study limitations and constraints
+   * Uses hierarchical summary + RAG to find relevant sections
    */
-  async identifyLimitations(paperContent: string, contextId: string = 'analysis'): Promise<LimitationAnalysis> {
+  async identifyLimitations(
+    paperId: string,
+    hierarchicalSummary: string,
+    contextId: string = 'analysis'
+  ): Promise<LimitationAnalysis> {
     const systemPrompt = `You are a research critique expert who identifies limitations and constraints in studies.`;
 
-    const input = `Identify the limitations of this research paper.
-
-Paper content:
-${paperContent.slice(0, 6000)}`;
-
     try {
+      // Import RAG function
+      const { getRelevantChunksByTopic } = await import('./dbService.ts');
+
+      // Find relevant chunks for limitations
+      const topics = ['limitation', 'constraint', 'weakness', 'generalizability', 'caveat', 'shortcoming'];
+      const relevantChunks = await getRelevantChunksByTopic(paperId, topics, 3);
+
+      // Combine hierarchical summary + relevant chunks
+      const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+
+      const context = `FULL PAPER SUMMARY:
+${hierarchicalSummary}
+
+DETAILED SECTIONS (Limitations, Discussion):
+${chunksText}`;
+
+      const input = `Identify the limitations of this research paper using the full paper summary and detailed sections below.
+
+${context}
+
+Provide a comprehensive analysis of study limitations and generalizability.`;
+
+      console.log('[Limitations Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
+
       const response = await this.prompt(input, systemPrompt, limitationAnalysisSchema, contextId);
       return JSON.parse(response);
     } catch (error) {
@@ -835,16 +992,21 @@ ${paperContent.slice(0, 6000)}`;
   /**
    * Generate complete paper analysis
    * Combines all analysis methods for comprehensive evaluation
+   * Uses hierarchical summary + RAG for accurate, comprehensive analysis
    */
-  async analyzePaper(paperContent: string, contextId: string = 'analysis'): Promise<PaperAnalysisResult> {
-    console.log('Starting comprehensive paper analysis...');
+  async analyzePaper(
+    paperId: string,
+    hierarchicalSummary: string,
+    contextId: string = 'analysis'
+  ): Promise<PaperAnalysisResult> {
+    console.log('Starting comprehensive paper analysis with hierarchical summary + RAG...');
 
     // Run all analyses in parallel with unique sub-contexts
     const [methodology, confounders, implications, limitations] = await Promise.all([
-      this.analyzeMethodology(paperContent, `${contextId}-methodology`),
-      this.identifyConfounders(paperContent, `${contextId}-confounders`),
-      this.analyzeImplications(paperContent, `${contextId}-implications`),
-      this.identifyLimitations(paperContent, `${contextId}-limitations`),
+      this.analyzeMethodology(paperId, hierarchicalSummary, `${contextId}-methodology`),
+      this.identifyConfounders(paperId, hierarchicalSummary, `${contextId}-confounders`),
+      this.analyzeImplications(paperId, hierarchicalSummary, `${contextId}-implications`),
+      this.identifyLimitations(paperId, hierarchicalSummary, `${contextId}-limitations`),
     ]);
 
     return {
@@ -1032,6 +1194,103 @@ ${truncatedContent}`;
         terms: [],
         timestamp: Date.now(),
       };
+    }
+  }
+
+  /**
+   * Create hierarchical summary of entire document using map-reduce approach
+   * This ensures full document coverage without losing information to truncation
+   *
+   * Process:
+   * 1. Split document into ~5000 char chunks (with 1000 char overlap)
+   * 2. Summarize each chunk in parallel
+   * 3. Combine chunk summaries
+   * 4. Create final meta-summary (~8000 chars)
+   *
+   * This allows us to process papers of any length while staying within token limits
+   */
+  async createHierarchicalSummary(
+    fullText: string,
+    contextId: string = 'hierarchical-summary'
+  ): Promise<string> {
+    console.log('[Hierarchical Summary] Starting hierarchical summarization...');
+    console.log('[Hierarchical Summary] Document length:', fullText.length, 'chars');
+
+    // Import chunking utility
+    const { chunkContent } = await import('./contentExtractor.ts');
+
+    // Step 1: Split into chunks (5000 chars, 1000 char overlap for speed and context)
+    const chunks = chunkContent(fullText, 5000, 1000);
+    console.log('[Hierarchical Summary] Split into', chunks.length, 'chunks');
+
+    const chunkSummarySystemPrompt = `You are a research paper summarizer. Create concise summaries that capture key information.
+CRITICAL:
+- Preserve ALL acronyms exactly (e.g., "SES", "RCT", "fMRI")
+- Keep technical terminology intact - do NOT paraphrase
+- Maintain domain-specific language
+- Include acronym definitions if present
+- Capture key findings, methods, data`;
+
+    // If document is already small enough, just return a single summary
+    if (chunks.length === 1) {
+      console.log('[Hierarchical Summary] Document is small, creating single summary');
+      const input = `Summarize this research paper content concisely, capturing all important points:\n\n${fullText.slice(0, 6000)}`;
+      const summary = await this.prompt(input, chunkSummarySystemPrompt, undefined, contextId);
+      console.log('[Hierarchical Summary] Single summary created:', summary.length, 'chars');
+      return summary;
+    }
+
+    // Step 2: Summarize each chunk in parallel
+    console.log('[Hierarchical Summary] Summarizing chunks in parallel...');
+    const chunkSummaries = await Promise.all(
+      chunks.map(async (chunk, index) => {
+        const input = `Summarize this section of a research paper, capturing all important points:\n\n${chunk.content}`;
+
+        try {
+          const summary = await this.prompt(input, chunkSummarySystemPrompt, undefined, `${contextId}-chunk-${index}`);
+          console.log(`[Hierarchical Summary] Chunk ${index + 1}/${chunks.length} summarized:`, summary.length, 'chars');
+          return summary;
+        } catch (error) {
+          console.error(`[Hierarchical Summary] Failed to summarize chunk ${index}:`, error);
+          // Return original chunk content truncated if summary fails
+          return chunk.content.slice(0, 500);
+        }
+      })
+    );
+
+    console.log('[Hierarchical Summary] All chunks summarized');
+
+    // Step 3: Combine chunk summaries
+    const combinedSummaries = chunkSummaries.join('\n\n');
+    console.log('[Hierarchical Summary] Combined summaries length:', combinedSummaries.length, 'chars');
+
+    // Step 4: Create final meta-summary
+    // If combined summaries are small enough, return as-is
+    if (combinedSummaries.length <= 8000) {
+      console.log('[Hierarchical Summary] Combined summaries already compact');
+      return combinedSummaries;
+    }
+
+    // Otherwise, create a meta-summary
+    console.log('[Hierarchical Summary] Creating meta-summary from', chunkSummaries.length, 'chunk summaries...');
+    const metaSystemPrompt = `You are a research paper summarizer. 
+Create a comprehensive but concise summary from multiple section summaries.
+CRITICAL:
+- Preserve ALL acronyms and technical terminology exactly
+- Do NOT paraphrase specialized terms
+- Maintain term consistency across sections
+- Include methodology, findings, results, conclusions
+`;
+    const metaInput = `Create a comprehensive summary of this research paper from these section summaries. Capture all key findings, methodology, results, and conclusions:\n\n${combinedSummaries.slice(0, 20000)}`;
+
+    try {
+      const finalSummary = await this.prompt(metaInput, metaSystemPrompt, undefined, `${contextId}-meta`);
+      console.log('[Hierarchical Summary] ✓ Meta-summary created:', finalSummary.length, 'chars');
+      return finalSummary;
+    } catch (error) {
+      console.error('[Hierarchical Summary] Meta-summary failed, returning truncated combined summaries:', error);
+      // Fallback to truncated combined summaries
+      return combinedSummaries.slice(0, 8000) + '...';
     }
   }
 
