@@ -24,13 +24,7 @@ export function LottieLoader({ path, size = 64, className = '' }: LottieLoaderPr
       loop: true,
     });
 
-    // Wait for animation to load, then set segment to first 50%
     animation.addEventListener('load', () => {
-      const totalFrames = animation.totalFrames;
-      const midpoint = Math.floor(totalFrames / 2);
-
-      // Set segment to loop only first 50%
-      animation.setSegment(0, midpoint);
       animation.play();
     });
 

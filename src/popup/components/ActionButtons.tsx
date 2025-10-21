@@ -60,12 +60,12 @@ export function ActionButtons({
         {isOperationRunning ? (
           <>
             <Loader size={32} class="animate-spin" />
-            Kuma is hard at work... (Detecting, explaining, and analyzing)
+            Kuma is hard at work...
           </>
         ) : isPaperStored ? (
           <>
             <Backpack size={32} />
-            Kuma has found this research paper stored in his backpack. (Paper already stored)
+            Kuma has found this research paper stored. (Paper already stored)
           </>
         ) : (
           <>

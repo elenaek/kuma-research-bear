@@ -821,192 +821,192 @@ Source: ${paper.url}
       <div class="h-screen flex items-center justify-center bg-gray-50 p-8">
         <EmptyState
           icon={FileText}
-          title="No Explanation Yet"
-          subtitle='Click "Explain Paper" in the popup to generate an explanation'
+          title="No Research Papers Yet"
+          subtitle='Click "Detect & Explain Paper" in the popup to generate an explanation'
         />
       </div>
     );
   }
 
-  if (viewState === 'stored-only') {
-    return (
-      <div class="h-screen flex flex-col bg-gray-50">
-        {/* Integrated Header */}
-        <IntegratedHeader
-          papers={paperNavigation.allPapers}
-          currentIndex={paperNavigation.currentPaperIndex}
-          currentPaperTitle={storedPaper?.title}
-          isCheckingStorage={isCheckingStorage}
-          statusText={isCheckingStorage ? '🐻 Checking storage...' : '🐻 Ready for analysis'}
-          onPrevious={handlePrevPaper}
-          onNext={handleNextPaper}
-          onSelect={(index) => switchToPaper(index)}
-          onDeleteCurrent={handleDeletePaper}
-          isDeleting={paperNavigation.isDeleting}
-          showDeleteConfirm={paperNavigation.showDeleteConfirm}
-          onCancelDelete={() => paperNavigation.setShowDeleteConfirm(false)}
-          onDeleteAll={handleDeleteAllPapers}
-          isDeletingAll={isDeletingAll}
-          showDeleteAllConfirm={showDeleteAllConfirm}
-          onCancelDeleteAll={() => setShowDeleteAllConfirm(false)}
-          onRefresh={handleManualRefresh}
-        />
+  // if (viewState === 'stored-only') {
+  //   return (
+  //     <div class="h-screen flex flex-col bg-gray-50">
+  //       {/* Integrated Header */}
+  //       <IntegratedHeader
+  //         papers={paperNavigation.allPapers}
+  //         currentIndex={paperNavigation.currentPaperIndex}
+  //         currentPaperTitle={storedPaper?.title}
+  //         isCheckingStorage={isCheckingStorage}
+  //         statusText={isCheckingStorage ? '🐻 Checking storage...' : '🐻 Ready for analysis'}
+  //         onPrevious={handlePrevPaper}
+  //         onNext={handleNextPaper}
+  //         onSelect={(index) => switchToPaper(index)}
+  //         onDeleteCurrent={handleDeletePaper}
+  //         isDeleting={paperNavigation.isDeleting}
+  //         showDeleteConfirm={paperNavigation.showDeleteConfirm}
+  //         onCancelDelete={() => paperNavigation.setShowDeleteConfirm(false)}
+  //         onDeleteAll={handleDeleteAllPapers}
+  //         isDeletingAll={isDeletingAll}
+  //         showDeleteAllConfirm={showDeleteAllConfirm}
+  //         onCancelDeleteAll={() => setShowDeleteAllConfirm(false)}
+  //         onRefresh={handleManualRefresh}
+  //       />
 
-        {/* Content */}
-        <div class="flex-1 overflow-auto">
-          <div class="max-w-4xl mx-auto px-responsive py-responsive">
+  //       {/* Content */}
+  //       <div class="flex-1 overflow-auto">
+  //         <div class="max-w-4xl mx-auto px-responsive py-responsive">
 
-            {/* Storage Checking Banner */}
-            {isCheckingStorage && (
-              <OperationBanner
-                status="loading"
-                title="🐻 Kuma is checking paper storage..."
-                subtitle="Retrying with exponential backoff (up to 5 attempts)"
-              />
-            )}
+  //           {/* Storage Checking Banner */}
+  //           {isCheckingStorage && (
+  //             <OperationBanner
+  //               status="loading"
+  //               title="🐻 Kuma is checking paper storage..."
+  //               subtitle="Retrying with exponential backoff (up to 5 attempts)"
+  //             />
+  //           )}
 
-            {/* Explanation In Progress Banner */}
-            {/* {isExplainingInBackground && (
-              <OperationBanner
-                status="loading"
-                title="🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)"
-                subtitle="Generating summary and simplified explanation. This usually takes 10-20 seconds"
-                gradient={true}
-              />
-            )} */}
+  //           {/* Explanation In Progress Banner */}
+  //           {/* {isExplainingInBackground && (
+  //             <OperationBanner
+  //               status="loading"
+  //               title="🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)"
+  //               subtitle="Generating summary and simplified explanation. This usually takes 10-20 seconds"
+  //               gradient={true}
+  //             />
+  //           )} */}
 
-            {/* Paper Info Card */}
-            <PaperInfoCard paper={data?.paper || null} storedPaper={storedPaper} />
+  //           {/* Paper Info Card */}
+  //           <PaperInfoCard paper={data?.paper || null} storedPaper={storedPaper} />
 
 
-            {/* Available Features */}
-            <AvailableFeaturesCard
-              storedPaper={storedPaper}
-              isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-            />
+  //           {/* Available Features */}
+  //           <AvailableFeaturesCard
+  //             storedPaper={storedPaper}
+  //             isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+  //           />
 
-            {/* Tabs */}
-            {/* Dropdown for narrow screens */}
-            <div class="mb-4 hide-on-wide">
-              <TabDropdown
-                tabs={[
-                  {
-                    id: 'analysis',
-                    label: 'Analysis',
-                    active: activeTab === 'analysis',
-                    loading: storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false,
-                    onClick: () => setActiveTab('analysis'),
-                  },
-                  {
-                    id: 'qa',
-                    label: 'Q&A',
-                    active: activeTab === 'qa',
-                    onClick: () => setActiveTab('qa'),
-                  },
-                  {
-                    id: 'glossary',
-                    label: 'Glossary',
-                    active: activeTab === 'glossary',
-                    loading: storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false,
-                    onClick: () => setActiveTab('glossary'),
-                  },
-                  {
-                    id: 'original',
-                    label: 'Abstract',
-                    active: activeTab === 'original',
-                    onClick: () => setActiveTab('original'),
-                  },
-                ]}
-                activeTabLabel={
-                  activeTab === 'analysis' ? 'Analysis' :
-                  activeTab === 'qa' ? 'Q&A' :
-                  activeTab === 'glossary' ? 'Glossary' :
-                  'Abstract'
-                }
-              />
-            </div>
+  //           {/* Tabs */}
+  //           {/* Dropdown for narrow screens */}
+  //           <div class="mb-4 hide-on-wide">
+  //             <TabDropdown
+  //               tabs={[
+  //                 {
+  //                   id: 'analysis',
+  //                   label: 'Analysis',
+  //                   active: activeTab === 'analysis',
+  //                   loading: storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false,
+  //                   onClick: () => setActiveTab('analysis'),
+  //                 },
+  //                 {
+  //                   id: 'qa',
+  //                   label: 'Q&A',
+  //                   active: activeTab === 'qa',
+  //                   onClick: () => setActiveTab('qa'),
+  //                 },
+  //                 {
+  //                   id: 'glossary',
+  //                   label: 'Glossary',
+  //                   active: activeTab === 'glossary',
+  //                   loading: storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false,
+  //                   onClick: () => setActiveTab('glossary'),
+  //                 },
+  //                 {
+  //                   id: 'original',
+  //                   label: 'Abstract',
+  //                   active: activeTab === 'original',
+  //                   onClick: () => setActiveTab('original'),
+  //                 },
+  //               ]}
+  //               activeTabLabel={
+  //                 activeTab === 'analysis' ? 'Analysis' :
+  //                 activeTab === 'qa' ? 'Q&A' :
+  //                 activeTab === 'glossary' ? 'Glossary' :
+  //                 'Abstract'
+  //               }
+  //             />
+  //           </div>
 
-            {/* Horizontal tabs for wide screens */}
-            <div class="mb-4 border-b border-gray-200 -mx-responsive hide-on-narrow">
-              <div class="flex gap-1 overflow-x-auto px-responsive scrollbar-hide" style="scrollbar-width: none; -ms-overflow-style: none;">
-                <TabButton
-                  active={activeTab === 'analysis'}
-                  onClick={() => setActiveTab('analysis')}
-                  loading={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-                >
-                  Analysis
-                </TabButton>
-                <TabButton
-                  active={activeTab === 'qa'}
-                  onClick={() => setActiveTab('qa')}
-                >
-                  Q&A
-                </TabButton>
-                <TabButton
-                  active={activeTab === 'glossary'}
-                  onClick={() => setActiveTab('glossary')}
-                  loading={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-                >
-                  Glossary
-                </TabButton>
-                <TabButton
-                  active={activeTab === 'original'}
-                  onClick={() => setActiveTab('original')}
-                >
-                  Abstract
-                </TabButton>
-              </div>
-            </div>
+  //           {/* Horizontal tabs for wide screens */}
+  //           <div class="mb-4 border-b border-gray-200 -mx-responsive hide-on-narrow">
+  //             <div class="flex gap-1 overflow-x-auto px-responsive scrollbar-hide" style="scrollbar-width: none; -ms-overflow-style: none;">
+  //               <TabButton
+  //                 active={activeTab === 'analysis'}
+  //                 onClick={() => setActiveTab('analysis')}
+  //                 loading={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+  //               >
+  //                 Analysis
+  //               </TabButton>
+  //               <TabButton
+  //                 active={activeTab === 'qa'}
+  //                 onClick={() => setActiveTab('qa')}
+  //               >
+  //                 Q&A
+  //               </TabButton>
+  //               <TabButton
+  //                 active={activeTab === 'glossary'}
+  //                 onClick={() => setActiveTab('glossary')}
+  //                 loading={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
+  //               >
+  //                 Glossary
+  //               </TabButton>
+  //               <TabButton
+  //                 active={activeTab === 'original'}
+  //                 onClick={() => setActiveTab('original')}
+  //               >
+  //                 Abstract
+  //               </TabButton>
+  //             </div>
+  //           </div>
 
-            {/* Tab Content */}
-            <div class="space-y-4">
-              {/* Analysis Tab Content */}
-              {activeTab === 'analysis' && (
-                <div class="tab-content space-y-4">
-                  <AnalysisSection
-                    analysis={analysis}
-                    isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-                  />
-                </div>
-              )}
+  //           {/* Tab Content */}
+  //           <div class="space-y-4">
+  //             {/* Analysis Tab Content */}
+  //             {activeTab === 'analysis' && (
+  //               <div class="tab-content space-y-4">
+  //                 <AnalysisSection
+  //                   analysis={analysis}
+  //                   isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+  //                 />
+  //               </div>
+  //             )}
 
-              {/* Q&A Tab Content */}
-              {activeTab === 'qa' && (
-                <div class="tab-content space-y-4">
-                  <QASection
-                    question={question}
-                    setQuestion={setQuestion}
-                    isAsking={isAsking}
-                    qaHistory={qaHistory}
-                    storedPaper={storedPaper}
-                    onAskQuestion={handleAskQuestion}
-                    newlyAddedQAIndex={newlyAddedQAIndex}
-                  />
-                </div>
-              )}
+  //             {/* Q&A Tab Content */}
+  //             {activeTab === 'qa' && (
+  //               <div class="tab-content space-y-4">
+  //                 <QASection
+  //                   question={question}
+  //                   setQuestion={setQuestion}
+  //                   isAsking={isAsking}
+  //                   qaHistory={qaHistory}
+  //                   storedPaper={storedPaper}
+  //                   onAskQuestion={handleAskQuestion}
+  //                   newlyAddedQAIndex={newlyAddedQAIndex}
+  //                 />
+  //               </div>
+  //             )}
 
-              {/* Glossary Tab */}
-              {activeTab === 'glossary' && (
-                <div class="tab-content space-y-4">
-                  <GlossarySection
-                    glossary={glossary}
-                    isGenerating={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-                  />
-                </div>
-              )}
+  //             {/* Glossary Tab */}
+  //             {activeTab === 'glossary' && (
+  //               <div class="tab-content space-y-4">
+  //                 <GlossarySection
+  //                   glossary={glossary}
+  //                   isGenerating={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
+  //                 />
+  //               </div>
+  //             )}
 
-              {/* Original Tab */}
-              {activeTab === 'original' && (
-                <div class="tab-content space-y-4">
-                  <OriginalPaperTab paper={data?.paper || null} />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  //             {/* Original Tab */}
+  //             {activeTab === 'original' && (
+  //               <div class="tab-content space-y-4">
+  //                 <OriginalPaperTab paper={data?.paper || null} />
+  //               </div>
+  //             )}
+  //           </div>
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div class="h-screen flex flex-col bg-gray-50">
@@ -1048,206 +1048,211 @@ Source: ${paper.url}
             />
           )}
 
-          {/* Explanation In Progress Banner */}
-          {/* {isExplainingInBackground && (
-            <OperationBanner
-              status="loading"
-              title="🐻 Kuma is explaining the paper..."
-              subtitle="Generating summary and simplified explanation. This usually takes 10-20 seconds"
-              gradient={true}
-            />
-          )} */}
 
           {/* Paper Info Card */}
           <PaperInfoCard paper={data?.paper || null} storedPaper={storedPaper} />
 
+          {(viewState === 'stored-only') && (
+              <div class="card">
+                <LottieLoader path="/lotties/kuma-thinking.lottie" size={120} className="mb-4 mx-auto" />
+                <div class="text-center">
+                  <p class="text-gray-900 text-base font-medium">Kuma is working on explaining this research paper</p>
+                  <p class="text-xs text-gray-500 mt-2 mb-2">Generating explanation and summary</p>
+                </div>
+              </div>
+          )}
+
           {/* Tabs */}
           {/* Dropdown for narrow screens */}
-          <div class="mb-4 hide-on-wide text-center">
-            <TabDropdown
-              tabs={[
-                {
-                  id: 'summary',
-                  label: 'Summary',
-                  active: activeTab === 'summary',
-                  onClick: () => setActiveTab('summary'),
-                },
-                {
-                  id: 'explanation',
-                  label: 'Explanation',
-                  active: activeTab === 'explanation',
-                  onClick: () => setActiveTab('explanation'),
-                },
-                {
-                  id: 'analysis',
-                  label: 'Analysis',
-                  active: activeTab === 'analysis',
-                  loading: storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false,
-                  disabled: !analysis && !(storedPaper?.url && operationState.isAnalyzing(storedPaper.url)),
-                  title: (storedPaper?.url && operationState.isAnalyzing(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : '',
-                  onClick: () => setActiveTab('analysis'),
-                },
-                {
-                  id: 'qa',
-                  label: 'Q&A',
-                  active: activeTab === 'qa',
-                  disabled: !storedPaper,
-                  title: !storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper',
-                  onClick: () => setActiveTab('qa'),
-                },
-                {
-                  id: 'glossary',
-                  label: 'Glossary',
-                  active: activeTab === 'glossary',
-                  loading: storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false,
-                  disabled: !glossary && !(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)),
-                  title: (storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : '',
-                  onClick: () => setActiveTab('glossary'),
-                },
-                {
-                  id: 'original',
-                  label: 'Original',
-                  active: activeTab === 'original',
-                  onClick: () => setActiveTab('original'),
-                },
-              ]}
-              activeTabLabel={
-                activeTab === 'summary' ? 'Summary' :
-                activeTab === 'explanation' ? 'Explanation' :
-                activeTab === 'analysis' ? 'Analysis' :
-                activeTab === 'qa' ? 'Q&A' :
-                activeTab === 'glossary' ? 'Glossary' :
-                'Original'
-              }
-            />
-          </div>
-
-          {/* Horizontal tabs for wide screens */}
-          <div class="mb-4 border-b border-gray-200 -mx-responsive hide-on-narrow">
-            <div class="flex gap-1 overflow-x-auto px-responsive scrollbar-hide" style="scrollbar-width: none; -ms-overflow-style: none;">
-              <TabButton
-                active={activeTab === 'summary'}
-                onClick={() => setActiveTab('summary')}
-              >
-                Summary
-              </TabButton>
-              <TabButton
-                active={activeTab === 'explanation'}
-                onClick={() => setActiveTab('explanation')}
-              >
-                Explanation
-              </TabButton>
-              <TabButton
-                active={activeTab === 'analysis'}
-                onClick={() => setActiveTab('analysis')}
-                loading={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-                disabled={!analysis && !(storedPaper?.url && operationState.isAnalyzing(storedPaper.url))}
-                title={(storedPaper?.url && operationState.isAnalyzing(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : ''}
-              >
-                Analysis
-              </TabButton>
-              <TabButton
-                active={activeTab === 'qa'}
-                onClick={() => setActiveTab('qa')}
-                disabled={!storedPaper}
-                title={!storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper'}
-              >
-                Q&A
-              </TabButton>
-              <TabButton
-                active={activeTab === 'glossary'}
-                onClick={() => setActiveTab('glossary')}
-                loading={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-                disabled={!glossary && !(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url))}
-                title={(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : ''}
-              >
-                Glossary
-              </TabButton>
-              <TabButton
-                active={activeTab === 'original'}
-                onClick={() => setActiveTab('original')}
-              >
-                Original
-              </TabButton>
-            </div>
-          </div>
-
-          {/* Tab Content */}
-          <div class="space-y-4">
-            {activeTab === 'summary' && (
-              <div class="tab-content space-y-4">
-                <SummaryTab summary={data?.summary || null} />
-              </div>
-            )}
-
-            {activeTab === 'explanation' && (
-              <div class="tab-content space-y-4">
-                <ExplanationTab explanation={data?.explanation || null} />
-              </div>
-            )}
-
-            {activeTab === 'analysis' && (
-              <div class="tab-content space-y-4">
-                <AnalysisSection
-                  analysis={analysis}
-                  isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+          {viewState !== 'stored-only' && (
+            <>
+              <div class="mb-4 hide-on-wide text-center">
+                <TabDropdown
+                  tabs={[
+                    {
+                      id: 'summary',
+                      label: 'Summary',
+                      active: activeTab === 'summary',
+                      onClick: () => setActiveTab('summary'),
+                    },
+                    {
+                      id: 'explanation',
+                      label: 'Explanation',
+                      active: activeTab === 'explanation',
+                      onClick: () => setActiveTab('explanation'),
+                    },
+                    {
+                      id: 'analysis',
+                      label: 'Analysis',
+                      active: activeTab === 'analysis',
+                      loading: storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false,
+                      disabled: !analysis && !(storedPaper?.url && operationState.isAnalyzing(storedPaper.url)),
+                      title: (storedPaper?.url && operationState.isAnalyzing(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : '',
+                      onClick: () => setActiveTab('analysis'),
+                    },
+                    {
+                      id: 'qa',
+                      label: 'Q&A',
+                      active: activeTab === 'qa',
+                      disabled: !storedPaper,
+                      title: !storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper',
+                      onClick: () => setActiveTab('qa'),
+                    },
+                    {
+                      id: 'glossary',
+                      label: 'Glossary',
+                      active: activeTab === 'glossary',
+                      loading: storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false,
+                      disabled: !glossary && !(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)),
+                      title: (storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : '',
+                      onClick: () => setActiveTab('glossary'),
+                    },
+                    {
+                      id: 'original',
+                      label: 'Original',
+                      active: activeTab === 'original',
+                      onClick: () => setActiveTab('original'),
+                    },
+                  ]}
+                  activeTabLabel={
+                    activeTab === 'summary' ? 'Summary' :
+                    activeTab === 'explanation' ? 'Explanation' :
+                    activeTab === 'analysis' ? 'Analysis' :
+                    activeTab === 'qa' ? 'Q&A' :
+                    activeTab === 'glossary' ? 'Glossary' :
+                    'Original'
+                  }
                 />
               </div>
-            )}
 
-            {activeTab === 'qa' && (
-              <div class="tab-content space-y-4">
-                <QASection
-                  question={question}
-                  setQuestion={setQuestion}
-                  isAsking={isAsking}
-                  qaHistory={qaHistory}
-                  storedPaper={storedPaper}
-                  onAskQuestion={handleAskQuestion}
-                  newlyAddedQAIndex={newlyAddedQAIndex}
-                />
+              {/* Horizontal tabs for wide screens */}
+              <div class="mb-4 border-b border-gray-200 -mx-responsive hide-on-narrow">
+                <div class="flex gap-1 overflow-x-auto px-responsive scrollbar-hide" style="scrollbar-width: none; -ms-overflow-style: none;">
+                  <TabButton
+                    active={activeTab === 'summary'}
+                    onClick={() => setActiveTab('summary')}
+                  >
+                    Summary
+                  </TabButton>
+                  <TabButton
+                    active={activeTab === 'explanation'}
+                    onClick={() => setActiveTab('explanation')}
+                  >
+                    Explanation
+                  </TabButton>
+                  <TabButton
+                    active={activeTab === 'analysis'}
+                    onClick={() => setActiveTab('analysis')}
+                    loading={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+                    disabled={!analysis && !(storedPaper?.url && operationState.isAnalyzing(storedPaper.url))}
+                    title={(storedPaper?.url && operationState.isAnalyzing(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : ''}
+                  >
+                    Analysis
+                  </TabButton>
+                  <TabButton
+                    active={activeTab === 'qa'}
+                    onClick={() => setActiveTab('qa')}
+                    disabled={!storedPaper}
+                    title={!storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper'}
+                  >
+                    Q&A
+                  </TabButton>
+                  <TabButton
+                    active={activeTab === 'glossary'}
+                    onClick={() => setActiveTab('glossary')}
+                    loading={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
+                    disabled={!glossary && !(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url))}
+                    title={(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : ''}
+                  >
+                    Glossary
+                  </TabButton>
+                  <TabButton
+                    active={activeTab === 'original'}
+                    onClick={() => setActiveTab('original')}
+                  >
+                    Original
+                  </TabButton>
+                </div>
               </div>
-            )}
 
-            {activeTab === 'glossary' && (
-              <div class="tab-content space-y-4">
-                <GlossarySection
-                  glossary={glossary}
-                  isGenerating={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-                />
+              {/* Tab Content */}
+              <div class="space-y-4">
+                {activeTab === 'summary' && (
+                  <div class="tab-content space-y-4">
+                    <SummaryTab summary={data?.summary || null} />
+                  </div>
+                )}
+
+                {activeTab === 'explanation' && (
+                  <div class="tab-content space-y-4">
+                    <ExplanationTab explanation={data?.explanation || null} />
+                  </div>
+                )}
+
+                {activeTab === 'analysis' && (
+                  <div class="tab-content space-y-4">
+                    <AnalysisSection
+                      analysis={analysis}
+                      isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+                    />
+                  </div>
+                )}
+
+                {activeTab === 'qa' && (
+                  <div class="tab-content space-y-4">
+                    <QASection
+                      question={question}
+                      setQuestion={setQuestion}
+                      isAsking={isAsking}
+                      qaHistory={qaHistory}
+                      storedPaper={storedPaper}
+                      onAskQuestion={handleAskQuestion}
+                      newlyAddedQAIndex={newlyAddedQAIndex}
+                    />
+                  </div>
+                )}
+
+                {activeTab === 'glossary' && (
+                  <div class="tab-content space-y-4">
+                    <GlossarySection
+                      glossary={glossary}
+                      isGenerating={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
+                    />
+                  </div>
+                )}
+
+                {activeTab === 'original' && (
+                  <div class="tab-content space-y-4">
+                    <OriginalPaperTab paper={data?.paper || null} />
+                  </div>
+                )}
               </div>
-            )}
 
-            {activeTab === 'original' && (
-              <div class="tab-content space-y-4">
-                <OriginalPaperTab paper={data?.paper || null} />
+              {/* Actions */}
+              <div class="flex gap-3 mt-6">
+                <LoadingButton
+                  onClick={handleCopy}
+                  loading={false}
+                  variant="secondary"
+                  className="flex-1"
+                >
+                  <Copy size={16} />
+                  {copied ? 'Copied!' : 'Copy Explanation'}
+                </LoadingButton>
+
+                <LoadingButton
+                  onClick={handleRegenerate}
+                  loading={isRegenerating}
+                  loadingText="Regenerating..."
+                  variant="secondary"
+                  className="flex-1"
+                >
+                  <RefreshCw size={16} />
+                  Regenerate
+                </LoadingButton>
               </div>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div class="flex gap-3 mt-6">
-            <LoadingButton
-              onClick={handleCopy}
-              loading={false}
-              variant="secondary"
-              className="flex-1"
-            >
-              <Copy size={16} />
-              {copied ? 'Copied!' : 'Copy Explanation'}
-            </LoadingButton>
-
-            <LoadingButton
-              onClick={handleRegenerate}
-              loading={isRegenerating}
-              loadingText="Regenerating..."
-              variant="secondary"
-              className="flex-1"
-            >
-              <RefreshCw size={16} />
-              Regenerate
-            </LoadingButton>
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>
