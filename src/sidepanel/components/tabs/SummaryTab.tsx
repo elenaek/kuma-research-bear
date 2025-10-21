@@ -17,6 +17,11 @@ export function SummaryTab(props: SummaryTabProps) {
     return null;
   }
 
+  // Determine API badge text and styling
+  const apiInfo = summary.generatedBy === 'summarizer-api'
+    ? { text: 'Chrome Summarizer API', color: 'bg-green-100 text-green-800' }
+    : { text: 'Prompt API', color: 'bg-blue-100 text-blue-800' };
+
   return (
     <>
       <CollapsibleSection title="Quick Summary" defaultOpen={true}>
@@ -33,6 +38,15 @@ export function SummaryTab(props: SummaryTabProps) {
           ))}
         </ul>
       </CollapsibleSection>
+
+      {/* API Source Indicator */}
+      {/* {summary.generatedBy && (
+        <div class="mt-4 flex items-center justify-end">
+          <span class={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${apiInfo.color}`}>
+            Generated with {apiInfo.text}
+          </span>
+        </div>
+      )} */}
     </>
   );
 }

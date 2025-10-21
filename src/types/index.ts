@@ -102,6 +102,12 @@ export interface AICapabilities {
   maxTopK?: number;
 }
 
+export interface SummarizerCapabilities {
+  available: boolean;
+  availability: AIAvailability;
+  model: string;
+}
+
 export interface ExplanationResult {
   originalText: string;
   explanation: string;
@@ -112,6 +118,7 @@ export interface SummaryResult {
   summary: string;
   keyPoints: string[];
   timestamp: number;
+  generatedBy?: 'summarizer-api' | 'prompt-api'; // Track which API was used
 }
 
 // Chrome Prompt API types (Stable - Chrome 138+)
@@ -139,6 +146,29 @@ declare global {
     static availability(): Promise<AIAvailability>;
     static params(): Promise<AILanguageModelParams>;
     static create(options?: AISessionOptions): Promise<AILanguageModelSession>;
+  }
+
+  // Chrome Summarizer API types (Chrome 138+)
+  interface SummarizerOptions {
+    type?: 'key-points' | 'tldr' | 'teaser' | 'headline';
+    format?: 'markdown' | 'plain-text';
+    length?: 'short' | 'medium' | 'long';
+    sharedContext?: string;
+    expectedInputLanguages?: string[];
+    outputLanguage?: string;
+    expectedContextLanguages?: string[];
+    monitor?(m: EventTarget): void;
+  }
+
+  interface AISummarizer {
+    summarize(text: string, options?: { context?: string }): Promise<string>;
+    summarizeStreaming(text: string, options?: { context?: string }): AsyncIterable<string>;
+    destroy(): void;
+  }
+
+  class Summarizer {
+    static availability(): Promise<AIAvailability>;
+    static create(options?: SummarizerOptions): Promise<AISummarizer>;
   }
 }
 

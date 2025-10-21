@@ -5,6 +5,7 @@ import {
   ExplanationResult,
   SummaryResult,
   AIAvailability,
+  SummarizerCapabilities,
   PaperAnalysisResult,
   MethodologyAnalysis,
   ConfounderAnalysis,
@@ -91,6 +92,139 @@ class ChromeAIService {
         availability: 'no',
         model: 'Gemini Nano',
       };
+    }
+  }
+
+  /**
+   * Check if Chrome Summarizer API is available
+   */
+  async checkSummarizerAvailability(): Promise<SummarizerCapabilities> {
+    try {
+      // Check if Summarizer global is available
+      if (typeof Summarizer === 'undefined') {
+        console.log('[Summarizer] API not available (typeof Summarizer === undefined)');
+        return {
+          available: false,
+          availability: 'no',
+          model: 'Gemini Nano',
+        };
+      }
+
+      const availability: AIAvailability = await Summarizer.availability();
+      console.log('[Summarizer] API availability:', availability);
+
+      return {
+        available: availability === 'available',
+        availability,
+        model: 'Gemini Nano',
+      };
+    } catch (error) {
+      console.error('[Summarizer] Error checking availability:', error);
+      return {
+        available: false,
+        availability: 'no',
+        model: 'Gemini Nano',
+      };
+    }
+  }
+
+  /**
+   * Create a summarizer session with specified options
+   */
+  async createSummarizer(options: SummarizerOptions): Promise<AISummarizer | null> {
+    try {
+      if (typeof Summarizer === 'undefined') {
+        console.error('[Summarizer] API not available');
+        return null;
+      }
+
+      console.log('[Summarizer] Creating summarizer with options:', options);
+      const summarizer = await Summarizer.create(options);
+      console.log('[Summarizer] Summarizer created successfully');
+      return summarizer;
+    } catch (error) {
+      console.error('[Summarizer] Error creating summarizer:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Generate summary using Chrome Summarizer API
+   * Creates both tldr (medium) and key-points (long) summaries
+   */
+  async generateSummaryWithSummarizer(
+    title: string,
+    abstract: string,
+    contextId: string = 'default'
+  ): Promise<SummaryResult | null> {
+    try {
+      console.log('[Summarizer] Starting summary generation for:', title);
+
+      // Create tldr summarizer for quick summary
+      const tldrSummarizer = await this.createSummarizer({
+        type: 'tldr',
+        format: 'markdown',
+        length: 'long',
+        sharedContext: `Research paper: ${title}`,
+        expectedInputLanguages: ['en'],
+        outputLanguage: 'en'
+      });
+
+      if (!tldrSummarizer) {
+        console.warn('[Summarizer] Failed to create tldr summarizer');
+        return null;
+      }
+
+      // Create key-points summarizer for key points
+      const keyPointsSummarizer = await this.createSummarizer({
+        type: 'key-points',
+        format: 'markdown',
+        length: 'long',
+        sharedContext: `Research paper: ${title}`,
+        expectedInputLanguages: ['en'],
+        outputLanguage: 'en'
+      });
+
+      if (!keyPointsSummarizer) {
+        console.warn('[Summarizer] Failed to create key-points summarizer');
+        tldrSummarizer.destroy();
+        return null;
+      }
+
+      // Generate both summaries in parallel
+      console.log('[Summarizer] Generating summaries...');
+      const [tldrResult, keyPointsResult] = await Promise.all([
+        tldrSummarizer.summarize(abstract, { context: title }),
+        keyPointsSummarizer.summarize(abstract, { context: title })
+      ]);
+
+      console.log('[Summarizer] tldr result:', tldrResult);
+      console.log('[Summarizer] key-points result:', keyPointsResult);
+
+      // Clean up summarizers
+      tldrSummarizer.destroy();
+      keyPointsSummarizer.destroy();
+
+      // Parse key points from markdown bullet list
+      const keyPoints = keyPointsResult
+        .split('\n')
+        .filter(line => line.trim().startsWith('-') || line.trim().startsWith('*'))
+        .map(line => line.replace(/^[-*]\s*/, '').trim())
+        .filter(point => point.length > 0);
+
+      console.log('[Summarizer] ✓ Summary generated successfully using Summarizer API');
+      console.log('[Summarizer] Summary:', tldrResult);
+      console.log('[Summarizer] Key points:', keyPoints);
+
+      return {
+        summary: tldrResult,
+        keyPoints: keyPoints.length > 0 ? keyPoints : ['No key points extracted'],
+        timestamp: Date.now(),
+        generatedBy: 'summarizer-api'
+      };
+    } catch (error) {
+      console.error('[Summarizer] Error generating summary:', error);
+      return null;
     }
   }
 
@@ -373,6 +507,7 @@ ${abstract}`;
 
   /**
    * Generate a summary of a paper
+   * Tries Summarizer API first, falls back to Prompt API if unavailable
    * Optionally uses hierarchical summary to capture entire paper (not just abstract)
    */
   async generateSummary(
@@ -381,6 +516,30 @@ ${abstract}`;
     contextId: string = 'default',
     hierarchicalSummary?: string
   ): Promise<SummaryResult> {
+    // Try Summarizer API first if no hierarchical summary (Summarizer works best with abstract)
+    if (!hierarchicalSummary) {
+      console.log('[Summary] Checking Summarizer API availability...');
+      const summarizerCapabilities = await this.checkSummarizerAvailability();
+
+      if (summarizerCapabilities.available) {
+        console.log('[Summary] Summarizer API available, using it for summary generation');
+        const summarizerResult = await this.generateSummaryWithSummarizer(title, abstract, contextId);
+
+        if (summarizerResult) {
+          console.log('[Summary] ✓ Successfully generated summary with Summarizer API');
+          return summarizerResult;
+        } else {
+          console.warn('[Summary] Summarizer API failed, falling back to Prompt API');
+        }
+      } else {
+        console.log(`[Summary] Summarizer API not available (${summarizerCapabilities.availability}), using Prompt API`);
+      }
+    } else {
+      console.log('[Summary] Using Prompt API for hierarchical summary (better for full paper analysis)');
+    }
+
+    // Fall back to Prompt API
+    console.log('[Summary] Using Prompt API for summary generation');
     const systemPrompt = `You are a research assistant that creates concise summaries of academic papers.
 Extract the most important information and present it clearly.
 Use markdown formatting to enhance readability.`;
@@ -439,10 +598,12 @@ KEY POINTS:
           .map(line => line.replace(/^-\s*/, '').trim())
       : [];
 
+    console.log('[Summary] ✓ Successfully generated summary with Prompt API');
     return {
       summary,
       keyPoints: keyPoints.length > 0 ? keyPoints : ['No key points extracted'],
       timestamp: Date.now(),
+      generatedBy: 'prompt-api'
     };
   }
 
