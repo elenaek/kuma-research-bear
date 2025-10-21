@@ -45,6 +45,8 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
       isDetecting: true,
       detectionProgress: '🐻 Kuma is foraging for research papers... (Detecting paper)',
       error: null,
+      hasDetected: false,  // Reset detection flag when starting new detection
+      hasChunked: false,   // Reset chunking flag when starting new detection
     });
 
     const detectResponse = await chrome.tabs.sendMessage(tabId, {
@@ -69,11 +71,21 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
 
     // Update state with detected paper
     updateOperationState(tabId, {
-      isDetecting: true,
+      isDetecting: false,  // Detection phase is complete
       detectionProgress: '🐻 Kuma found a research paper! (Paper detected!)',
       currentPaper: detectResponse.paper,
       isPaperStored: isPaperStored,
+      hasDetected: true,  // Mark detection as complete
     });
+
+    // Note: Chunking happens automatically during paper storage in the content script
+    // The chunking state updates are handled by dbHandlers.handleStorePaper()
+    // We wait a moment to ensure the paper is fully stored before continuing
+    if (!detectResponse.alreadyStored) {
+      console.log('[Orchestrator] Waiting for paper storage and chunking to complete...');
+      // Add a small delay to ensure chunking completes
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
 
     // Phase 2: Explanation
     updateOperationState(tabId, {

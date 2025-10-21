@@ -1211,7 +1211,8 @@ ${truncatedContent}`;
    */
   async createHierarchicalSummary(
     fullText: string,
-    contextId: string = 'hierarchical-summary'
+    contextId: string = 'hierarchical-summary',
+    onProgress?: (current: number, total: number) => void
   ): Promise<string> {
     console.log('[Hierarchical Summary] Starting hierarchical summarization...');
     console.log('[Hierarchical Summary] Document length:', fullText.length, 'chars');
@@ -1240,24 +1241,46 @@ CRITICAL:
       return summary;
     }
 
-    // Step 2: Summarize each chunk in parallel
+    // Step 2: Summarize each chunk in parallel with progress tracking
     console.log('[Hierarchical Summary] Summarizing chunks in parallel...');
-    const chunkSummaries = await Promise.all(
-      chunks.map(async (chunk, index) => {
-        const input = `Summarize this section of a research paper, capturing all important points:\n\n${chunk.content}`;
 
-        try {
-          const summary = await this.prompt(input, chunkSummarySystemPrompt, undefined, `${contextId}-chunk-${index}`);
-          console.log(`[Hierarchical Summary] Chunk ${index + 1}/${chunks.length} summarized:`, summary.length, 'chars');
-          return summary;
-        } catch (error) {
-          console.error(`[Hierarchical Summary] Failed to summarize chunk ${index}:`, error);
-          // Return original chunk content truncated if summary fails
-          return chunk.content.slice(0, 500);
+    // Report initial progress
+    if (onProgress) {
+      onProgress(0, chunks.length);
+    }
+
+    let completedCount = 0;
+
+    // Create promises for all chunk summaries (starts parallel execution)
+    const summaryPromises = chunks.map(async (chunk, index) => {
+      const input = `Summarize this section of a research paper, capturing all important points:\n\n${chunk.content}`;
+
+      try {
+        const summary = await this.prompt(input, chunkSummarySystemPrompt, undefined, `${contextId}-chunk-${index}`);
+        console.log(`[Hierarchical Summary] Chunk ${index + 1}/${chunks.length} summarized:`, summary.length, 'chars');
+
+        // Report progress after this chunk completes
+        completedCount++;
+        if (onProgress) {
+          onProgress(completedCount, chunks.length);
         }
-      })
-    );
 
+        return summary;
+      } catch (error) {
+        console.error(`[Hierarchical Summary] Failed to summarize chunk ${index}:`, error);
+
+        // Still count as completed even if failed
+        completedCount++;
+        if (onProgress) {
+          onProgress(completedCount, chunks.length);
+        }
+
+        // Return original chunk content truncated if summary fails
+        return chunk.content.slice(0, 500);
+      }
+    });
+
+    const chunkSummaries = await Promise.all(summaryPromises);
     console.log('[Hierarchical Summary] All chunks summarized');
 
     // Step 3: Combine chunk summaries

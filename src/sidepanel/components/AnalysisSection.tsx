@@ -28,7 +28,6 @@ export function AnalysisSection(props: AnalysisSectionProps) {
             <p class="text-sm text-gray-600">
               Evaluating methodology, identifying confounders, analyzing implications, and assessing limitations.
             </p>
-            <p class="text-xs text-gray-500 mt-2">This may take 20-30 seconds</p>
           </div>
         </div>
       </div>

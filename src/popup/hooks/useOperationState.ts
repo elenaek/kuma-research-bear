@@ -7,6 +7,7 @@ interface OperationState {
   isExplaining: boolean;
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
+  isChunking: boolean;
   currentPaper?: {
     url: string;
     title?: string;
@@ -15,11 +16,16 @@ interface OperationState {
   explanationProgress?: string;
   analysisProgress?: string;
   glossaryProgress?: string;
+  chunkingProgress?: string;
+  currentChunk?: number;
+  totalChunks?: number;
   error?: string;
   hasExplanation?: boolean;
   hasSummary?: boolean;
   hasAnalysis?: boolean;
   hasGlossary?: boolean;
+  hasDetected?: boolean;
+  hasChunked?: boolean;
   completionPercentage?: number;
 }
 
@@ -29,12 +35,17 @@ interface UseOperationStateReturn {
   isExplaining: boolean;
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
+  isChunking: boolean;
   detectionStatus: string | null;
   hasExplanation: boolean;
   hasSummary: boolean;
   hasAnalysis: boolean;
   hasGlossary: boolean;
+  hasDetected: boolean;
+  hasChunked: boolean;
   completionPercentage: number;
+  currentChunk: number;
+  totalChunks: number;
 
   // Actions
   checkOperationState: (tabId: number, expectedUrl?: string) => Promise<void>;
@@ -65,12 +76,17 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
   const [isExplaining, setIsExplaining] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingGlossary, setIsGeneratingGlossary] = useState(false);
+  const [isChunking, setIsChunking] = useState(false);
   const [detectionStatus, setDetectionStatus] = useState<string | null>(null);
   const [hasExplanation, setHasExplanation] = useState(false);
   const [hasSummary, setHasSummary] = useState(false);
   const [hasAnalysis, setHasAnalysis] = useState(false);
   const [hasGlossary, setHasGlossary] = useState(false);
+  const [hasDetected, setHasDetected] = useState(false);
+  const [hasChunked, setHasChunked] = useState(false);
   const [completionPercentage, setCompletionPercentage] = useState(0);
+  const [currentChunk, setCurrentChunk] = useState(0);
+  const [totalChunks, setTotalChunks] = useState(0);
 
   // Update refs when currentTabUrl or currentTabId changes
   useEffect(() => {
@@ -99,16 +115,27 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
         setIsExplaining(state.isExplaining);
         setIsAnalyzing(state.isAnalyzing);
         setIsGeneratingGlossary(state.isGeneratingGlossary);
+        setIsChunking(state.isChunking);
+
+        // Update chunking progress if available
+        if (state.currentChunk !== undefined) {
+          setCurrentChunk(state.currentChunk);
+        }
+        if (state.totalChunks !== undefined) setTotalChunks(state.totalChunks);
 
         // Update completion status if available
         if (state.hasExplanation !== undefined) setHasExplanation(state.hasExplanation);
         if (state.hasSummary !== undefined) setHasSummary(state.hasSummary);
         if (state.hasAnalysis !== undefined) setHasAnalysis(state.hasAnalysis);
         if (state.hasGlossary !== undefined) setHasGlossary(state.hasGlossary);
+        if (state.hasDetected !== undefined) setHasDetected(state.hasDetected);
+        if (state.hasChunked !== undefined) setHasChunked(state.hasChunked);
         if (state.completionPercentage !== undefined) setCompletionPercentage(state.completionPercentage);
 
         // Update status message based on current operation
-        if (state.isDetecting) {
+        if (state.isChunking) {
+          setDetectionStatus(state.chunkingProgress || '🐻 Kuma is organizing the research paper... (Processing chunks)');
+        } else if (state.isDetecting) {
           setDetectionStatus(state.detectionProgress || '🐻 Kuma is foraging for research papers... (Detecting paper)');
         } else if (state.isExplaining) {
           setDetectionStatus(state.explanationProgress || '🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)');
@@ -150,6 +177,11 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
         setIsExplaining(state.isExplaining);
         setIsAnalyzing(state.isAnalyzing);
         setIsGeneratingGlossary(state.isGeneratingGlossary);
+        setIsChunking(state.isChunking);
+
+        // Update chunking progress
+        if (state.currentChunk !== undefined) setCurrentChunk(state.currentChunk);
+        if (state.totalChunks !== undefined) setTotalChunks(state.totalChunks);
 
         // Only load completion status if there's a current paper AND it matches the expected URL
         // This prevents wrong paper's completion status from overwriting database truth
@@ -161,11 +193,15 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
           if (state.hasSummary !== undefined) setHasSummary(state.hasSummary);
           if (state.hasAnalysis !== undefined) setHasAnalysis(state.hasAnalysis);
           if (state.hasGlossary !== undefined) setHasGlossary(state.hasGlossary);
+          if (state.hasDetected !== undefined) setHasDetected(state.hasDetected);
+          if (state.hasChunked !== undefined) setHasChunked(state.hasChunked);
           if (state.completionPercentage !== undefined) setCompletionPercentage(state.completionPercentage);
         }
 
         // Update UI based on current state
-        if (state.isDetecting) {
+        if (state.isChunking) {
+          setDetectionStatus(state.chunkingProgress || '🐻 Kuma is organizing the research paper... (Processing chunks)');
+        } else if (state.isDetecting) {
           setDetectionStatus(state.detectionProgress || '🐻 Kuma is foraging for research papers... (Detecting paper)');
         } else if (state.isExplaining) {
           setDetectionStatus(state.explanationProgress || '🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)');
@@ -208,12 +244,17 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
     setIsExplaining(false);
     setIsAnalyzing(false);
     setIsGeneratingGlossary(false);
+    setIsChunking(false);
     setDetectionStatus(null);
     setHasExplanation(false);
     setHasSummary(false);
     setHasAnalysis(false);
     setHasGlossary(false);
+    setHasDetected(false);
+    setHasChunked(false);
     setCompletionPercentage(0);
+    setCurrentChunk(0);
+    setTotalChunks(0);
   }
 
   return {
@@ -221,12 +262,17 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
     isExplaining,
     isAnalyzing,
     isGeneratingGlossary,
+    isChunking,
     detectionStatus,
     hasExplanation,
     hasSummary,
     hasAnalysis,
     hasGlossary,
+    hasDetected,
+    hasChunked,
     completionPercentage,
+    currentChunk,
+    totalChunks,
     checkOperationState,
     setDetectionStatus,
     setIsDetecting,

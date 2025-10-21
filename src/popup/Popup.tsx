@@ -6,6 +6,7 @@ import { usePaperStatus } from './hooks/usePaperStatus.ts';
 import { Header } from './components/Header.tsx';
 import { AIStatusCard } from './components/AIStatusCard.tsx';
 import { PaperInfoCard } from './components/PaperInfoCard.tsx';
+import { OperationBadges } from './components/OperationBadges.tsx';
 import { ActionButtons } from './components/ActionButtons.tsx';
 import { LottieAnimationHandle } from './components/LottieAnimation.tsx';
 
@@ -223,16 +224,41 @@ export function Popup() {
           isExplaining={operationState.isExplaining}
           isAnalyzing={operationState.isAnalyzing}
           isGeneratingGlossary={operationState.isGeneratingGlossary}
+          isChunking={operationState.isChunking}
           detectionStatus={operationState.detectionStatus}
           onInitialize={aiStatus.handleInitializeAI}
           onReset={aiStatus.handleResetAI}
         />
 
-        {/* Paper Info Card */}
+        {/* Show operation badges early when operations are active but no paper yet */}
+        {!paperStatus.paper && (operationState.isDetecting || operationState.isChunking || operationState.hasDetected || operationState.hasChunked) && (
+          <div class="card mb-4 bg-blue-50 border-blue-200">
+            <h3 class="text-sm font-semibold text-gray-700 mb-1">Operation Progress</h3>
+            <OperationBadges
+              isDetecting={operationState.isDetecting}
+              isChunking={operationState.isChunking}
+              hasDetected={operationState.hasDetected}
+              hasChunked={operationState.hasChunked}
+              currentChunk={operationState.currentChunk}
+              totalChunks={operationState.totalChunks}
+            />
+          </div>
+        )}
+
+        {/* Paper Info Card - Show when paper exists */}
         {paperStatus.paper && (
           <PaperInfoCard
             paper={paperStatus.paper}
             isPaperStored={paperStatus.isPaperStored}
+            isDetecting={operationState.isDetecting}
+            isChunking={operationState.isChunking}
+            isExplaining={operationState.isExplaining}
+            isAnalyzing={operationState.isAnalyzing}
+            isGeneratingGlossary={operationState.isGeneratingGlossary}
+            hasDetected={operationState.hasDetected}
+            hasChunked={operationState.hasChunked}
+            currentChunk={operationState.currentChunk}
+            totalChunks={operationState.totalChunks}
             hasExplanation={operationState.hasExplanation}
             hasSummary={operationState.hasSummary}
             hasAnalysis={operationState.hasAnalysis}

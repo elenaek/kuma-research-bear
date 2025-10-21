@@ -15,20 +15,89 @@ import { MessageType } from '../../types/index.ts';
 export async function handleStorePaper(payload: any, tabId?: number): Promise<any> {
   try {
     console.log('[DBHandlers] Storing paper in IndexedDB:', payload.paper.title);
-    const { storePaper } = await import('../../utils/dbService.ts');
-    const storedPaper = await storePaper(payload.paper, payload.fullText);
-    console.log('[DBHandlers] ✓ Paper stored successfully:', storedPaper.id);
 
-    // Update operation state to show paper is stored
+    // Update state to show chunking/summarization is starting
+    if (tabId) {
+      const initialState = operationStateService.updateState(tabId, {
+        isChunking: true,
+        chunkingProgress: '🐻 Kuma is reading through the research paper by sections... (Preparing chunks)',
+        currentChunk: 0,
+        totalChunks: 0,
+        hasDetected: true,  // Mark detection as complete (since we're starting chunking)
+        hasChunked: false,  // Reset chunking completion flag
+      });
+
+      // Broadcast initial chunking state
+      chrome.runtime.sendMessage({
+        type: MessageType.OPERATION_STATE_CHANGED,
+        payload: { state: initialState },
+      }).catch(() => {
+        // No listeners, that's ok
+      });
+    }
+
+    const { storePaper } = await import('../../utils/dbService.ts');
+
+    // Create progress callback to update state during chunk summarization
+    const onChunkProgress = (current: number, total: number) => {
+      if (tabId) {
+        let progressMessage = "";
+        if(current === total) {
+          progressMessage = "🐻 Kuma is contemplating about what was read...";
+        }
+        else {
+          progressMessage = total > 0
+            ? `🐻 Kuma is reading through the research paper by chunks... (${current}/${total} chunks read)`
+            : '🐻 Kuma is organizing the research paper... (Preparing chunks)';
+        }
+
+        const state = operationStateService.updateState(tabId, {
+          chunkingProgress: progressMessage,
+          currentChunk: current,
+          totalChunks: total,
+        });
+
+        // Broadcast chunking progress
+        if(state.currentChunk === state.totalChunks) {
+          chrome.runtime.sendMessage({
+            type: MessageType.OPERATION_STATE_CHANGED,
+            payload: { state: {
+              ...state,
+              hasChunked: true
+            } },
+          }).catch(() => {
+            // No listeners, that's ok
+          });
+        }
+        else {
+          chrome.runtime.sendMessage({
+            type: MessageType.OPERATION_STATE_CHANGED,
+            payload: { state },
+          }).catch(() => {
+            // No listeners, that's ok
+          });
+        }
+      }
+    };
+
+    const storedPaper = await storePaper(payload.paper, payload.fullText, undefined, onChunkProgress);
+
+    // Update operation state to show paper is stored and chunking is complete
     if (tabId) {
       const state = operationStateService.updateState(tabId, {
         currentPaper: storedPaper,
         isPaperStored: true,
+        isChunking: false,
+        isExplaining: true,
+        chunkingProgress: '',
+        currentChunk: 0,
+        totalChunks: 0,
+        hasChunked: true,  // Mark chunking as complete
       });
 
       // Broadcast state change
       chrome.runtime.sendMessage({
-        type: 'OPERATION_STATE_CHANGED',
+        type: MessageType.OPERATION_STATE_CHANGED,
         payload: { state },
       }).catch(() => {
         // No listeners, that's ok
@@ -38,6 +107,24 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
     return { success: true, paper: storedPaper };
   } catch (dbError) {
     console.error('[DBHandlers] Failed to store paper:', dbError);
+
+    // Clear chunking state on error
+    if (tabId) {
+      const state = operationStateService.updateState(tabId, {
+        isChunking: false,
+        chunkingProgress: '',
+        currentChunk: 0,
+        totalChunks: 0,
+      });
+
+      chrome.runtime.sendMessage({
+        type: MessageType.OPERATION_STATE_CHANGED,
+        payload: { state },
+      }).catch(() => {
+        // No listeners, that's ok
+      });
+    }
+
     return { success: false, error: String(dbError) };
   }
 }

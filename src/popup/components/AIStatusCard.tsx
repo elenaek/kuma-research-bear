@@ -12,6 +12,7 @@ interface AIStatusCardProps {
   isExplaining: boolean;
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
+  isChunking: boolean;
   detectionStatus: string | null;
   onInitialize: () => void;
   onReset: () => void;
@@ -31,13 +32,14 @@ export function AIStatusCard({
   isExplaining,
   isAnalyzing,
   isGeneratingGlossary,
+  isChunking,
   detectionStatus,
   onInitialize,
   onReset,
 }: AIStatusCardProps) {
   // Determine status dot style
   const getStatusDotClass = () => {
-    if (aiStatus === 'ready' && (isDetecting || isExplaining || isAnalyzing)) {
+    if (aiStatus === 'ready' && (isDetecting || isExplaining || isAnalyzing || isChunking)) {
       return 'kuma-working';
     }
     if (aiStatus === 'ready') {
@@ -51,7 +53,7 @@ export function AIStatusCard({
 
   // Determine status message
   const getDisplayMessage = () => {
-    if (aiStatus === 'ready' && detectionStatus && (isDetecting || isExplaining || isAnalyzing || isGeneratingGlossary)) {
+    if (aiStatus === 'ready' && detectionStatus && (isDetecting || isExplaining || isAnalyzing || isGeneratingGlossary || isChunking)) {
       return detectionStatus;
     }
     if (aiStatus === 'ready') {

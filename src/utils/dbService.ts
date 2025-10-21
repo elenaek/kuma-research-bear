@@ -67,7 +67,12 @@ function generatePaperId(url: string): string {
 /**
  * Store a research paper with its full content
  */
-export async function storePaper(paper: ResearchPaper, fullText?: string, qaHistory?: any[]): Promise<StoredPaper> {
+export async function storePaper(
+  paper: ResearchPaper,
+  fullText?: string,
+  qaHistory?: any[],
+  onChunkProgress?: (current: number, total: number) => void
+): Promise<StoredPaper> {
   console.log('[IndexedDB] storePaper called:', {
     title: paper.title,
     url: paper.url,
@@ -107,20 +112,7 @@ export async function storePaper(paper: ResearchPaper, fullText?: string, qaHist
       tokenCount: Math.ceil(chunk.content.length / 4),
     }));
 
-    // Generate hierarchical summary for full document coverage
-    console.log('[IndexedDB] Generating hierarchical summary for comprehensive analysis...');
-    let hierarchicalSummary: string | undefined;
-    try {
-      const { aiService } = await import('./aiService.ts');
-      hierarchicalSummary = await aiService.createHierarchicalSummary(extractedText, `paper-${paperId}`);
-      console.log('[IndexedDB] ✓ Hierarchical summary generated:', hierarchicalSummary.length, 'chars');
-    } catch (error) {
-      console.error('[IndexedDB] Failed to generate hierarchical summary:', error);
-      // Continue without hierarchical summary - analysis will still work but with reduced accuracy
-      hierarchicalSummary = undefined;
-    }
-
-    // Create stored paper object
+    // Create stored paper object (hierarchical summary will be added after chunk storage)
     const storedPaper: StoredPaper = {
       ...paper,
       id: paperId,
@@ -128,7 +120,7 @@ export async function storePaper(paper: ResearchPaper, fullText?: string, qaHist
       chunkCount: contentChunks.length,
       storedAt: Date.now(),
       lastAccessedAt: Date.now(),
-      hierarchicalSummary,
+      hierarchicalSummary: undefined,  // Will be generated after chunks are stored
       qaHistory: qaHistory || [],
     };
 
@@ -141,11 +133,12 @@ export async function storePaper(paper: ResearchPaper, fullText?: string, qaHist
       request.onerror = () => reject(new Error('Failed to store paper'));
     });
 
-    // Store chunks
+    // Store chunks (instant - no progress tracking needed)
     const chunkTransaction = db.transaction([CHUNKS_STORE], 'readwrite');
     const chunkStore = chunkTransaction.objectStore(CHUNKS_STORE);
 
-    for (const chunk of contentChunks) {
+    for (let i = 0; i < contentChunks.length; i++) {
+      const chunk = contentChunks[i];
       await new Promise<void>((resolve, reject) => {
         const request = chunkStore.put(chunk);
         request.onsuccess = () => resolve();
@@ -154,6 +147,33 @@ export async function storePaper(paper: ResearchPaper, fullText?: string, qaHist
     }
 
     console.log(`✓ Stored paper: ${paper.title} (${contentChunks.length} chunks)`);
+
+    // Generate hierarchical summary AFTER chunks are stored
+    // Progress tracking happens during summarization (the time-consuming part)
+    console.log('[IndexedDB] Generating hierarchical summary for comprehensive analysis...');
+    try {
+      const { aiService } = await import('./aiService.ts');
+      const hierarchicalSummary = await aiService.createHierarchicalSummary(
+        extractedText,
+        `paper-${paperId}`,
+        onChunkProgress  // Pass progress callback to track chunk summarization
+      );
+      console.log('[IndexedDB] ✓ Hierarchical summary generated:', hierarchicalSummary.length, 'chars');
+
+      // Update the stored paper with hierarchical summary
+      storedPaper.hierarchicalSummary = hierarchicalSummary;
+      const updateTransaction = db.transaction([PAPERS_STORE], 'readwrite');
+      const updateStore = updateTransaction.objectStore(PAPERS_STORE);
+      await new Promise<void>((resolve, reject) => {
+        const request = updateStore.put(storedPaper);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(new Error('Failed to update paper with hierarchical summary'));
+      });
+      console.log('[IndexedDB] ✓ Paper updated with hierarchical summary');
+    } catch (error) {
+      console.error('[IndexedDB] Failed to generate hierarchical summary:', error);
+      // Continue without hierarchical summary - analysis will still work but with reduced accuracy
+    }
 
     db.close();
     return storedPaper;

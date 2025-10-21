@@ -257,6 +257,7 @@ export interface OperationState {
   isExplaining: boolean;
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
+  isChunking: boolean;  // Track if chunking is in progress
   currentPaper: ResearchPaper | null;
   isPaperStored: boolean;  // Track if the current paper is stored in DB
   error: string | null;
@@ -264,6 +265,9 @@ export interface OperationState {
   explanationProgress: string;
   analysisProgress: string;
   glossaryProgress: string;
+  chunkingProgress: string;  // Status message for chunking
+  currentChunk: number;  // Current chunk being processed
+  totalChunks: number;  // Total number of chunks to process
   lastUpdated: number;
   // Track active AI requests for this tab
   activeAIRequests: string[];
@@ -274,5 +278,7 @@ export interface OperationState {
   hasSummary: boolean;
   hasAnalysis: boolean;
   hasGlossary: boolean;
+  hasDetected: boolean;  // Track if paper was successfully detected
+  hasChunked: boolean;  // Track if chunking completed successfully
   completionPercentage: number; // 0-100, based on completed features
 }

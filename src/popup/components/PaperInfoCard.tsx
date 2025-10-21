@@ -1,10 +1,22 @@
 import { Database } from 'lucide-preact';
 import type { ResearchPaper } from '../../types/index.ts';
+import { OperationBadges } from './OperationBadges.tsx';
 import { CompletionBadges } from './CompletionBadges.tsx';
 
 interface PaperInfoCardProps {
   paper: ResearchPaper;
   isPaperStored: boolean;
+  // Operation phases
+  isDetecting?: boolean;
+  isChunking?: boolean;
+  isExplaining?: boolean;
+  isAnalyzing?: boolean;
+  isGeneratingGlossary?: boolean;
+  hasDetected?: boolean;
+  hasChunked?: boolean;
+  currentChunk?: number;
+  totalChunks?: number;
+  // Content features
   hasExplanation?: boolean;
   hasSummary?: boolean;
   hasAnalysis?: boolean;
@@ -19,6 +31,15 @@ interface PaperInfoCardProps {
 export function PaperInfoCard({
   paper,
   isPaperStored,
+  isDetecting = false,
+  isChunking = false,
+  isExplaining = false,
+  isAnalyzing = false,
+  isGeneratingGlossary = false,
+  hasDetected = false,
+  hasChunked = false,
+  currentChunk = 0,
+  totalChunks = 0,
   hasExplanation = false,
   hasSummary = false,
   hasAnalysis = false,
@@ -56,13 +77,26 @@ export function PaperInfoCard({
       <p class="text-sm font-medium text-gray-900 mb-1 line-clamp-2">{paper.title}</p>
       <p class="text-xs text-gray-600 line-clamp-1">{paper.authors.join(', ')}</p>
 
-      {/* Show completion badges only when paper is stored */}
-      {isPaperStored && (
+      {/* Show operation badges when operations are active or completed */}
+      <OperationBadges
+        isDetecting={isDetecting}
+        isChunking={isChunking}
+        hasDetected={hasDetected}
+        hasChunked={hasChunked}
+        currentChunk={currentChunk}
+        totalChunks={totalChunks}
+      />
+
+      {/* Show completion badges when paper is stored or has any features */}
+      {(isPaperStored || hasExplanation || hasSummary || hasAnalysis || hasGlossary) && (
         <CompletionBadges
           hasExplanation={hasExplanation}
           hasSummary={hasSummary}
           hasAnalysis={hasAnalysis}
           hasGlossary={hasGlossary}
+          isExplaining={isExplaining}
+          isAnalyzing={isAnalyzing}
+          isGeneratingGlossary={isGeneratingGlossary}
         />
       )}
     </div>

@@ -77,11 +77,10 @@ export const methodologyAnalysisSchema: JSONSchema = {
     studyType:{
       type: 'string',
       description: 'Type of study (e.g. randomized controlled trial, cohort study, case-control study, etc.)',
-      maxLength: 30,
     },
     studyDesign: {
       type: 'string',
-      description: 'Detailed description of study design (max 35 words)',
+      description: 'Detailed description of study design',
     },
     dataCollection: {
       type: 'string',

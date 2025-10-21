@@ -30,7 +30,7 @@ export function GlossarySection(props: GlossarySectionProps) {
       <div class="card">
         <div class="text-center py-8">
           <LottieLoader path="/lotties/kuma-thinking.lottie" size={80} className="mx-auto mb-3" />
-          <p class="text-gray-600 text-base">Generating glossary of terms...</p>
+          <p class="text-gray-900 font-medium text-base">Generating glossary of terms...</p>
         </div>
       </div>
     );
