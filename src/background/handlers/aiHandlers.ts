@@ -48,6 +48,9 @@ export async function handleResetAI(): Promise<any> {
  * Explain a research paper (abstract)
  */
 export async function handleExplainPaper(payload: any, tabId?: number): Promise<any> {
+  // Generate context ID based on tab ID if available
+  const contextId = tabId ? `tab-${tabId}-explain` : 'default-explain';
+
   try {
     const paper: ResearchPaper = payload.paper;
 
@@ -61,9 +64,6 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
       });
       broadcastStateChange(state);
     }
-
-    // Generate context ID based on tab ID if available
-    const contextId = tabId ? `tab-${tabId}-explain` : 'default-explain';
 
     // Get stored paper to check for hierarchical summary
     const storedPaper = await getPaperByUrl(paper.url);
@@ -140,6 +140,9 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
     }
 
     throw explainError;
+  } finally {
+    // Always destroy the session when done, whether success or failure
+    aiService.destroySessionForContext(contextId);
   }
 }
 
@@ -147,43 +150,55 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
  * Explain a text section
  */
 export async function handleExplainSection(payload: any, tabId?: number): Promise<any> {
-  const sectionText = payload.text;
   const sectionContextId = tabId ? `tab-${tabId}-section` : 'default-section';
-  const simplified = await aiService.simplifyText(sectionText, sectionContextId);
-  return { success: true, simplified };
+  try {
+    const sectionText = payload.text;
+    const simplified = await aiService.simplifyText(sectionText, sectionContextId);
+    return { success: true, simplified };
+  } finally {
+    aiService.destroySessionForContext(sectionContextId);
+  }
 }
 
 /**
  * Explain a technical term
  */
 export async function handleExplainTerm(payload: any, tabId?: number): Promise<any> {
-  const term = payload.term;
-  const context = payload.context;
   const termContextId = tabId ? `tab-${tabId}-term` : 'default-term';
-  const termExplanation = await aiService.explainTerm(term, context, termContextId);
-  return { success: true, explanation: termExplanation };
+  try {
+    const term = payload.term;
+    const context = payload.context;
+    const termExplanation = await aiService.explainTerm(term, context, termContextId);
+    return { success: true, explanation: termExplanation };
+  } finally {
+    aiService.destroySessionForContext(termContextId);
+  }
 }
 
 /**
  * Generate a summary
  */
 export async function handleGenerateSummary(payload: any, tabId?: number): Promise<any> {
-  const { title, abstract } = payload;
   const summaryContextId = tabId ? `tab-${tabId}-summary` : 'default-summary';
-  const summaryResult = await aiService.generateSummary(title, abstract, summaryContextId);
-  return { success: true, summary: summaryResult };
+  try {
+    const { title, abstract } = payload;
+    const summaryResult = await aiService.generateSummary(title, abstract, summaryContextId);
+    return { success: true, summary: summaryResult };
+  } finally {
+    aiService.destroySessionForContext(summaryContextId);
+  }
 }
 
 /**
  * Analyze a paper in depth
  */
 export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<any> {
-  try {
-    const paperUrl = payload.url;
-    const analysisContextId = tabId ? `tab-${tabId}-analysis` : 'default-analysis';
+  const paperUrl = payload.url;
+  const analysisContextId = tabId ? `tab-${tabId}-analysis` : 'default-analysis';
+  const requestKey = requestDeduplicationService.getRequestKey(tabId, 'analyze', paperUrl);
 
+  try {
     // Check for existing active request
-    const requestKey = requestDeduplicationService.getRequestKey(tabId, 'analyze', paperUrl);
     if (requestDeduplicationService.hasRequest(requestKey)) {
       console.log(`[AIHandlers] Reusing existing analysis request for ${requestKey}`);
 
@@ -348,12 +363,22 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
       broadcastStateChange(state);
     }
 
-    const requestKey = requestDeduplicationService.getRequestKey(tabId, 'analyze', payload.url);
     requestDeduplicationService.deleteRequest(requestKey);
     return {
       success: false,
       error: `Analysis failed: ${String(error)}`
     };
+  } finally {
+    // Always destroy all analysis-related sessions when done
+    // Main analysis session
+    aiService.destroySessionForContext(analysisContextId);
+    // Sub-sessions for individual analyses
+    aiService.destroySessionForContext(`${analysisContextId}-methodology`);
+    aiService.destroySessionForContext(`${analysisContextId}-confounders`);
+    aiService.destroySessionForContext(`${analysisContextId}-implications`);
+    aiService.destroySessionForContext(`${analysisContextId}-limitations`);
+    // Hierarchical summary session if created
+    aiService.destroySessionForContext(`${analysisContextId}-summary`);
   }
 }
 
@@ -361,12 +386,12 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
  * Generate glossary for a paper
  */
 export async function handleGenerateGlossary(payload: any, tabId?: number): Promise<any> {
-  try {
-    const paperUrl = payload.url;
-    const glossaryContextId = tabId ? `tab-${tabId}-glossary` : 'default-glossary';
+  const paperUrl = payload.url;
+  const glossaryContextId = tabId ? `tab-${tabId}-glossary` : 'default-glossary';
+  const requestKey = requestDeduplicationService.getRequestKey(tabId, 'glossary', paperUrl);
 
+  try {
     // Check for existing active request
-    const requestKey = requestDeduplicationService.getRequestKey(tabId, 'glossary', paperUrl);
     if (requestDeduplicationService.hasRequest(requestKey)) {
       console.log(`[AIHandlers] Reusing existing glossary request for ${requestKey}`);
       const existingGlossary = await requestDeduplicationService.getRequest(requestKey);
@@ -447,6 +472,9 @@ export async function handleGenerateGlossary(payload: any, tabId?: number): Prom
       success: false,
       error: `Glossary generation failed: ${String(error)}`
     };
+  } finally {
+    // Always destroy the glossary session when done
+    aiService.destroySessionForContext(glossaryContextId);
   }
 }
 
@@ -454,10 +482,10 @@ export async function handleGenerateGlossary(payload: any, tabId?: number): Prom
  * Answer a question about a paper using RAG
  */
 export async function handleAskQuestion(payload: any, tabId?: number): Promise<any> {
+  const qaContextId = tabId ? `tab-${tabId}-qa` : 'default-qa';
+
   try {
     const { paperUrl, question } = payload;
-    // Generate context ID for Q&A
-    const qaContextId = tabId ? `tab-${tabId}-qa` : 'default-qa';
 
     if (!paperUrl || !question) {
       return {
@@ -507,5 +535,7 @@ export async function handleAskQuestion(payload: any, tabId?: number): Promise<a
       success: false,
       error: `Failed to answer question: ${String(qaError)}`
     };
+  } finally {
+    aiService.destroySessionForContext(qaContextId);
   }
 }

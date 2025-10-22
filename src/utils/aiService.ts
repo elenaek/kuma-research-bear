@@ -35,16 +35,9 @@ function sleep(ms: number): Promise<void> {
 class ChromeAIService {
   // Multiple sessions support - one per context (tab)
   private sessions: Map<string, AILanguageModelSession> = new Map();
-  private sessionActivity: Map<string, number> = new Map(); // Track last activity time
   private activeRequests: Map<string, AbortController> = new Map(); // Track active requests
   private capabilities: AICapabilities | null = null;
   private extractionRetries: Map<string, number> = new Map(); // Track retries per URL
-
-  // Configuration
-  private readonly MAX_CONCURRENT_SESSIONS = 30;
-  private readonly SESSION_IDLE_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-  private readonly CLEANUP_INTERVAL = 60 * 1000; // Check every minute
-  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Check if Chrome Prompt API is available
@@ -302,47 +295,11 @@ class ChromeAIService {
   }
 
   /**
-   * Initialize cleanup timer on first use
-   */
-  private initializeCleanup() {
-    if (!this.cleanupTimer) {
-      this.cleanupTimer = setInterval(() => {
-        this.cleanupInactiveSessions();
-      }, this.CLEANUP_INTERVAL);
-    }
-  }
-
-  /**
    * Get or create a session for a specific context (tab)
-   * Reuses existing sessions when possible for better performance
+   * Creates a fresh session for each operation
    */
   async getOrCreateSession(contextId: string, options?: AISessionOptions): Promise<AILanguageModelSession> {
-    // Initialize cleanup on first session creation
-    this.initializeCleanup();
-
-    // Check if we already have a session for this context
-    if (this.sessions.has(contextId)) {
-      const session = this.sessions.get(contextId)!;
-      this.sessionActivity.set(contextId, Date.now());
-      console.log(`[AI] Reusing existing session for context: ${contextId}`);
-      return session;
-    }
-
-    // Check if we've reached max sessions limit
-    if (this.sessions.size >= this.MAX_CONCURRENT_SESSIONS) {
-      console.warn(`[AI] Max sessions limit reached (${this.MAX_CONCURRENT_SESSIONS}), cleaning up old sessions`);
-      this.cleanupInactiveSessions();
-
-      // If still at limit, remove the oldest session
-      if (this.sessions.size >= this.MAX_CONCURRENT_SESSIONS) {
-        const oldestContext = this.findOldestSession();
-        if (oldestContext) {
-          this.destroySessionForContext(oldestContext);
-        }
-      }
-    }
-
-    // Create new session for this context
+    // Always create a new session - simpler and more reliable
     try {
       if (typeof LanguageModel === 'undefined') {
         throw new Error('Prompt API not available');
@@ -352,51 +309,11 @@ class ChromeAIService {
       const session = await LanguageModel.create(options);
 
       this.sessions.set(contextId, session);
-      this.sessionActivity.set(contextId, Date.now());
-
       console.log(`[AI] Session created successfully. Total sessions: ${this.sessions.size}`);
       return session;
     } catch (error) {
       console.error(`[AI] Error creating session for context ${contextId}:`, error);
       throw error;
-    }
-  }
-
-  /**
-   * Find the oldest (least recently used) session
-   */
-  private findOldestSession(): string | null {
-    let oldestContext: string | null = null;
-    let oldestTime = Date.now();
-
-    for (const [context, time] of this.sessionActivity.entries()) {
-      if (time < oldestTime) {
-        oldestTime = time;
-        oldestContext = context;
-      }
-    }
-
-    return oldestContext;
-  }
-
-  /**
-   * Clean up inactive sessions to free resources
-   */
-  private cleanupInactiveSessions() {
-    const now = Date.now();
-    const sessionsToRemove: string[] = [];
-
-    for (const [context, lastActivity] of this.sessionActivity.entries()) {
-      if (now - lastActivity > this.SESSION_IDLE_TIMEOUT) {
-        sessionsToRemove.push(context);
-      }
-    }
-
-    if (sessionsToRemove.length > 0) {
-      console.log(`[AI] Cleaning up ${sessionsToRemove.length} inactive sessions`);
-      for (const context of sessionsToRemove) {
-        this.destroySessionForContext(context);
-      }
     }
   }
 
@@ -415,7 +332,6 @@ class ChromeAIService {
     }
 
     this.sessions.delete(contextId);
-    this.sessionActivity.delete(contextId);
 
     // Cancel any active requests for this context
     const abortController = this.activeRequests.get(contextId);
@@ -479,9 +395,6 @@ class ChromeAIService {
 
         // Clear the request tracking on success
         this.activeRequests.delete(contextId);
-
-        // Update activity timestamp
-        this.sessionActivity.set(contextId, Date.now());
 
         return response;
       } catch (error: any) {
@@ -576,7 +489,7 @@ OUTPUT FORMAT:
 ### What are the paper's main findings or results?
 - Answer
 
-*Fields/Subject Areas:* Field(s) or subfields this paper belongs in
+**Fields/Subject Areas:** Field(s) or subfields this paper belongs in
 
 FULL PAPER SUMMARY:
 ${hierarchicalSummary}
@@ -613,7 +526,7 @@ OUTPUT FORMAT:
 ### What are the paper's main findings or results?
 - Answer
 
-*Fields/Subject Areas:* Field(s) or subfields this paper belongs in
+**Fields/Subject Areas:** Field(s) or subfields this paper belongs in
 
 Abstract:
 ${abstract}`;
@@ -1079,7 +992,6 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
       this.destroySessionForContext(contextId);
     }
     this.sessions.clear();
-    this.sessionActivity.clear();
     this.activeRequests.clear();
   }
 
@@ -1232,9 +1144,9 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
     } catch (error) {
       console.error('Confounder analysis failed:', error);
       return {
-        identified: ['Analysis failed'],
-        biases: ['Could not analyze'],
-        controlMeasures: ['Unable to determine'],
+        identified: [{ name: 'Analysis failed', explanation: 'Could not identify confounders due to an error' }],
+        biases: [{ name: 'Could not analyze', explanation: 'An error occurred while analyzing biases' }],
+        controlMeasures: [{ name: 'Unable to determine', explanation: 'Could not determine control measures due to an error' }],
       };
     }
   }

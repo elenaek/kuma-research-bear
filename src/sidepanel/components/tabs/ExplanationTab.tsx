@@ -18,7 +18,7 @@ export function ExplanationTab(props: ExplanationTabProps) {
   }
 
   return (
-    <CollapsibleSection title="Simplified Explanation" defaultOpen={true}>
+    <CollapsibleSection title="At a Glance" defaultOpen={true}>
       <MarkdownRenderer content={explanation.explanation || ''} />
     </CollapsibleSection>
   );

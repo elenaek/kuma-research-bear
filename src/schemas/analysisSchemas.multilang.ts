@@ -155,25 +155,61 @@ export const confounderAnalysisSchema_en: JSONSchema = {
     identified: {
       type: 'array',
       items: {
-        type: 'string',
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name of the confounding variable',
+          },
+          explanation: {
+            type: 'string',
+            description: 'Explanation of how this variable confounds the results',
+          },
+        },
+        required: ['name', 'explanation'],
+        additionalProperties: false,
       },
-      description: 'List of identified confounding variables',
+      description: 'List of identified confounding variables with explanations',
       minItems: 1,
     },
     biases: {
       type: 'array',
       items: {
-        type: 'string',
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name of the bias',
+          },
+          explanation: {
+            type: 'string',
+            description: 'Explanation of how this bias affects the study',
+          },
+        },
+        required: ['name', 'explanation'],
+        additionalProperties: false,
       },
-      description: 'List of potential biases',
+      description: 'List of potential biases with explanations',
       minItems: 1,
     },
     controlMeasures: {
       type: 'array',
       items: {
-        type: 'string',
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name of the control measure',
+          },
+          explanation: {
+            type: 'string',
+            description: 'Explanation of how this measure controls for confounders or biases',
+          },
+        },
+        required: ['name', 'explanation'],
+        additionalProperties: false,
       },
-      description: 'Measures taken to control for confounders',
+      description: 'Measures taken to control for confounders with explanations',
       minItems: 1,
     },
   },
@@ -187,25 +223,61 @@ export const confounderAnalysisSchema_es: JSONSchema = {
     identified: {
       type: 'array',
       items: {
-        type: 'string',
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Nombre de la variable de confusión',
+          },
+          explanation: {
+            type: 'string',
+            description: 'Explicación de cómo esta variable confunde los resultados',
+          },
+        },
+        required: ['name', 'explanation'],
+        additionalProperties: false,
       },
-      description: 'Lista de variables de confusión identificadas',
+      description: 'Lista de variables de confusión identificadas con explicaciones',
       minItems: 1,
     },
     biases: {
       type: 'array',
       items: {
-        type: 'string',
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Nombre del sesgo',
+          },
+          explanation: {
+            type: 'string',
+            description: 'Explicación de cómo este sesgo afecta el estudio',
+          },
+        },
+        required: ['name', 'explanation'],
+        additionalProperties: false,
       },
-      description: 'Lista de sesgos potenciales',
+      description: 'Lista de sesgos potenciales con explicaciones',
       minItems: 1,
     },
     controlMeasures: {
       type: 'array',
       items: {
-        type: 'string',
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Nombre de la medida de control',
+          },
+          explanation: {
+            type: 'string',
+            description: 'Explicación de cómo esta medida controla los factores de confusión o sesgos',
+          },
+        },
+        required: ['name', 'explanation'],
+        additionalProperties: false,
       },
-      description: 'Medidas tomadas para controlar los factores de confusión',
+      description: 'Medidas tomadas para controlar los factores de confusión con explicaciones',
       minItems: 1,
     },
   },
@@ -219,25 +291,61 @@ export const confounderAnalysisSchema_ja: JSONSchema = {
     identified: {
       type: 'array',
       items: {
-        type: 'string',
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: '交絡変数の名前',
+          },
+          explanation: {
+            type: 'string',
+            description: 'この変数がどのように結果を交絡させるかの説明',
+          },
+        },
+        required: ['name', 'explanation'],
+        additionalProperties: false,
       },
-      description: '特定された交絡変数のリスト',
+      description: '特定された交絡変数のリストと説明',
       minItems: 1,
     },
     biases: {
       type: 'array',
       items: {
-        type: 'string',
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'バイアスの名前',
+          },
+          explanation: {
+            type: 'string',
+            description: 'このバイアスが研究にどのように影響するかの説明',
+          },
+        },
+        required: ['name', 'explanation'],
+        additionalProperties: false,
       },
-      description: '潜在的なバイアスのリスト',
+      description: '潜在的なバイアスのリストと説明',
       minItems: 1,
     },
     controlMeasures: {
       type: 'array',
       items: {
-        type: 'string',
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: '制御措置の名前',
+          },
+          explanation: {
+            type: 'string',
+            description: 'この措置が交絡因子やバイアスをどのように制御するかの説明',
+          },
+        },
+        required: ['name', 'explanation'],
+        additionalProperties: false,
       },
-      description: '交絡因子を制御するために取られた措置',
+      description: '交絡因子を制御するために取られた措置と説明',
       minItems: 1,
     },
   },

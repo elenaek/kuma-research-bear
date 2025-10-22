@@ -269,9 +269,9 @@ export interface MethodologyAnalysis {
 }
 
 export interface ConfounderAnalysis {
-  identified: string[];
-  biases: string[];
-  controlMeasures: string[];
+  identified: Array<{ name: string; explanation: string }>;
+  biases: Array<{ name: string; explanation: string }>;
+  controlMeasures: Array<{ name: string; explanation: string }>;
 }
 
 export interface ImplicationAnalysis {
