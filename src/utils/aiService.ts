@@ -564,6 +564,20 @@ IMPORTANT: Respond in ${languageName}. Your entire explanation must be in ${lang
 Please explain this research paper in simple terms that anyone can understand.
 Use the full paper summary below to provide a comprehensive explanation that covers the entire study, not just the abstract.
 
+OUTPUT FORMAT:
+### What is the main problem or research question being addressed?
+- Answer
+### Why is this problem important?
+- Answer
+### What is the proposed solution, method or model?
+- Answer
+### What are the key assumptions orp remises of the approach?
+- Answer
+### What are the paper's main findings or results?
+- Answer
+
+*Fields/Subject Areas:* Field(s) or subfields this paper belongs in
+
 FULL PAPER SUMMARY:
 ${hierarchicalSummary}
 
@@ -586,6 +600,20 @@ Use markdown formatting for better readability:
 - Use bullet points or numbered lists where appropriate
 - Use *italic* for emphasis
 - Keep paragraphs concise
+
+OUTPUT FORMAT:
+### What is the main problem or research question being addressed?
+- Answer
+### Why is this problem important?
+- Answer
+### What is the proposed solution, method or model?
+- Answer
+### What are the key assumptions orp remises of the approach?
+- Answer
+### What are the paper's main findings or results?
+- Answer
+
+*Fields/Subject Areas:* Field(s) or subfields this paper belongs in
 
 Abstract:
 ${abstract}`;
