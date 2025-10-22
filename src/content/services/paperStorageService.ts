@@ -32,33 +32,36 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
     console.log('[PaperStorage] isPaperStored check result:', alreadyStored);
 
     if (!alreadyStored) {
-      console.log('[PaperStorage] Storing paper in IndexedDB via background worker...');
+      console.log('[PaperStorage] Extracting text and sending to background for storage...');
 
       // Extract full text in content script (where document is available)
       const fullText = await extractFullText();
-      const storeResult = await ChromeService.storePaperInDB(paper, fullText);
 
-      if (storeResult.success && storeResult.paper) {
-        const storedPaper = storeResult.paper;
-        console.log('[PaperStorage] ✓ Paper stored successfully!', {
-          id: storedPaper.id,
-          chunkCount: storedPaper.chunkCount,
-          storedAt: new Date(storedPaper.storedAt).toLocaleString()
+      // Send to background for storage (IndexedDB must be in background for cross-context access)
+      const storageResponse = await ChromeService.storePaperInDB(paper, fullText);
+
+      if (storageResponse.success && storageResponse.paper) {
+        console.log('[PaperStorage] ✓ Paper stored successfully in background!', {
+          id: storageResponse.paper.id,
+          chunkCount: storageResponse.paper.chunkCount,
         });
+
+        // Note: Embedding generation now handled by offscreen document in background
+        // This ensures embeddings persist even if user navigates away from tab
 
         return {
           stored: true,
-          chunkCount: storedPaper.chunkCount,
+          chunkCount: storageResponse.paper.chunkCount,
           alreadyStored: false,
-          paperId: storedPaper.id,
+          paperId: storageResponse.paper.id,
         };
       } else {
-        console.error('[PaperStorage] Failed to store paper:', storeResult.error);
+        console.error('[PaperStorage] Failed to store paper:', storageResponse.error);
         return {
           stored: false,
           chunkCount: 0,
           alreadyStored: false,
-          storageError: storeResult.error,
+          storageError: storageResponse.error || 'Failed to store paper',
         };
       }
     } else {
@@ -100,15 +103,20 @@ export async function storePaperSimple(paper: ResearchPaper): Promise<boolean> {
   try {
     const alreadyStored = await ChromeService.isPaperStoredInDB(paper.url);
     if (!alreadyStored) {
-      console.log('[PaperStorage] Storing paper in IndexedDB via background worker...');
+      console.log('[PaperStorage] Extracting text and sending to background for storage...');
       const fullText = await extractFullText();
-      const storeResult = await ChromeService.storePaperInDB(paper, fullText);
 
-      if (storeResult.success) {
-        console.log('[PaperStorage] ✓ Paper stored locally for offline access');
+      // Send to background for storage
+      const storageResponse = await ChromeService.storePaperInDB(paper, fullText);
+
+      if (storageResponse.success && storageResponse.paper) {
+        console.log('[PaperStorage] ✓ Paper stored in background for offline access');
+
+        // Note: Embedding generation handled by offscreen document in background
+
         return true;
       } else {
-        console.error('[PaperStorage] Failed to store paper:', storeResult.error);
+        console.error('[PaperStorage] Failed to store paper:', storageResponse.error);
         return false;
       }
     } else {

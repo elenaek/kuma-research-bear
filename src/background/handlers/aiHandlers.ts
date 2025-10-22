@@ -1,6 +1,6 @@
 import { ResearchPaper, PaperAnalysisResult, QuestionAnswer } from '../../types/index.ts';
 import { aiService } from '../../utils/aiService.ts';
-import { getPaperByUrl, getPaperChunks, getRelevantChunks } from '../../utils/dbService.ts';
+import { getPaperByUrl, getPaperChunks, getRelevantChunks, getRelevantChunksSemantic } from '../../utils/dbService.ts';
 import * as operationStateService from '../services/operationStateService.ts';
 import * as requestDeduplicationService from '../services/requestDeduplicationService.ts';
 import * as paperStatusService from '../services/paperStatusService.ts';
@@ -507,7 +507,8 @@ export async function handleAskQuestion(payload: any, tabId?: number): Promise<a
     }
 
     // Get relevant chunks based on the question (top 5 chunks)
-    const relevantChunks = await getRelevantChunks(storedPaper.id, question, 5);
+    // Uses semantic search with automatic fallback to keyword search
+    const relevantChunks = await getRelevantChunksSemantic(storedPaper.id, question, 5);
 
     if (relevantChunks.length === 0) {
       return {

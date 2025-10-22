@@ -488,8 +488,11 @@ OUTPUT FORMAT:
 - Answer
 ### What are the paper's main findings or results?
 - Answer
+### How can I use this information in my own life, studies, work or research?
+- Answer
 
-**Fields/Subject Areas:** Field(s) or subfields this paper belongs in
+**Fields/Subject Areas:** 
+- Field(s) or subfields this paper belongs in
 
 FULL PAPER SUMMARY:
 ${hierarchicalSummary}
@@ -525,8 +528,11 @@ OUTPUT FORMAT:
 - Answer
 ### What are the paper's main findings or results?
 - Answer
+### How can I use this information in my own life, studies, work or research?
+- Answer
 
-**Fields/Subject Areas:** Field(s) or subfields this paper belongs in
+**Fields/Subject Areas:** 
+- Field(s) or subfields this paper belongs in
 
 Abstract:
 ${abstract}`;
@@ -1020,12 +1026,12 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
-      // Import RAG function
-      const { getRelevantChunksByTopic } = await import('./dbService.ts');
+      // Import RAG function (semantic search with keyword fallback)
+      const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
 
-      // Find relevant chunks for methodology
+      // Find relevant chunks for methodology using semantic search
       const topics = ['methodology', 'methods', 'design', 'procedure', 'participants', 'sample', 'statistical'];
-      const relevantChunks = await getRelevantChunksByTopic(paperId, topics, 3);
+      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, 3);
 
       // Combine hierarchical summary + relevant chunks
       const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
@@ -1100,12 +1106,12 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
-      // Import RAG function
-      const { getRelevantChunksByTopic } = await import('./dbService.ts');
+      // Import RAG function (semantic search with keyword fallback)
+      const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
 
-      // Find relevant chunks for confounders/biases
+      // Find relevant chunks for confounders/biases using semantic search
       const topics = ['bias', 'confound', 'limitation', 'control', 'random', 'blinding', 'selection'];
-      const relevantChunks = await getRelevantChunksByTopic(paperId, topics, 3);
+      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, 3);
 
       // Combine hierarchical summary + relevant chunks
       const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
@@ -1176,12 +1182,12 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
-      // Import RAG function
-      const { getRelevantChunksByTopic } = await import('./dbService.ts');
+      // Import RAG function (semantic search with keyword fallback)
+      const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
 
-      // Find relevant chunks for implications
+      // Find relevant chunks for implications using semantic search
       const topics = ['implication', 'application', 'significance', 'discussion', 'conclusion', 'impact', 'future'];
-      const relevantChunks = await getRelevantChunksByTopic(paperId, topics, 3);
+      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, 3);
 
       // Combine hierarchical summary + relevant chunks
       const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
@@ -1252,12 +1258,12 @@ Provide a comprehensive analysis of real-world applications, significance, and f
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
-      // Import RAG function
-      const { getRelevantChunksByTopic } = await import('./dbService.ts');
+      // Import RAG function (semantic search with keyword fallback)
+      const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
 
-      // Find relevant chunks for limitations
+      // Find relevant chunks for limitations using semantic search
       const topics = ['limitation', 'constraint', 'weakness', 'generalizability', 'caveat', 'shortcoming'];
-      const relevantChunks = await getRelevantChunksByTopic(paperId, topics, 3);
+      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, 3);
 
       // Combine hierarchical summary + relevant chunks
       const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');

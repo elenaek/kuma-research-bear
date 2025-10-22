@@ -104,6 +104,23 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
       });
     }
 
+    // Generate embeddings in offscreen document (non-blocking)
+    // Offscreen document persists independently and has DOM access for Transformers.js
+    (async () => {
+      try {
+        const { generateEmbeddingsOffscreen } = await import('../services/offscreenService.ts');
+        const result = await generateEmbeddingsOffscreen(storedPaper.id);
+
+        if (result.success) {
+          console.log('[DBHandlers] ✓ Generated', result.count, 'embeddings in offscreen document');
+        } else {
+          console.log('[DBHandlers] Could not generate embeddings, will use keyword search:', result.error);
+        }
+      } catch (error) {
+        console.log('[DBHandlers] Error triggering embedding generation:', error);
+      }
+    })();
+
     return { success: true, paper: storedPaper };
   } catch (dbError) {
     console.error('[DBHandlers] Failed to store paper:', dbError);

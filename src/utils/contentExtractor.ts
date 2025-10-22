@@ -25,6 +25,11 @@ export interface ContentChunk {
  * Check if the current page is a PDF
  */
 export function isPDFPage(): boolean {
+  // Guard against service worker context
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return false;
+  }
+
   // Check if URL ends with .pdf
   if (window.location.href.toLowerCase().endsWith('.pdf')) {
     return true;
@@ -48,6 +53,19 @@ export function isPDFPage(): boolean {
  * Removes navigation, ads, scripts, and focuses on main content
  */
 export function extractPageText(): ExtractedContent {
+  // Guard against service worker context
+  if (typeof document === 'undefined') {
+    return {
+      text: '',
+      headings: [],
+      metadata: {
+        wordCount: 0,
+        charCount: 0,
+        hasStructure: false,
+      },
+    };
+  }
+
   // Clone the document to avoid modifying the actual page
   const clone = document.cloneNode(true) as Document;
 

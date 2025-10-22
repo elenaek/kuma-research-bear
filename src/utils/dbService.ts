@@ -1,5 +1,4 @@
 import { ResearchPaper, StoredPaper, ContentChunk } from '../types/index.ts';
-import { chunkContent, extractPageText } from './contentExtractor.ts';
 
 /**
  * IndexedDB Service for storing research papers locally
@@ -91,6 +90,7 @@ export async function storePaper(
       extractedText = fullText;
     } else if (typeof document !== 'undefined') {
       // We're in a content script context, can extract text
+      const { extractPageText } = await import('./contentExtractor.ts');
       extractedText = extractPageText().text;
     } else {
       // We're in a background script context without fullText provided
@@ -98,6 +98,7 @@ export async function storePaper(
     }
 
     // Create chunks with metadata using contentExtractor (5000 chars with 1000 overlap for speed and context)
+    const { chunkContent } = await import('./contentExtractor.ts');
     const extractorChunks = chunkContent(extractedText, 5000, 1000);
 
     // Transform to storage format with richer metadata
@@ -139,12 +140,14 @@ export async function storePaper(
 
     for (let i = 0; i < contentChunks.length; i++) {
       const chunk = contentChunks[i];
-      await new Promise<void>((resolve, reject) => {
-        const request = chunkStore.put(chunk);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(new Error('Failed to store chunk'));
-      });
+      chunkStore.put(chunk);  // Queue all puts
     }
+
+    // Wait for transaction to complete
+    await new Promise<void>((resolve, reject) => {
+      chunkTransaction.oncomplete = () => resolve();
+      chunkTransaction.onerror = () => reject(new Error('Failed to store chunks'));
+    });
 
     console.log(`✓ Stored paper: ${paper.title} (${contentChunks.length} chunks)`);
 
@@ -174,6 +177,9 @@ export async function storePaper(
       console.error('[IndexedDB] Failed to generate hierarchical summary:', error);
       // Continue without hierarchical summary - analysis will still work but with reduced accuracy
     }
+
+    // Note: Embedding generation moved to content/services/paperStorageService.ts
+    // This prevents bundling Transformers.js in background worker
 
     db.close();
     return storedPaper;
@@ -518,6 +524,45 @@ export async function updatePaperExplanation(
 }
 
 /**
+ * Update chunk embeddings for a paper
+ * Used by offscreen document after generating embeddings
+ */
+export async function updateChunkEmbeddings(paperId: string, embeddings: Float32Array[]): Promise<void> {
+  const db = await initDB();
+
+  try {
+    // Get chunks for the paper
+    const chunks = await getPaperChunks(paperId);
+
+    if (chunks.length !== embeddings.length) {
+      throw new Error(`Chunk count mismatch: ${chunks.length} chunks vs ${embeddings.length} embeddings`);
+    }
+
+    // Update chunks with embeddings
+    const transaction = db.transaction([CHUNKS_STORE], 'readwrite');
+    const store = transaction.objectStore(CHUNKS_STORE);
+
+    for (let i = 0; i < chunks.length; i++) {
+      chunks[i].embedding = embeddings[i];
+      store.put(chunks[i]);
+    }
+
+    // Wait for transaction to complete
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(new Error('Failed to update chunks with embeddings'));
+    });
+
+    console.log(`✓ Updated ${embeddings.length} chunks with embeddings for paper: ${paperId}`);
+    db.close();
+  } catch (error) {
+    db.close();
+    console.error('Error updating chunk embeddings:', error);
+    throw error;
+  }
+}
+
+/**
  * Update analysis for a paper
  */
 export async function updatePaperAnalysis(paperId: string, analysis: any, outputLanguage?: string): Promise<boolean> {
@@ -726,6 +771,83 @@ export async function getRelevantChunksByTopic(
   console.log(`[RAG] Found ${relevantChunks.length} relevant chunks`);
   return relevantChunks;
 }
+
+// Semantic search delegated to offscreen document via offscreenService.ts
+// Offscreen document has DOM access needed for Transformers.js
+
+/**
+ * Get relevant chunks using semantic search (EmbeddingGemma)
+ * This function now just falls back to keyword search when called from background
+ *
+ * @param paperId - Paper ID
+ * @param query - Search query
+ * @param limit - Maximum number of chunks to return
+ * @returns Array of relevant chunks sorted by similarity
+ */
+export async function getRelevantChunksSemantic(
+  paperId: string,
+  query: string,
+  limit: number = 5
+): Promise<ContentChunk[]> {
+  console.log('[dbService] Semantic search requested for:', query);
+
+  try {
+    // Check if chunks have embeddings
+    const chunks = await getPaperChunks(paperId);
+    const hasEmbeddings = chunks.some(chunk => chunk.embedding !== undefined);
+
+    if (!hasEmbeddings) {
+      console.log('[dbService] No embeddings available, falling back to keyword search');
+      return await getRelevantChunks(paperId, query, limit);
+    }
+
+    // Delegate to offscreen document for semantic search calculation
+    const { searchSemanticOffscreen } = await import('../background/services/offscreenService.ts');
+    const result = await searchSemanticOffscreen(paperId, query, limit);
+
+    if (result.success && result.chunkIds && result.chunkIds.length > 0) {
+      // Fetch the chunks in the ranked order
+      const rankedChunks = result.chunkIds
+        .map(chunkId => chunks.find(c => c.id === chunkId))
+        .filter(c => c !== undefined) as ContentChunk[];
+
+      console.log('[dbService] ✓ Semantic search found', rankedChunks.length, 'chunks');
+      return rankedChunks;
+    } else {
+      console.log('[dbService] Semantic search failed, falling back to keyword search');
+      return await getRelevantChunks(paperId, query, limit);
+    }
+  } catch (error) {
+    console.error('[dbService] Error in semantic search, falling back to keyword search:', error);
+    return await getRelevantChunks(paperId, query, limit);
+  }
+}
+
+/**
+ * Get relevant chunks using semantic search for multiple topic keywords
+ * DEPRECATED: Use semanticSearchService from content script instead
+ * This function now just falls back to keyword search when called from background
+ * Enhanced version for analysis operations (methodology, limitations, etc.)
+ * Falls back to keyword search if embeddings are not available
+ *
+ * @param paperId - Paper ID
+ * @param topics - Array of topic keywords
+ * @param limit - Maximum number of chunks to return
+ * @returns Array of relevant chunks sorted by similarity
+ */
+export async function getRelevantChunksByTopicSemantic(
+  paperId: string,
+  topics: string[],
+  limit: number = 3
+): Promise<ContentChunk[]> {
+  // This function is deprecated in background worker context
+  // Use content/services/semanticSearchService.ts from content script instead
+  console.log('[dbService] Semantic search by topic called from background, using keyword fallback');
+  return await getRelevantChunksByTopic(paperId, topics, limit);
+}
+
+// Note: Embedding generation and semantic search delegated to offscreen document
+// (background/services/offscreenService.ts) which has DOM access for Transformers.js
 
 /**
  * Check if a paper is already stored

@@ -30,6 +30,8 @@ export enum MessageType {
   ASK_QUESTION = 'ASK_QUESTION',
   UPDATE_PAPER_QA_HISTORY = 'UPDATE_PAPER_QA_HISTORY',
   GENERATE_GLOSSARY = 'GENERATE_GLOSSARY',
+  GENERATE_EMBEDDINGS = 'GENERATE_EMBEDDINGS',
+  SEMANTIC_SEARCH = 'SEMANTIC_SEARCH',
 
   // Background operation state management
   GET_OPERATION_STATE = 'GET_OPERATION_STATE',
@@ -254,7 +256,7 @@ export interface ContentChunk {
   startChar: number;
   endChar: number;
   tokenCount: number;
-  embedding?: number[]; // Future: for semantic search
+  embedding?: Float32Array; // Semantic embedding vector for RAG (256-768 dimensions)
 }
 
 // Paper Analysis types

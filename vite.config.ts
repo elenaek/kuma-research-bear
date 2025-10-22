@@ -11,9 +11,10 @@ export default defineConfig({
       additionalInputs: [
         'src/popup/popup.html',
         'src/sidepanel/sidepanel.html',
+        'src/offscreen/offscreen.html',
       ],
     }),
-    // Copy PDF.js worker and DotLottie WASM to dist folder
+    // Copy PDF.js worker, DotLottie WASM, and ONNX Runtime WASM to dist folder
     viteStaticCopy({
       targets: [
         {
@@ -22,6 +23,10 @@ export default defineConfig({
         },
         {
           src: 'node_modules/@lottiefiles/dotlottie-web/dist/dotlottie-player.wasm',
+          dest: '.',
+        },
+        {
+          src: 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.{wasm,mjs}',
           dest: '.',
         },
       ],
@@ -33,5 +38,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // Disable polyfills that reference document
+    modulePreload: {
+      polyfill: false,
+    },
   },
 });

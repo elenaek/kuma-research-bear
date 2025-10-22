@@ -44,6 +44,7 @@ export async function handleDetectPaper(currentPaper: ResearchPaper | null) {
   let chunkCount = 0;
   let alreadyStored = false;
   let storageError: string | undefined;
+  let paperId: string | undefined;
 
   if (paper) {
     const storageResult = await storePaper(paper);
@@ -51,6 +52,7 @@ export async function handleDetectPaper(currentPaper: ResearchPaper | null) {
     chunkCount = storageResult.chunkCount;
     alreadyStored = storageResult.alreadyStored;
     storageError = storageResult.storageError;
+    paperId = storageResult.paperId;
   }
 
   return {
@@ -59,6 +61,7 @@ export async function handleDetectPaper(currentPaper: ResearchPaper | null) {
     chunkCount,
     alreadyStored,
     storageError,
+    paperId,
   };
 }
 

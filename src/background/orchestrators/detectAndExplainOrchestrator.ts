@@ -78,14 +78,10 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
       hasDetected: true,  // Mark detection as complete
     });
 
-    // Note: Chunking happens automatically during paper storage in the content script
-    // The chunking state updates are handled by dbHandlers.handleStorePaper()
-    // We wait a moment to ensure the paper is fully stored before continuing
-    if (!detectResponse.alreadyStored) {
-      console.log('[Orchestrator] Waiting for paper storage and chunking to complete...');
-      // Add a small delay to ensure chunking completes
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
+    // Note: Paper and chunks are guaranteed to be in IndexedDB when detect returns
+    // dbService.storePaper() waits for transaction.oncomplete before returning
+    // Embedding generation happens in background and doesn't block
+    console.log('[Orchestrator] Paper storage complete, proceeding to explanation...');
 
     // Phase 2: Explanation
     updateOperationState(tabId, {
@@ -99,15 +95,17 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
     const explanation = await aiService.explainAbstract(detectResponse.paper.abstract, explainContextId);
     const summary = await aiService.generateSummary(detectResponse.paper.title, detectResponse.paper.abstract, explainContextId);
 
-    // Store in IndexedDB per-paper (single source of truth)
-    // If storage fails, let the error propagate - we can't mark as "complete" if data isn't saved
-    const storedPaperForExplanation = await getPaperByUrl(detectResponse.paper.url);
-    if (!storedPaperForExplanation) {
-      throw new Error('Paper not found in storage. Cannot save explanation.');
+    // Store explanation using paperId from detection response
+    // The content script guarantees the paper is stored before returning
+    const paperId = detectResponse.paperId;
+    if (!paperId) {
+      console.error('[Orchestrator] No paperId in detection response:', detectResponse);
+      throw new Error('Paper was not stored successfully. Cannot save explanation.');
     }
 
+    console.log('[Orchestrator] Storing explanation for paper:', paperId);
     const { updatePaperExplanation } = await import('../../utils/dbService.ts');
-    await updatePaperExplanation(storedPaperForExplanation.id, explanation, summary);
+    await updatePaperExplanation(paperId, explanation, summary);
     console.log('[Orchestrator] ✓ Explanation stored in IndexedDB');
 
     updateOperationState(tabId, {
