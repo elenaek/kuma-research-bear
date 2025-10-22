@@ -1,5 +1,5 @@
-import { useState } from 'preact/hooks';
-import { ChevronDown, ChevronUp, BookOpen, Search, X } from 'lucide-preact';
+import { useState, useEffect } from 'preact/hooks';
+import { ChevronDown, ChevronUp, BookOpen, Search, X, ChevronLeft, ChevronRight } from 'lucide-preact';
 import { Tooltip } from './Tooltip.tsx';
 import { GlossaryTerm } from '../types/index.ts';
 
@@ -98,6 +98,8 @@ interface GlossaryListProps {
 
 export function GlossaryList({ terms }: GlossaryListProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [itemsPerPage, setItemsPerPage] = useState<number | 'all'>(10);
+  const [currentPage, setCurrentPage] = useState(1);
 
   if (!terms || terms.length === 0) {
     return (
@@ -123,13 +125,91 @@ export function GlossaryList({ terms }: GlossaryListProps) {
       )
     : terms;
 
+  // Reset to page 1 when search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  // Reset to page 1 when items per page changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
+
+  // Calculate pagination
+  const totalPages = itemsPerPage === 'all' ? 1 : Math.ceil(filteredTerms.length / itemsPerPage);
+
+  // Ensure current page is valid
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  // Get paginated terms
+  const paginatedTerms = itemsPerPage === 'all'
+    ? filteredTerms
+    : filteredTerms.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Generate page numbers for pagination controls
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxPagesToShow = 5;
+
+    if (totalPages <= maxPagesToShow) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 4; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = totalPages - 3; i <= totalPages; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push('...');
+        pages.push(currentPage - 1);
+        pages.push(currentPage);
+        pages.push(currentPage + 1);
+        pages.push('...');
+        pages.push(totalPages);
+      }
+    }
+
+    return pages;
+  };
+
   return (
     <div class="space-y-2">
-      <div class="flex items-center gap-2 mb-3">
-        <BookOpen size={18} class="text-blue-600" />
-        <h3 class="text-base font-semibold text-gray-900">
-          Glossary of Terms ({terms.length})
-        </h3>
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <div class="flex items-center gap-2">
+          <BookOpen size={18} class="text-blue-600" />
+          <h3 class="text-base font-semibold text-gray-900">
+            Glossary of Terms ({terms.length})
+          </h3>
+        </div>
+
+        {/* Items Per Page Dropdown */}
+        <div class="flex items-center gap-2">
+          <label htmlFor="items-per-page" class="text-sm text-gray-700 font-medium">
+            Show:
+          </label>
+          <select
+            id="items-per-page"
+            value={itemsPerPage}
+            defaultValue={10}
+            onChange={(e) => setItemsPerPage((e.target as HTMLSelectElement).value === 'all' ? 'all' : Number((e.target as HTMLSelectElement).value))}
+            class="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent hover:cursor-pointer"
+          >
+            <option value="all">All</option>
+            <option value={10}>10 per page</option>
+            <option value={15}>15 per page</option>
+            <option value={20}>20 per page</option>
+          </select>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -164,11 +244,78 @@ export function GlossaryList({ terms }: GlossaryListProps) {
 
       {/* Term Cards */}
       {filteredTerms.length > 0 ? (
-        <div class="space-y-1.5" style={{ overflow: 'visible' }}>
-          {filteredTerms.map((term, index) => (
-            <GlossaryCard key={`${term.acronym}-${index}`} term={term} />
-          ))}
-        </div>
+        <>
+          <div class="space-y-1.5" style={{ overflow: 'visible' }}>
+            {paginatedTerms.map((term, index) => (
+              <GlossaryCard key={`${term.acronym}-${index}`} term={term} />
+            ))}
+          </div>
+
+          {/* Pagination Controls */}
+          {itemsPerPage !== 'all' && totalPages > 1 && (
+            <div class="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-gray-200">
+              {/* Previous Button */}
+              <button
+                onClick={() => setCurrentPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                class={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-md transition-colors hover:cursor-pointer ${
+                  currentPage === 1
+                    ? 'text-gray-400 cursor-not-allowed'
+                    : 'text-blue-600 hover:bg-blue-50'
+                }`}
+                aria-label="Previous page"
+              >
+                <ChevronLeft size={16} />
+                Previous
+              </button>
+
+              {/* Page Numbers */}
+              <div class="flex items-center gap-1">
+                {getPageNumbers().map((page, idx) => (
+                  typeof page === 'number' ? (
+                    <button
+                      key={idx}
+                      onClick={() => setCurrentPage(page)}
+                      class={`px-3 py-1.5 text-sm rounded-md transition-colors hover:cursor-pointer ${
+                        currentPage === page
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ) : (
+                    <span key={idx} class="px-2 text-gray-400">
+                      {page}
+                    </span>
+                  )
+                ))}
+              </div>
+
+              {/* Next Button */}
+              <button
+                onClick={() => setCurrentPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                class={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-md transition-colors hover:cursor-pointer ${
+                  currentPage === totalPages
+                    ? 'text-gray-400 cursor-not-allowed'
+                    : 'text-blue-600 hover:bg-blue-50'
+                }`}
+                aria-label="Next page"
+              >
+                Next
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
+
+          {/* Page Info */}
+          {itemsPerPage !== 'all' && totalPages > 1 && (
+            <p class="text-xs text-center text-gray-500 mt-2">
+              Page {currentPage} of {totalPages}
+            </p>
+          )}
+        </>
       ) : (
         <div class="text-center py-6">
           <p class="text-sm text-gray-500">No terms match "{searchQuery}"</p>
