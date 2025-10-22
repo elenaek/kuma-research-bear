@@ -1,4 +1,4 @@
-import { BookOpen } from 'lucide-preact';
+import { BookOpen, Sparkles } from 'lucide-preact';
 import { GlossaryResult } from '../../types/index.ts';
 import { GlossaryList } from '../../components/GlossaryCard.tsx';
 import { LottieLoader } from './ui/LottieLoader.tsx';
@@ -6,6 +6,12 @@ import { LottieLoader } from './ui/LottieLoader.tsx';
 interface GlossarySectionProps {
   glossary: GlossaryResult | null;
   isGenerating: boolean;
+  glossaryProgress?: {
+    stage: 'extracting' | 'filtering-terms' | 'generating-definitions';
+    current?: number;
+    total?: number;
+  } | null;
+  onGenerateGlossary?: () => void;
 }
 
 /**
@@ -13,7 +19,7 @@ interface GlossarySectionProps {
  * Displays glossary of terms for the paper
  */
 export function GlossarySection(props: GlossarySectionProps) {
-  const { glossary, isGenerating } = props;
+  const { glossary, isGenerating, glossaryProgress, onGenerateGlossary } = props;
 
   // Show glossary if available
   if (glossary) {
@@ -26,14 +32,39 @@ export function GlossarySection(props: GlossarySectionProps) {
 
   // Loading state
   if (isGenerating) {
+    let progressMessage = 'Generating glossary of terms...';
+    let progressDetail = 'Combing through the paper and extracting key terminology.';
+
+    if (glossaryProgress) {
+      if (glossaryProgress.stage === 'extracting') {
+        progressMessage = 'Extracting keyword candidates...';
+        progressDetail = 'Kuma is identifying potential technical terms.';
+      } else if (glossaryProgress.stage === 'filtering-terms') {
+        progressMessage = 'Filtering for technical terms...';
+        progressDetail = 'Kuma is identifying actual technical terminology and removing non-technical terms.';
+      } else if (glossaryProgress.stage === 'generating-definitions') {
+        progressMessage = `Writing definitions for each term... ${glossaryProgress.current || 0}/${glossaryProgress.total || 0}`;
+        progressDetail = 'Kuma is writing definitions for each term.';
+      }
+    }
+
     return (
       <div class="card">
         <div class="text-center py-8">
           <LottieLoader path="/lotties/kuma-thinking.lottie" size={80} className="mx-auto mb-3" />
-          <p class="text-gray-900 font-medium text-base">Generating glossary of terms...</p>
-          <p class="text-sm text-gray-600">
-              Combing through the paper and extracting key terminology.
-            </p>
+          <p class="text-gray-900 font-medium text-base">{progressMessage}</p>
+          <p class="text-sm text-gray-600">{progressDetail}</p>
+
+          {glossaryProgress?.stage === 'generating-definitions' && glossaryProgress.current && glossaryProgress.current > 0 && glossaryProgress.total && glossaryProgress.total > 0 && (
+            <div class="mt-4 w-full max-w-xs mx-auto">
+              <div class="w-full bg-gray-200 rounded-full h-2.5">
+                <div
+                  class="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${(glossaryProgress.current / glossaryProgress.total) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -45,9 +76,19 @@ export function GlossarySection(props: GlossarySectionProps) {
       <div class="text-center py-8">
         <BookOpen size={48} class="text-gray-300 mx-auto mb-4" />
         <p class="text-gray-500 mb-2">No glossary available yet</p>
-        <p class="text-sm text-gray-400">
-          The glossary will be generated when the paper is stored
+        <p class="text-sm text-gray-400 mb-4">
+          Click the button below to generate a glossary of key terms and concepts from this paper.
         </p>
+
+        {onGenerateGlossary && (
+          <button
+            onClick={onGenerateGlossary}
+            class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200 font-medium hover:cursor-pointer"
+          >
+            <Sparkles size={18} />
+            Generate Glossary
+          </button>
+        )}
       </div>
     </div>
   );

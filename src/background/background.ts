@@ -89,7 +89,8 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
       case MessageType.GENERATE_GLOSSARY:
         const glossaryTabId = message.payload.tabId || sender.tab?.id;
-        sendResponse(await aiHandlers.handleGenerateGlossary(message.payload, glossaryTabId));
+        // Use the new transformer-based manual glossary generation
+        sendResponse(await aiHandlers.handleGenerateGlossaryManual(message.payload, glossaryTabId));
         break;
 
       case MessageType.ASK_QUESTION:
@@ -137,6 +138,10 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
       case MessageType.GET_OPERATION_STATE:
         const getStateTabId = message.payload?.tabId || sender.tab?.id;
         sendResponse(await stateHandlers.handleGetOperationState(message.payload, getStateTabId));
+        break;
+
+      case MessageType.GET_OPERATION_STATE_BY_PAPER:
+        sendResponse(await stateHandlers.handleGetOperationStateByPaper(message.payload));
         break;
 
       // Orchestrated Workflows

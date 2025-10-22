@@ -702,6 +702,73 @@ export const glossarySchema_ja: JSONSchema = {
 };
 
 // ============================================================================
+// CHUNK SUMMARIZATION WITH TERMS EXTRACTION SCHEMAS
+// ============================================================================
+
+export const chunkSummarySchema_en: JSONSchema = {
+  type: 'object',
+  properties: {
+    summary: {
+      type: 'string',
+      description: 'Concise summary of this chunk that captures key information, findings, methods, and data. Preserve acronyms and technical terminology.',
+    },
+    terms: {
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+      description: 'Array of 5-10 most important technical terms, acronyms, and domain-specific jargon found in this chunk (e.g., "fMRI", "randomized controlled trial", "statistical significance")',
+      minItems: 0,
+      maxItems: 10,
+    },
+  },
+  required: ['summary', 'terms'],
+  additionalProperties: false,
+};
+
+export const chunkSummarySchema_es: JSONSchema = {
+  type: 'object',
+  properties: {
+    summary: {
+      type: 'string',
+      description: 'Resumen conciso de este fragmento que captura información clave, hallazgos, métodos y datos. Preservar acrónimos y terminología técnica.',
+    },
+    terms: {
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+      description: 'Array de 5-10 términos técnicos más importantes, acrónimos y jerga específica del dominio encontrados en este fragmento (ej. "fMRI", "ensayo controlado aleatorizado", "significancia estadística")',
+      minItems: 0,
+      maxItems: 10,
+    },
+  },
+  required: ['summary', 'terms'],
+  additionalProperties: false,
+};
+
+export const chunkSummarySchema_ja: JSONSchema = {
+  type: 'object',
+  properties: {
+    summary: {
+      type: 'string',
+      description: 'このチャンクの重要な情報、発見、方法、データを捉えた簡潔な要約。頭字語と専門用語を保持する。',
+    },
+    terms: {
+      type: 'array',
+      items: {
+        type: 'string',
+      },
+      description: 'このチャンクで見つかった最も重要な専門用語、頭字語、分野固有の専門用語の5〜10個の配列（例：「fMRI」、「ランダム化比較試験」、「統計的有意性」）',
+      minItems: 0,
+      maxItems: 10,
+    },
+  },
+  required: ['summary', 'terms'],
+  additionalProperties: false,
+};
+
+// ============================================================================
 // HELPER FUNCTION
 // ============================================================================
 
@@ -712,7 +779,7 @@ export const glossarySchema_ja: JSONSchema = {
  * @returns JSONSchema with descriptions in the specified language
  */
 export function getSchemaForLanguage(
-  schemaType: 'methodology' | 'confounder' | 'implication' | 'limitation' | 'glossary',
+  schemaType: 'methodology' | 'confounder' | 'implication' | 'limitation' | 'glossary' | 'chunk-summary',
   language: 'en' | 'es' | 'ja'
 ): JSONSchema {
   const schemaMap = {
@@ -740,6 +807,11 @@ export function getSchemaForLanguage(
       en: glossarySchema_en,
       es: glossarySchema_es,
       ja: glossarySchema_ja,
+    },
+    'chunk-summary': {
+      en: chunkSummarySchema_en,
+      es: chunkSummarySchema_es,
+      ja: chunkSummarySchema_ja,
     },
   };
 

@@ -59,17 +59,17 @@ export function ActionButtons({
       >
         {isOperationRunning ? (
           <>
-            <Loader size={32} class="animate-spin" />
+            <Loader size={18} class="animate-spin" />
             Kuma is hard at work...
           </>
         ) : isPaperStored ? (
           <>
-            <Backpack size={32} />
+            <Backpack size={18} />
             Kuma has found this research paper stored. (Paper already stored)
           </>
         ) : (
           <>
-            <Search size={32} />
+            <Search size={18} />
             Detect & Explain Paper
           </>
         )}

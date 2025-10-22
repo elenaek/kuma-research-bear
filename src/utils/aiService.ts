@@ -477,7 +477,7 @@ IMPORTANT: Respond in ${languageName}. Your entire explanation must be in ${lang
 Please explain this research paper in simple terms that anyone can understand.
 Use the full paper summary below to provide a comprehensive explanation that covers the entire study, not just the abstract.
 
-OUTPUT FORMAT:
+<OUTPUT FORMAT BEGIN>
 ### What is the main problem or research question being addressed?
 - Answer
 ### Why is this problem important?
@@ -493,6 +493,8 @@ OUTPUT FORMAT:
 
 **Fields/Subject Areas:** 
 - Field(s) or subfields this paper belongs in
+
+</OUTPUT FORMAT END>
 
 FULL PAPER SUMMARY:
 ${hierarchicalSummary}
@@ -517,7 +519,7 @@ Use markdown formatting for better readability:
 - Use *italic* for emphasis
 - Keep paragraphs concise
 
-OUTPUT FORMAT:
+<OUTPUT FORMAT BEGIN>
 ### What is the main problem or research question being addressed?
 - Answer
 ### Why is this problem important?
@@ -533,6 +535,8 @@ OUTPUT FORMAT:
 
 **Fields/Subject Areas:** 
 - Field(s) or subfields this paper belongs in
+
+</OUTPUT FORMAT END>
 
 Abstract:
 ${abstract}`;
@@ -1431,19 +1435,22 @@ Use markdown formatting for better readability:
   }
 
   /**
-   * Generate a glossary of acronyms and technical terms from a research paper
+   * Extract technical terms from truncated paper text using Gemini
+   * Simple fallback for legacy papers without pre-extracted chunk terms
    */
-  async generateGlossary(
-    paperContent: string,
+  async extractTermsFromText(
+    text: string,
     paperTitle: string,
-    contextId: string = 'glossary'
-  ): Promise<GlossaryResult> {
-    console.log('Generating glossary of terms and acronyms...');
+    contextId: string = 'extract-terms',
+    targetCount: number = 50
+  ): Promise<string[]> {
+    console.log('[TermExtraction] Extracting terms from', text.length, 'chars of text');
+
+    // Truncate to ~10k characters
+    const truncatedText = text.slice(0, 10000);
 
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
-
-    // Get language name for instructions
     const languageNames: { [key: string]: string } = {
       'en': 'English',
       'es': 'Spanish',
@@ -1451,116 +1458,459 @@ Use markdown formatting for better readability:
     };
     const languageName = languageNames[outputLanguage] || 'English';
 
-    const maxChars = 15000; // ~3750tokens
-    const truncatedContent = paperContent.slice(0, maxChars);
-    const systemPrompt = `You are a research paper terminology expert who creates comprehensive glossaries.
-Extract acronyms, initialisms, and key technical terms from research papers.
-Provide clear definitions and helpful analogies for each term.
-IMPORTANT: All definitions, contexts, and analogies must be in ${languageName}. Keep acronyms in their original form, but explain them in ${languageName}.
-`;
+    const systemPrompt = `You are a research paper expert who identifies important technical terms and acronyms for glossaries.
+IMPORTANT: Return your response in ${languageName}.`;
 
-    const input = `IMPORTANT: All definitions, study contexts, and analogies must be in ${languageName}. Keep acronyms in their original form, but explain them in ${languageName}.
+    const input = `Paper Title: ${paperTitle}
 
-Extract all UNIQUE acronyms, initialisms, and important technical abbreviations from this research paper and create a glossary.
+From the following excerpt of a research paper, extract the TOP ${targetCount} most important technical terms, acronyms, and domain-specific concepts that would be valuable in a glossary.
 
-For each key acronym/initialisms/technical terms, provide:
-1. The acronym/initialism/technical term (e.g., "RCT", "CI", "FDA")
-2. The full expanded form
-3. A clear definition
-4. An array of study contexts with sections - for each context, specify:
-   - context: describe how the term is used in this paper (string)
-   - sections: array of section names where this usage appears (array of strings)
-5. A simple analogy to help understand it
+Prioritize:
+- Technical terms and scientific terminology (HIGH PRIORITY)
+- Acronyms and initialisms (e.g., DNA, MRI, RCT) (HIGH PRIORITY)
+- Domain-specific jargon and specialized concepts (HIGH PRIORITY)
+- Methodological terms (MEDIUM PRIORITY)
+- Statistical or mathematical terms (MEDIUM PRIORITY)
 
-If the same context appears in multiple sections, include all sections in the array.
-Focus on terms that are critical to understanding the paper.
+DO NOT include:
+- Person names (authors, researchers, people)
+- Institution names (universities, organizations)
+- Place names (cities, countries, regions)
+- General English words
+- Common verbs or adjectives
+
+Paper excerpt:
+${truncatedText}
+
+Extract exactly ${targetCount} unique terms (or fewer if there aren't enough technical terms).
+Return ONLY the terms as a comma-separated list, in order of importance.
+IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in their original form.`;
+
+    try {
+      console.log('[TermExtraction] Sending text to Gemini Nano for term extraction...');
+
+      const response = await this.prompt(
+        input,
+        systemPrompt,
+        undefined, // No schema - simple text response
+        contextId,
+        [{ type: "text", languages: ["en"] }],
+        [{ type: "text", languages: [outputLanguage] }]
+      );
+
+      // Parse comma-separated list
+      const extractedTerms = response
+        .split(',')
+        .map(term => term.trim())
+        .filter(term => term.length > 0 && term.length < 100); // Sanity check
+
+      console.log('[TermExtraction] ✓ Extracted', extractedTerms.length, 'terms');
+      console.log('[TermExtraction] Sample terms:', extractedTerms.slice(0, 10).join(', '));
+
+      return extractedTerms;
+    } catch (error) {
+      console.error('[TermExtraction] Failed to extract terms:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Generate a definition for a single keyword using RAG + GeminiNano
+   * Hybrid approach: retrieves relevant context via search, then generates definition
+   */
+  async generateDefinitionWithRAG(
+    keyword: string,
+    paperId: string,
+    paperTitle: string,
+    contextId: string = 'definition',
+    useKeywordOnly: boolean = false
+  ): Promise<GlossaryTerm | null> {
+    console.log('[Definition] Generating definition for keyword:', keyword);
+
+    try {
+      // Step 1: Find relevant chunks
+      // Import getPaperChunks for fallback
+      const { getPaperChunks } = await import('./dbService.ts');
+      const allChunks = await getPaperChunks(paperId);
+
+      if (allChunks.length === 0) {
+        console.warn('[Definition] No chunks found for paper:', paperId);
+        return null;
+      }
+
+      let relevantChunks = [];
+
+      // If useKeywordOnly is true, skip semantic search and go straight to keyword search
+      // This is faster for exact term matching (e.g., when we already know the exact terms)
+      if (useKeywordOnly) {
+        console.log('[Definition] Using keyword-only search for:', keyword);
+        const { getRelevantChunks } = await import('./dbService.ts');
+        relevantChunks = await getRelevantChunks(paperId, keyword, 5);
+      } else {
+        // Try semantic search via offscreen document if embeddings are available
+        const hasEmbeddings = allChunks.some(chunk => chunk.embedding !== undefined);
+
+        if (hasEmbeddings) {
+          try {
+            console.log('[Definition] Attempting semantic search via offscreen document for keyword:', keyword);
+
+            // Use offscreen service for semantic search (isolates embedding code from background)
+            const { searchSemanticOffscreen } = await import('../background/services/offscreenService.ts');
+            const searchResult = await searchSemanticOffscreen(paperId, keyword, 5);
+
+            if (searchResult.success && searchResult.chunkIds && searchResult.chunkIds.length > 0) {
+              // Map chunk IDs back to chunks
+              relevantChunks = searchResult.chunkIds
+                .map(chunkId => allChunks.find(c => c.id === chunkId))
+                .filter(c => c !== undefined) as any[];
+
+              console.log('[Definition] Found', relevantChunks.length, 'relevant chunks via semantic search');
+            } else {
+              console.log('[Definition] Semantic search returned no results, falling back to keyword search');
+            }
+          } catch (error) {
+            console.warn('[Definition] Semantic search failed, falling back to keyword search:', error);
+          }
+        }
+
+        // Fallback to keyword search if semantic search didn't work
+        if (relevantChunks.length === 0) {
+          console.log('[Definition] Using keyword search for:', keyword);
+          const { getRelevantChunks } = await import('./dbService.ts');
+          relevantChunks = await getRelevantChunks(paperId, keyword, 5);
+        }
+      }
+
+      if (relevantChunks.length === 0) {
+        console.warn('[Definition] No relevant chunks found for keyword:', keyword);
+        return null;
+      }
+
+      // Step 2: Prepare context from relevant chunks
+      const contextText = relevantChunks
+        .map((chunk, i) => `[Section ${i + 1}]\n${chunk.content}`)
+        .join('\n\n');
+
+      // Get user's preferred output language
+      const outputLanguage = await getOutputLanguage();
+      const languageNames: { [key: string]: string } = {
+        'en': 'English',
+        'es': 'Spanish',
+        'ja': 'Japanese'
+      };
+      const languageName = languageNames[outputLanguage] || 'English';
+
+      // Step 3: Generate definition using GeminiNano
+      const systemPrompt = `You are a research paper terminology expert who provides clear, accurate definitions for technical terms and acronyms.
+IMPORTANT: All definitions, contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.`;
+
+      const input = `IMPORTANT: All definitions, study contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.
 
 Paper Title: ${paperTitle}
 
-Paper Content:
-${truncatedContent}`;
-    try {
-      console.log('[Glossary] Attempting to generate glossary with schema validation...');
-      // Include language in context ID to ensure separate sessions per language
-      const languageContextId = `${contextId}-${outputLanguage}`;
+Define the following term/acronym based on how it is used in this research paper: "${keyword}"
 
-      // Get schema with language-appropriate descriptions
+Here are relevant excerpts from the paper:
+
+${contextText}
+
+Provide:
+1. The acronym/term (keep it in its original form)
+2. The full expanded form (if it's an acronym)
+3. A clear, concise definition based on the paper's context
+4. An array of study contexts with sections - for each unique way the term is used, provide:
+   - context: describe how the term is used in this paper (string)
+   - sections: array of section names where this usage appears (array of strings like ["Introduction", "Methods"])
+5. A simple analogy to help understand it
+
+Focus on how this term is specifically used in THIS paper.`;
+
+      // Use the glossary schema for the single term
       const schema = getSchemaForLanguage('glossary', outputLanguage as 'en' | 'es' | 'ja');
 
+      // Modify schema to expect a single term instead of array
+      const singleTermSchema = {
+        type: "object",
+        properties: {
+          acronym: { type: "string" },
+          longForm: { type: "string" },
+          definition: { type: "string" },
+          studyContext: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                context: { type: "string" },
+                sections: {
+                  type: "array",
+                  items: { type: "string" }
+                }
+              },
+              required: ["context", "sections"]
+            }
+          },
+          analogy: { type: "string" }
+        },
+        required: ["acronym", "longForm", "definition", "studyContext", "analogy"]
+      };
+
+      const languageContextId = `${contextId}-${keyword}-${outputLanguage}`;
+      const response = await this.prompt(
+        input,
+        systemPrompt,
+        singleTermSchema as JSONSchema,
+        languageContextId,
+        [{ type: "text", languages: ["en"] }],
+        [{ type: "text", languages: [outputLanguage] }]
+      );
+
+      const term = JSON.parse(response) as GlossaryTerm;
+      console.log('[Definition] ✓ Definition generated for:', keyword);
+
+      return term;
+    } catch (error) {
+      console.error('[Definition] Error generating definition for keyword:', keyword, error);
+      return null;
+    }
+  }
+
+  /**
+   * Generate definitions for multiple terms in a single prompt call (batch processing)
+   * Much more efficient than calling generateDefinitionWithRAG multiple times
+   *
+   * @param keywords - Array of keywords/terms to define
+   * @param paperId - Paper ID for RAG context retrieval
+   * @param paperTitle - Title of the paper
+   * @param contextId - Context ID for session management
+   * @param useKeywordOnly - If true, use keyword search; otherwise use semantic search
+   * @returns Array of glossary terms (null entries for failed definitions)
+   */
+  async generateDefinitionsBatchWithRAG(
+    keywords: string[],
+    paperId: string,
+    paperTitle: string,
+    contextId: string = 'definition-batch',
+    useKeywordOnly: boolean = false
+  ): Promise<(GlossaryTerm | null)[]> {
+    console.log(`[DefinitionBatch] Generating definitions for ${keywords.length} terms in single prompt call`);
+
+    try {
+      // Step 1: Gather RAG context for each keyword (in parallel)
+      const { getPaperChunks } = await import('./dbService.ts');
+      const allChunks = await getPaperChunks(paperId);
+
+      console.log('[DefinitionBatch] Gathering RAG context for all keywords...');
+
+      const keywordContexts = await Promise.all(
+        keywords.map(async (keyword) => {
+          let relevantChunks = [];
+
+          // Use keyword-only search if specified
+          if (useKeywordOnly) {
+            const { getRelevantChunks } = await import('./dbService.ts');
+            relevantChunks = await getRelevantChunks(paperId, keyword, 2); // Reduced to 2 chunks per term to fit in context
+          } else {
+            // Try semantic search
+            const hasEmbeddings = allChunks.some(chunk => chunk.embedding !== undefined);
+
+            if (hasEmbeddings) {
+              try {
+                const { searchSemanticOffscreen } = await import('../background/services/offscreenService.ts');
+                const searchResult = await searchSemanticOffscreen(paperId, keyword, 2);
+
+                if (searchResult.success && searchResult.chunkIds && searchResult.chunkIds.length > 0) {
+                  relevantChunks = searchResult.chunkIds
+                    .map(chunkId => allChunks.find(c => c.id === chunkId))
+                    .filter(c => c !== undefined) as any[];
+                }
+              } catch (error) {
+                console.warn('[DefinitionBatch] Semantic search failed for', keyword);
+              }
+            }
+
+            // Fallback to keyword search
+            if (relevantChunks.length === 0) {
+              const { getRelevantChunks } = await import('./dbService.ts');
+              relevantChunks = await getRelevantChunks(paperId, keyword, 2);
+            }
+          }
+
+          // Truncate context to avoid token limits (max ~500 chars per term)
+          const contextText = relevantChunks
+            .map((chunk, i) => {
+              const content = chunk.content;
+              // Truncate each chunk to max 250 chars to keep batch size manageable
+              return content.length > 250 ? content.substring(0, 250) + '...' : content;
+            })
+            .join('\n');
+
+          return {
+            keyword,
+            context: contextText || 'No relevant context found'
+          };
+        })
+      );
+
+      console.log('[DefinitionBatch] ✓ RAG context gathered for all keywords');
+
+      // Step 2: Construct single prompt with all keywords and their contexts
+      const outputLanguage = await getOutputLanguage();
+      const languageNames: { [key: string]: string } = {
+        'en': 'English',
+        'es': 'Spanish',
+        'ja': 'Japanese'
+      };
+      const languageName = languageNames[outputLanguage] || 'English';
+
+      const systemPrompt = `You are a research paper terminology expert who provides clear, accurate definitions for technical terms and acronyms.
+IMPORTANT: All definitions, contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.`;
+
+      // Build the input with all keywords
+      const keywordSections = keywordContexts.map((kc, idx) => {
+        return `
+TERM ${idx + 1}: "${kc.keyword}"
+Relevant excerpts from paper:
+${kc.context}
+`;
+      }).join('\n---\n');
+
+      const input = `IMPORTANT: All definitions, study contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.
+
+Paper Title: ${paperTitle}
+
+Define the following ${keywords.length} terms/acronyms based on how they are used in this research paper:
+
+${keywordSections}
+
+For EACH term, provide:
+1. The acronym/term (keep it in its original form)
+2. The full expanded form (if it's an acronym, otherwise same as term)
+3. A clear, concise definition based on the paper's context
+4. An array of study contexts with sections - for each unique way the term is used:
+   - context: describe how the term is used in this paper (string)
+   - sections: array of section names where this usage appears (array of strings like ["Introduction", "Methods"])
+5. A simple analogy to help understand it
+
+Focus on how each term is specifically used in THIS paper.
+Return an array with ${keywords.length} term definitions in the same order as listed above.`;
+
+      // Step 3: Use batch schema (array of terms)
+      const schema = getSchemaForLanguage('glossary', outputLanguage as 'en' | 'es' | 'ja');
+
+      const languageContextId = `${contextId}-${outputLanguage}`;
       const response = await this.prompt(
         input,
         systemPrompt,
         schema,
         languageContextId,
-        [{ type: "text", languages: ["en"] }],  // expectedInputs
-        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
-      );
-      console.log('[Glossary] AI response received, length:', response.length);
-      console.log('[Glossary] Raw response preview:', response.substring(0, 500));
-
-      const glossary = JSON.parse(response);
-      console.log('[Glossary] JSON parsed successfully');
-      console.log('[Glossary] Glossary object:', glossary);
-      console.log('[Glossary] Number of terms:', glossary.terms?.length || 0);
-
-      // Ensure terms array exists
-      if (!glossary.terms) {
-        console.warn('[Glossary] No terms array in response, initializing empty array');
-        glossary.terms = [];
-      } else {
-        console.log('[Glossary] First term sample:', glossary.terms[0]);
-      }
-
-      // Deduplicate terms by acronym (case-insensitive)
-      const uniqueTermsMap = new Map<string, GlossaryTerm>();
-      for (const term of glossary.terms) {
-        const key = term.acronym.toUpperCase().trim();
-
-        if (!uniqueTermsMap.has(key)) {
-          // Normalize the acronym (trim whitespace)
-          term.acronym = term.acronym.trim();
-          uniqueTermsMap.set(key, term);
-        } else {
-          // Merge study contexts by appending unique ones
-          const existing = uniqueTermsMap.get(key)!;
-          for (const newContext of term.studyContext) {
-            // Check if this context already exists (based on similar context text)
-            const existingContext = existing.studyContext.find(
-              ec => ec.context.toLowerCase() === newContext.context.toLowerCase()
-            );
-
-            if (existingContext) {
-              // Merge sections for the same context
-              for (const section of newContext.sections) {
-                if (!existingContext.sections.includes(section)) {
-                  existingContext.sections.push(section);
-                }
-              }
-            } else {
-              // Add new context
-              existing.studyContext.push(newContext);
-            }
-          }
-        }
-      }
-
-      // Convert back to array and sort alphabetically
-      const uniqueTerms = Array.from(uniqueTermsMap.values());
-      uniqueTerms.sort((a: GlossaryTerm, b: GlossaryTerm) =>
-        a.acronym.localeCompare(b.acronym)
+        [{ type: "text", languages: ["en"] }],
+        [{ type: "text", languages: [outputLanguage] }]
       );
 
-      return {
-        terms: uniqueTerms,
-        timestamp: Date.now(),
-      };
+      // Step 4: Parse response
+      const parsed = JSON.parse(response);
+      const terms = parsed.terms as GlossaryTerm[];
+
+      console.log(`[DefinitionBatch] ✓ Generated ${terms.length} definitions in single call`);
+
+      return terms;
     } catch (error) {
-      console.error('Glossary generation failed:', error);
-      // Return empty glossary on error
-      return {
-        terms: [],
-        timestamp: Date.now(),
-      };
+      console.error('[DefinitionBatch] Error generating batch definitions:', error);
+      // Return array of nulls if batch fails
+      return keywords.map(() => null);
+    }
+  }
+
+  /**
+   * Deduplicate a batch of terms using Gemini Nano
+   * Handles singular/plural, synonyms, abbreviations intelligently
+   *
+   * @param terms - Array of terms to deduplicate
+   * @param paperTitle - Title of the paper for context
+   * @param targetCount - Target number of unique terms to return
+   * @param contextId - Context ID for session management
+   * @returns Deduplicated array of technical terms
+   */
+  async deduplicateTermsBatch(
+    terms: string[],
+    paperTitle: string,
+    targetCount: number = 50,
+    contextId: string = 'dedupe-batch'
+  ): Promise<string[]> {
+    console.log('[TermDedupe] Deduplicating', terms.length, 'terms, target:', targetCount);
+
+    // Get user's preferred output language
+    const outputLanguage = await getOutputLanguage();
+    const languageNames: { [key: string]: string } = {
+      'en': 'English',
+      'es': 'Spanish',
+      'ja': 'Japanese'
+    };
+    const languageName = languageNames[outputLanguage] || 'English';
+
+    // Prepare term list
+    const termList = terms.join(', ');
+
+    const systemPrompt = `You are a research paper glossary expert who deduplicates and selects technical terms.
+Your task is to remove duplicates and select the TOP ${targetCount} most important unique terms.
+IMPORTANT: Return your response in ${languageName}.`;
+
+    const input = `Paper Title: ${paperTitle}
+
+From the following list of technical terms extracted from this paper, deduplicate and select the TOP ${targetCount} MOST IMPORTANT unique terms.
+
+DEDUPLICATION RULES:
+1. Singular vs Plural: Choose ONE canonical form
+   - Prefer singular unless plural is the standard form
+   - Example: "spectrum" vs "spectra" → choose "spectrum"
+2. Synonyms: If multiple terms mean the same thing, choose the most common/standard form
+3. Abbreviations: Include BOTH abbreviation AND full form IF the abbreviation is commonly used
+   - Example: Keep both "CMB" and "cosmic microwave background"
+4. Variations: Remove redundant variations (e.g., "power spectrum", "angular power spectrum" → keep the more specific one)
+
+PRIORITIZE:
+- Technical terms and scientific terminology (HIGH)
+- Acronyms and initialisms (HIGH)
+- Domain-specific jargon (HIGH)
+- Methodological terms (MEDIUM)
+- Frequently appearing terms (HIGH)
+
+Terms to deduplicate:
+${termList}
+
+Return exactly ${targetCount} unique, deduplicated terms (or fewer if not enough unique terms exist).
+Return ONLY the selected terms as a comma-separated list, in order of importance.
+IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in their original form.`;
+
+    try {
+      console.log('[TermDedupe] Sending terms to Gemini Nano for deduplication...');
+
+      const response = await this.prompt(
+        input,
+        systemPrompt,
+        undefined, // No schema - simple text response
+        contextId,
+        [{ type: "text", languages: ["en"] }],
+        [{ type: "text", languages: [outputLanguage] }]
+      );
+
+      // Parse comma-separated list
+      const deduplicatedTerms = response
+        .split(',')
+        .map(term => term.trim())
+        .filter(term => term.length > 0 && term.length < 100); // Sanity check
+
+      console.log('[TermDedupe] ✓ Deduplicated to', deduplicatedTerms.length, 'unique terms');
+      console.log('[TermDedupe] Sample:', deduplicatedTerms.slice(0, 10).join(', '));
+
+      return deduplicatedTerms;
+    } catch (error) {
+      console.error('[TermDedupe] Error deduplicating terms:', error);
+      // Fallback: return unique terms (basic dedup)
+      console.warn('[TermDedupe] Falling back to basic deduplication');
+      const uniqueTerms = Array.from(new Set(terms.map(t => t.toLowerCase())))
+        .slice(0, targetCount);
+      return uniqueTerms;
     }
   }
 
@@ -1570,17 +1920,19 @@ ${truncatedContent}`;
    *
    * Process:
    * 1. Split document into ~5000 char chunks (with 1000 char overlap)
-   * 2. Summarize each chunk in parallel
+   * 2. Summarize each chunk in parallel AND extract technical terms
    * 3. Combine chunk summaries
    * 4. Create final meta-summary (~8000 chars)
    *
    * This allows us to process papers of any length while staying within token limits
+   *
+   * @returns Object with hierarchical summary and array of terms per chunk
    */
   async createHierarchicalSummary(
     fullText: string,
     contextId: string = 'hierarchical-summary',
     onProgress?: (current: number, total: number) => void
-  ): Promise<string> {
+  ): Promise<{ summary: string; chunkTerms: string[][] }> {
     console.log('[Hierarchical Summary] Starting hierarchical summarization...');
     console.log('[Hierarchical Summary] Document length:', fullText.length, 'chars');
 
@@ -1591,25 +1943,31 @@ ${truncatedContent}`;
     const chunks = chunkContent(fullText, 5000, 1000);
     console.log('[Hierarchical Summary] Split into', chunks.length, 'chunks');
 
-    const chunkSummarySystemPrompt = `You are a research paper summarizer. Create concise summaries that capture key information.
+    const chunkSummarySystemPrompt = `You are a research paper summarizer. Create concise summaries that capture key information AND extract technical terms.
 CRITICAL:
 - Preserve ALL acronyms exactly (e.g., "SES", "RCT", "fMRI")
 - Keep technical terminology intact - do NOT paraphrase
 - Maintain domain-specific language
 - Include acronym definitions if present
-- Capture key findings, methods, data`;
+- Capture key findings, methods, data
+- Extract 5-10 most important technical terms, acronyms, initialisms, and domain-specific jargon a user would need to know to understand this section`;
 
-    // If document is already small enough, just return a single summary
+    // Get chunk summary schema with terms extraction
+    const outputLanguage = await getOutputLanguage();
+    const chunkSchema = getSchemaForLanguage('chunk-summary', outputLanguage as 'en' | 'es' | 'ja');
+
+    // If document is already small enough, just return a single summary with terms
     if (chunks.length === 1) {
-      console.log('[Hierarchical Summary] Document is small, creating single summary');
-      const input = `Summarize this research paper content concisely, capturing all important points:\n\n${fullText.slice(0, 6000)}`;
-      const summary = await this.prompt(input, chunkSummarySystemPrompt, undefined, contextId);
-      console.log('[Hierarchical Summary] Single summary created:', summary.length, 'chars');
-      return summary;
+      console.log('[Hierarchical Summary] Document is small, creating single summary with terms');
+      const input = `Summarize this research paper content concisely, capturing all important points. Also extract the 5-10 most important technical terms and acronyms:\n\n${fullText.slice(0, 6000)}`;
+      const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, contextId);
+      const parsed = JSON.parse(response);
+      console.log('[Hierarchical Summary] Single summary created:', parsed.summary.length, 'chars,', parsed.terms.length, 'terms');
+      return { summary: parsed.summary, chunkTerms: [parsed.terms] };
     }
 
-    // Step 2: Summarize each chunk in parallel with progress tracking
-    console.log('[Hierarchical Summary] Summarizing chunks in parallel...');
+    // Step 2: Summarize each chunk in parallel with progress tracking AND extract terms
+    console.log('[Hierarchical Summary] Summarizing chunks in parallel and extracting terms...');
 
     // Report initial progress
     if (onProgress) {
@@ -1618,13 +1976,14 @@ CRITICAL:
 
     let completedCount = 0;
 
-    // Create promises for all chunk summaries (starts parallel execution)
-    const summaryPromises = chunks.map(async (chunk, index) => {
-      const input = `Summarize this section of a research paper, capturing all important points:\n\n${chunk.content}`;
+    // Create promises for all chunk summaries with terms (starts parallel execution)
+    const chunkPromises = chunks.map(async (chunk, index) => {
+      const input = `Summarize this section of a research paper, capturing all important points. Also extract the 5-10 most important technical terms and acronyms:\n\n${chunk.content}`;
 
       try {
-        const summary = await this.prompt(input, chunkSummarySystemPrompt, undefined, `${contextId}-chunk-${index}`);
-        console.log(`[Hierarchical Summary] Chunk ${index + 1}/${chunks.length} summarized:`, summary.length, 'chars');
+        const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, `${contextId}-chunk-${index}`);
+        const parsed = JSON.parse(response);
+        console.log(`[Hierarchical Summary] Chunk ${index + 1}/${chunks.length} summarized:`, parsed.summary.length, 'chars,', parsed.terms.length, 'terms');
 
         // Report progress after this chunk completes
         completedCount++;
@@ -1632,7 +1991,7 @@ CRITICAL:
           onProgress(completedCount, chunks.length);
         }
 
-        return summary;
+        return { summary: parsed.summary, terms: parsed.terms };
       } catch (error) {
         console.error(`[Hierarchical Summary] Failed to summarize chunk ${index}:`, error);
 
@@ -1642,28 +2001,33 @@ CRITICAL:
           onProgress(completedCount, chunks.length);
         }
 
-        // Return original chunk content truncated if summary fails
-        return chunk.content.slice(0, 500);
+        // Return original chunk content truncated if summary fails, with empty terms
+        return { summary: chunk.content.slice(0, 500), terms: [] };
       }
     });
 
-    const chunkSummaries = await Promise.all(summaryPromises);
-    console.log('[Hierarchical Summary] All chunks summarized');
+    const chunkResults = await Promise.all(chunkPromises);
+    console.log('[Hierarchical Summary] All chunks summarized and terms extracted');
+
+    // Separate summaries and terms
+    const chunkSummaries = chunkResults.map(result => result.summary);
+    const chunkTerms = chunkResults.map(result => result.terms);
+    console.log('[Hierarchical Summary] Extracted', chunkTerms.flat().length, 'total terms from all chunks');
 
     // Step 3: Combine chunk summaries
     const combinedSummaries = chunkSummaries.join('\n\n');
     console.log('[Hierarchical Summary] Combined summaries length:', combinedSummaries.length, 'chars');
 
     // Step 4: Create final meta-summary
-    // If combined summaries are small enough, return as-is
+    // If combined summaries are small enough, return as-is with terms
     if (combinedSummaries.length <= 8000) {
       console.log('[Hierarchical Summary] Combined summaries already compact');
-      return combinedSummaries;
+      return { summary: combinedSummaries, chunkTerms };
     }
 
     // Otherwise, create a meta-summary
     console.log('[Hierarchical Summary] Creating meta-summary from', chunkSummaries.length, 'chunk summaries...');
-    const metaSystemPrompt = `You are a research paper summarizer. 
+    const metaSystemPrompt = `You are a research paper summarizer.
 Create a comprehensive but concise summary from multiple section summaries.
 CRITICAL:
 - Preserve ALL acronyms and technical terminology exactly
@@ -1676,11 +2040,11 @@ CRITICAL:
     try {
       const finalSummary = await this.prompt(metaInput, metaSystemPrompt, undefined, `${contextId}-meta`);
       console.log('[Hierarchical Summary] ✓ Meta-summary created:', finalSummary.length, 'chars');
-      return finalSummary;
+      return { summary: finalSummary, chunkTerms };
     } catch (error) {
       console.error('[Hierarchical Summary] Meta-summary failed, returning truncated combined summaries:', error);
       // Fallback to truncated combined summaries
-      return combinedSummaries.slice(0, 8000) + '...';
+      return { summary: combinedSummaries.slice(0, 8000) + '...', chunkTerms };
     }
   }
 

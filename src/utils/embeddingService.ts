@@ -105,13 +105,42 @@ class EmbeddingService {
 
         this.tokenizer = await AutoTokenizer.from_pretrained(this.config.modelId);
 
-        this.model = await AutoModel.from_pretrained(this.config.modelId, {
-          dtype: this.config.dtype,
-          device: 'wasm',  // Explicitly use WASM backend
-        });
+        // Try WebGPU first for GPU acceleration, fallback to WASM
+        let device = 'wasm';
+        try {
+          // Check if WebGPU is available
+          if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
+            device = 'webgpu';
+            console.log('[Embedding] WebGPU detected, attempting GPU acceleration');
+          } else {
+            console.log('[Embedding] WebGPU not available, using WASM backend');
+          }
+        } catch (e) {
+          console.log('[Embedding] Error detecting WebGPU, falling back to WASM');
+        }
 
-        this.status = 'ready';
-        console.log('[Embedding] ✓ Model loaded successfully');
+        try {
+          this.model = await AutoModel.from_pretrained(this.config.modelId, {
+            dtype: this.config.dtype,
+            device: device,
+          });
+
+          this.status = 'ready';
+          console.log(`[Embedding] ✓ Model loaded successfully with ${device.toUpperCase()} backend`);
+        } catch (modelError) {
+          // If WebGPU fails, fallback to WASM
+          if (device === 'webgpu') {
+            console.warn('[Embedding] WebGPU failed, falling back to WASM:', modelError);
+            this.model = await AutoModel.from_pretrained(this.config.modelId, {
+              dtype: this.config.dtype,
+              device: 'wasm',
+            });
+            this.status = 'ready';
+            console.log('[Embedding] ✓ Model loaded successfully with WASM backend (fallback)');
+          } else {
+            throw modelError;
+          }
+        }
       } catch (error) {
         this.status = 'error';
         console.error('[Embedding] Failed to load model:', error);

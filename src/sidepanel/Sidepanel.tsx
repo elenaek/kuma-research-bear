@@ -46,6 +46,11 @@ export function Sidepanel() {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [analysis, setAnalysis] = useState<PaperAnalysisResult | null>(null);
   const [glossary, setGlossary] = useState<GlossaryResult | null>(null);
+  const [glossaryProgress, setGlossaryProgress] = useState<{
+    stage: 'extracting' | 'filtering-terms' | 'generating-definitions';
+    current?: number;
+    total?: number;
+  } | null>(null);
   const [isCheckingStorage, setIsCheckingStorage] = useState(false);
   const [isExplainingInBackground, setIsExplainingInBackground] = useState(false);
   const [storedPaper, setStoredPaper] = useState<StoredPaper | null>(null);
@@ -134,8 +139,19 @@ export function Sidepanel() {
         // Update glossary generating papers Set
         if (state.isGeneratingGlossary) {
           operationState.addGlossaryGeneratingPaper(paperUrl);
+
+          // Restore glossary progress if available
+          if (state.glossaryProgressStage) {
+            setGlossaryProgress({
+              stage: state.glossaryProgressStage as 'extracting' | 'filtering-terms' | 'generating-definitions',
+              current: state.currentGlossaryTerm,
+              total: state.totalGlossaryTerms,
+            });
+          }
         } else {
           operationState.removeGlossaryGeneratingPaper(paperUrl);
+          // Clear glossary progress when generation stops
+          setGlossaryProgress(null);
         }
 
         // Reload paper from IndexedDB when operations complete
@@ -210,13 +226,23 @@ export function Sidepanel() {
       }
     };
 
+    // Create glossary progress listener for GLOSSARY_PROGRESS updates
+    const glossaryProgressListener = (message: any) => {
+      if (message.type === MessageType.GLOSSARY_PROGRESS) {
+        console.log('[Sidepanel] Glossary progress update:', message.payload);
+        setGlossaryProgress(message.payload);
+      }
+    };
+
     // Register message listeners
     chrome.runtime.onMessage.addListener(messageListener);
     chrome.runtime.onMessage.addListener(navigationListener);
+    chrome.runtime.onMessage.addListener(glossaryProgressListener);
 
     return () => {
       chrome.runtime.onMessage.removeListener(messageListener);
       chrome.runtime.onMessage.removeListener(navigationListener);
+      chrome.runtime.onMessage.removeListener(glossaryProgressListener);
     };
   }, []);
 
@@ -323,34 +349,6 @@ export function Sidepanel() {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const currentUrl = tab?.url;
 
-      // Query current operation state from background
-      try {
-        if (tab?.id) {
-          const stateResponse = await ChromeService.getOperationState(tab.id);
-
-          if (stateResponse.success && stateResponse.state) {
-            const state = stateResponse.state;
-            console.log('[Sidepanel] Loaded operation state:', state);
-
-            // Update banner states based on current operation
-            setIsExplainingInBackground(state.isExplaining);
-
-            // Update paper-specific generation states
-            const paperUrl = state.currentPaper?.url;
-            if (paperUrl) {
-              if (state.isAnalyzing) {
-                operationState.addAnalyzingPaper(paperUrl);
-              }
-              if (state.isGeneratingGlossary) {
-                operationState.addGlossaryGeneratingPaper(paperUrl);
-              }
-            }
-          }
-        }
-      } catch (stateError) {
-        console.warn('[Sidepanel] Could not load operation state:', stateError);
-      }
-
       // Collect debug info
       await collectDebugInfo();
 
@@ -366,6 +364,7 @@ export function Sidepanel() {
 
       try {
         const stored = await checkForStoredPaper(currentUrl);
+        let paperToLoad: StoredPaper | null = null;
 
         if (stored) {
           // Sync navigation selector to the loaded paper
@@ -374,21 +373,58 @@ export function Sidepanel() {
             paperNavigation.setCurrentPaperIndex(paperIndex);
             console.log('[Sidepanel] Synced navigation to paper index:', paperIndex);
           }
-
-          // Load all paper data
-          await loadPaperData(stored);
+          paperToLoad = stored;
         } else {
           // No paper found for current URL - check if we have any papers to show as fallback
           if (papers.length > 0) {
             console.log('[Sidepanel] No paper for current URL, loading first paper as fallback');
             // Set navigation to first paper
             paperNavigation.setCurrentPaperIndex(0);
-            // Load all paper data
-            await loadPaperData(papers[0]);
+            paperToLoad = papers[0];
           } else {
             // Truly no papers in database - show empty state
             console.log('[Sidepanel] No papers in database');
             setViewState('empty');
+          }
+        }
+
+        // Load paper data first
+        if (paperToLoad) {
+          await loadPaperData(paperToLoad);
+
+          // Now query operation state for THIS specific paper by URL
+          try {
+            const stateResponse = await ChromeService.getOperationStateByPaper(paperToLoad.url);
+
+            if (stateResponse.success && stateResponse.state) {
+              const state = stateResponse.state;
+              console.log('[Sidepanel] Loaded operation state for paper:', paperToLoad.url, state);
+
+              // Update banner states based on current operation
+              setIsExplainingInBackground(state.isExplaining);
+
+              // Update paper-specific generation states
+              if (state.isAnalyzing) {
+                operationState.addAnalyzingPaper(paperToLoad.url);
+              }
+              if (state.isGeneratingGlossary) {
+                operationState.addGlossaryGeneratingPaper(paperToLoad.url);
+
+                // Restore glossary progress if available
+                if (state.glossaryProgressStage) {
+                  setGlossaryProgress({
+                    stage: state.glossaryProgressStage as 'extracting' | 'filtering-terms' | 'generating-definitions',
+                    current: state.currentGlossaryTerm,
+                    total: state.totalGlossaryTerms,
+                  });
+                  console.log('[Sidepanel] Restored glossary progress:', state.glossaryProgressStage, state.currentGlossaryTerm, '/', state.totalGlossaryTerms);
+                }
+              }
+            } else {
+              console.log('[Sidepanel] No operation state found for paper:', paperToLoad.url);
+            }
+          } catch (stateError) {
+            console.warn('[Sidepanel] Could not load operation state for paper:', stateError);
           }
         }
       } catch (dbError) {
@@ -421,7 +457,11 @@ export function Sidepanel() {
       operationState.addAnalyzingPaper(paperUrl);
       console.log('Starting paper analysis for:', paperUrl);
 
-      const response = await ChromeService.analyzePaper(paperUrl);
+      // Get active tab ID to associate operation state
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tab?.id;
+
+      const response = await ChromeService.analyzePaper(paperUrl, tabId);
 
       if (response.success) {
         console.log('✓ Paper analysis completed successfully');
@@ -464,11 +504,15 @@ export function Sidepanel() {
     }
 
     try {
-      // Add to glossary generating papers Set
+      // Add to glossary generating papers Set (progress updates come from message listener)
       operationState.addGlossaryGeneratingPaper(paperUrl);
       console.log('Starting glossary generation for:', paperUrl);
 
-      const response = await ChromeService.generateGlossary(paperUrl);
+      // Get active tab ID to associate operation state
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tab?.id;
+
+      const response = await ChromeService.generateGlossary(paperUrl, tabId);
 
       if (response.success && response.glossary) {
         console.log('✓ Glossary generated successfully');
@@ -506,8 +550,9 @@ export function Sidepanel() {
         setOperationQueueMessage('');
       }, 3000);
     } finally {
-      // Remove from glossary generating papers Set
+      // Remove from glossary generating papers Set and reset progress
       operationState.removeGlossaryGeneratingPaper(paperUrl);
+      setGlossaryProgress(null);
     }
   }
 
@@ -1011,7 +1056,6 @@ Source: ${paper.url}
                     active={activeTab === 'glossary'}
                     onClick={() => setActiveTab('glossary')}
                     loading={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-                    disabled={!glossary && !(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url))}
                     title={(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : ''}
                   >
                     Glossary
@@ -1067,6 +1111,8 @@ Source: ${paper.url}
                     <GlossarySection
                       glossary={glossary}
                       isGenerating={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
+                      glossaryProgress={glossaryProgress}
+                      onGenerateGlossary={storedPaper?.url ? () => triggerGlossaryGeneration(storedPaper.url) : undefined}
                     />
                   </div>
                 )}

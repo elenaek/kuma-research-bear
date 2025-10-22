@@ -108,7 +108,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 {analysis.methodology.strengths.map((strength, idx) => (
                   <li key={idx} class="flex gap-2 text-sm text-gray-600">
                     <span class="text-green-600">•</span>
-                    <span>{strength}</span>
+                    <MarkdownRenderer content={strength} />
                   </li>
                 ))}
               </ul>
@@ -124,7 +124,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 {analysis.methodology.concerns.map((concern, idx) => (
                   <li key={idx} class="flex gap-2 text-sm text-gray-600">
                     <span class="text-yellow-600">•</span>
-                    <span>{concern}</span>
+                    <MarkdownRenderer content={concern} />
                   </li>
                 ))}
               </ul>
@@ -218,7 +218,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 {analysis.implications.realWorldApplications.map((app, idx) => (
                   <li key={idx} class="flex gap-2 text-sm text-gray-600">
                     <span class="text-blue-600">•</span>
-                    <span>{app}</span>
+                    <MarkdownRenderer content={app} />
                   </li>
                 ))}
               </ul>
@@ -233,7 +233,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 {analysis.implications.futureResearch.map((research, idx) => (
                   <li key={idx} class="flex gap-2 text-sm text-gray-600">
                     <span class="text-purple-600">•</span>
-                    <span>{research}</span>
+                    <MarkdownRenderer content={research} />
                   </li>
                 ))}
               </ul>

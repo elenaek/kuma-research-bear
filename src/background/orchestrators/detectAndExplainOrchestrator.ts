@@ -9,7 +9,7 @@ import * as iconService from '../services/iconService.ts';
  * Orchestrates the multi-phase workflow:
  * 1. Detection - Detect paper on page
  * 2. Explanation - Generate explanation and summary
- * 3. Analysis + Glossary - Deep analysis and term extraction (parallel)
+ * 3. Analysis - Deep analysis (glossary must be manually triggered)
  */
 
 /**
@@ -118,14 +118,12 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
       completionPercentage: 50,
     });
 
-    // Phase 3: Analysis + Glossary (auto-trigger in parallel)
+    // Phase 3: Analysis (auto-trigger)
     updateOperationState(tabId, {
       isDetecting: false,
       isExplaining: false,
       isAnalyzing: true,
-      isGeneratingGlossary: true,
       analysisProgress: '🐻 Kuma is deeply analyzing the research paper... (Analyzing paper)',
-      glossaryProgress: '🐻 Kuma is extracting technical terms and acronyms... (Generating glossary)',
     });
 
     const paperUrl = detectResponse.paper.url;
@@ -137,37 +135,26 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
         isPaperStored: true,
       });
 
-      const paperContent = storedPaper.fullText || storedPaper.abstract;
       const analysisContextId = `tab-${tabId}-analysis`;
-      const glossaryContextId = `tab-${tabId}-glossary`;
 
-      // Run analysis and glossary generation in parallel
-      const [analysis, glossary] = await Promise.all([
-        aiService.analyzePaper(storedPaper.id, storedPaper.hierarchicalSummary || '', analysisContextId),
-        aiService.generateGlossary(paperContent, storedPaper.title, glossaryContextId)
-      ]);
+      // Run analysis
+      const analysis = await aiService.analyzePaper(storedPaper.id, storedPaper.hierarchicalSummary || '', analysisContextId);
 
-      // Store both analysis and glossary in IndexedDB (single source of truth)
+      // Store analysis in IndexedDB (single source of truth)
       // If storage fails, let the error propagate - we can't mark as "complete" if data isn't saved
-      const { updatePaperAnalysis, updatePaperGlossary } = await import('../../utils/dbService.ts');
-      await Promise.all([
-        updatePaperAnalysis(storedPaper.id, analysis),
-        updatePaperGlossary(storedPaper.id, glossary)
-      ]);
-      console.log('[Orchestrator] ✓ Analysis and glossary stored in IndexedDB');
+      const { updatePaperAnalysis } = await import('../../utils/dbService.ts');
+      await updatePaperAnalysis(storedPaper.id, analysis);
+      console.log('[Orchestrator] ✓ Analysis stored in IndexedDB');
 
       updateOperationState(tabId, {
         isDetecting: false,
         isExplaining: false,
         isAnalyzing: false,
-        isGeneratingGlossary: false,
         analysisProgress: '🐻 Kuma has finished analyzing the research paper! (Analysis complete!)',
-        glossaryProgress: '🐻 Kuma has finished extracting terms! (Glossary complete!)',
-        // Update completion tracking (all 4 features now complete!)
+        // Update completion tracking (automatic features complete - glossary is manual)
         hasExplanation: true,
         hasSummary: true,
         hasAnalysis: true,
-        hasGlossary: true,
         completionPercentage: 100,
       });
     } else {
@@ -175,9 +162,7 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
         isDetecting: false,
         isAnalyzing: false,
         isExplaining: false,
-        isGeneratingGlossary: false,
         analysisProgress: '',
-        glossaryProgress: '',
         error: '🐻 Kuma could not find a research paper to analyze. (Paper not found for analysis)',
       });
     }
@@ -189,11 +174,9 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
       isDetecting: false,
       isExplaining: false,
       isAnalyzing: false,
-      isGeneratingGlossary: false,
       detectionProgress: '',
       explanationProgress: '',
       analysisProgress: '',
-      glossaryProgress: '',
       error: String(flowError),
     });
     return { success: false, error: String(flowError) };

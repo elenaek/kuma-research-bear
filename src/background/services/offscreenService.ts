@@ -109,3 +109,4 @@ export async function searchSemanticOffscreen(
     return { success: false, chunkIds: [], error: String(error) };
   }
 }
+

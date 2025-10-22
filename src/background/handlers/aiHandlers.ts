@@ -1,4 +1,4 @@
-import { ResearchPaper, PaperAnalysisResult, QuestionAnswer } from '../../types/index.ts';
+import { MessageType, ResearchPaper, PaperAnalysisResult, QuestionAnswer, GlossaryTerm } from '../../types/index.ts';
 import { aiService } from '../../utils/aiService.ts';
 import { getPaperByUrl, getPaperChunks, getRelevantChunks, getRelevantChunksSemantic } from '../../utils/dbService.ts';
 import * as operationStateService from '../services/operationStateService.ts';
@@ -382,18 +382,50 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
   }
 }
 
+
 /**
- * Generate glossary for a paper
+ * Generate glossary manually using transformer-based keyword extraction + RAG
+ * This is the new improved glossarization flow that:
+ * 1. Extracts keywords using KeyBERT-style algorithm (EmbeddingGemma)
+ * 2. Generates definitions for each keyword using hybrid RAG + GeminiNano
+ * 3. Sends progress updates to UI
  */
-export async function handleGenerateGlossary(payload: any, tabId?: number): Promise<any> {
+export async function handleGenerateGlossaryManual(payload: any, tabId?: number): Promise<any> {
   const paperUrl = payload.url;
-  const glossaryContextId = tabId ? `tab-${tabId}-glossary` : 'default-glossary';
-  const requestKey = requestDeduplicationService.getRequestKey(tabId, 'glossary', paperUrl);
+  const glossaryContextId = tabId ? `tab-${tabId}-glossary-manual` : 'default-glossary-manual';
+  const requestKey = requestDeduplicationService.getRequestKey(tabId, 'glossary-manual', paperUrl);
+
+  // Helper to send progress updates
+  const sendProgress = (stage: string, current?: number, total?: number) => {
+    if (tabId) {
+      // Update operation state with progress information
+      const state = operationStateService.updateState(tabId, {
+        glossaryProgressStage: stage,
+        currentGlossaryTerm: current || 0,
+        totalGlossaryTerms: total || 0,
+      });
+
+      // Broadcast via runtime messages so sidepanel can receive it
+      chrome.runtime.sendMessage({
+        type: MessageType.GLOSSARY_PROGRESS,
+        payload: {
+          stage, // 'extracting' | 'filtering-terms' | 'generating-definitions'
+          current, // current term being processed
+          total, // total terms to process
+        },
+      }).catch(() => {
+        // No listeners, that's ok
+      });
+
+      // Also broadcast state change so operation state listeners are notified
+      broadcastStateChange(state);
+    }
+  };
 
   try {
     // Check for existing active request
     if (requestDeduplicationService.hasRequest(requestKey)) {
-      console.log(`[AIHandlers] Reusing existing glossary request for ${requestKey}`);
+      console.log(`[AIHandlers] Reusing existing manual glossary request for ${requestKey}`);
       const existingGlossary = await requestDeduplicationService.getRequest(requestKey);
       return { success: true, glossary: existingGlossary };
     }
@@ -407,15 +439,189 @@ export async function handleGenerateGlossary(payload: any, tabId?: number): Prom
         throw new Error('Paper not found in storage. Please store the paper first.');
       }
 
-      console.log(`[AIHandlers] Generating glossary for paper: ${storedPaper.title} with context: ${glossaryContextId}`);
+      console.log(`[AIHandlers] Generating glossary manually for paper: ${storedPaper.title}`);
 
-      // Use fullText for glossary generation (more complete than abstract)
-      const paperContent = storedPaper.fullText || storedPaper.abstract;
+      // Update operation state to show glossary generation is in progress
+      if (tabId) {
+        const state = operationStateService.updateState(tabId, {
+          isGeneratingGlossary: true,
+          glossaryProgress: '🐻 Kuma is generating a glossary for the research paper...',
+          currentPaper: storedPaper,
+          error: null,
+        });
+        broadcastStateChange(state);
+      }
 
-      // Generate glossary with context ID
-      const glossary = await aiService.generateGlossary(paperContent, storedPaper.title, glossaryContextId);
+      // Step 1: Aggregate terms from chunks
+      sendProgress('extracting');
+      console.log('[AIHandlers] Step 1: Aggregating terms from chunks...');
 
-      return glossary;
+      const { getPaperChunks } = await import('../../utils/dbService.ts');
+      const chunks = await getPaperChunks(storedPaper.id);
+
+      // Check if chunks have terms (new papers will, old papers won't)
+      const hasTerms = chunks.some(chunk => chunk.terms && chunk.terms.length > 0);
+
+      let deduplicatedTerms: string[];
+
+      if (!hasTerms) {
+        // Fallback to Gemini-based extraction for legacy papers without pre-extracted chunk terms
+        console.warn('[AIHandlers] Chunks do not have terms. Using Gemini fallback for legacy paper...');
+        sendProgress('extracting');
+
+        const paperContent = storedPaper.fullText || storedPaper.abstract;
+        const extractedTerms = await aiService.extractTermsFromText(
+          paperContent,
+          storedPaper.title,
+          `${glossaryContextId}-extract-fallback`,
+          50
+        );
+
+        if (extractedTerms.length === 0) {
+          throw new Error('Failed to extract terms via Gemini fallback');
+        }
+
+        // Simple deduplication (case-insensitive)
+        deduplicatedTerms = Array.from(
+          new Map(extractedTerms.map(term => [term.toLowerCase(), term])).values()
+        );
+
+        console.log('[AIHandlers] ✓ Gemini fallback extraction complete:', deduplicatedTerms.length, 'terms');
+      } else {
+        // New approach: Collect all terms from all chunks
+        const allTerms: string[] = [];
+        chunks.forEach(chunk => {
+          if (chunk.terms && chunk.terms.length > 0) {
+            allTerms.push(...chunk.terms);
+          }
+        });
+
+        console.log('[AIHandlers] ✓ Aggregated', allTerms.length, 'terms from', chunks.length, 'chunks');
+        console.log('[AIHandlers] Sample terms:', allTerms.slice(0, 10).join(', '));
+
+        if (allTerms.length === 0) {
+          throw new Error('No terms found in chunks');
+        }
+
+        // Step 2: Batched deduplication (200 terms per batch to avoid context limits)
+        sendProgress('filtering-terms');
+        console.log('[AIHandlers] Step 2: Deduplicating terms in batches...');
+
+        const batchSize = 200;
+        const deduplicatedBatches: string[] = [];
+
+        for (let i = 0; i < allTerms.length; i += batchSize) {
+          const batch = allTerms.slice(i, i + batchSize);
+          console.log(`[AIHandlers] Deduplicating batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allTerms.length / batchSize)} (${batch.length} terms)...`);
+
+          try {
+            const deduped = await aiService.deduplicateTermsBatch(
+              batch,
+              storedPaper.title,
+              Math.ceil(50 * (batch.length / allTerms.length)), // Proportional target
+              `${glossaryContextId}-dedupe-${i}`
+            );
+            deduplicatedBatches.push(...deduped);
+          } catch (error) {
+            console.error(`[AIHandlers] Error deduplicating batch:`, error);
+            // Continue with next batch
+          }
+        }
+
+        console.log('[AIHandlers] ✓ After batched deduplication:', deduplicatedBatches.length, 'terms');
+
+        // Final deduplication pass if we have too many terms
+        if (deduplicatedBatches.length > 40) {
+          console.log('[AIHandlers] Running final deduplication pass...');
+          deduplicatedTerms = await aiService.deduplicateTermsBatch(
+            deduplicatedBatches,
+            storedPaper.title,
+            50, // Target 50 final terms
+            `${glossaryContextId}-final-dedupe`
+          );
+        } else {
+          deduplicatedTerms = deduplicatedBatches;
+        }
+
+        console.log('[AIHandlers] ✓ Final deduplicated terms:', deduplicatedTerms.length);
+        console.log('[AIHandlers] Terms:', deduplicatedTerms.slice(0, 10).join(', '));
+      }
+
+      // Step 3: Generate definitions for each technical term using RAG + GeminiNano
+      sendProgress('generating-definitions', 0, deduplicatedTerms.length);
+      console.log('[AIHandlers] Step 3: Generating definitions for technical terms...');
+
+      const glossaryTerms: GlossaryTerm[] = [];
+      let successCount = 0;
+
+      // Process definitions in batches (10 at a time to avoid input size limits)
+      const batchSize = 10;
+      const totalTerms = deduplicatedTerms.length;
+
+      for (let i = 0; i < totalTerms; i += batchSize) {
+        const batch = deduplicatedTerms.slice(i, i + batchSize);
+
+        try {
+          console.log(`[AIHandlers] Generating ${batch.length} definitions in single prompt call (batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(totalTerms / batchSize)})...`);
+
+          // Generate all definitions in the batch with a SINGLE prompt call
+          const batchTerms = await aiService.generateDefinitionsBatchWithRAG(
+            batch,
+            storedPaper.id,
+            storedPaper.title,
+            `${glossaryContextId}-batch-${i}`,
+            true // Use keyword-only search (faster for exact terms)
+          );
+
+          // Collect successful results
+          batchTerms.forEach((term, idx) => {
+            if (term) {
+              glossaryTerms.push(term);
+              successCount++;
+              console.log(`[AIHandlers] ✓ Definition generated for: ${batch[idx]}`);
+            } else {
+              console.warn(`[AIHandlers] ✗ Failed to generate definition for: ${batch[idx]}`);
+            }
+          });
+
+          console.log(`[AIHandlers] Batch complete: ${batchTerms.filter(t => t !== null).length}/${batch.length} successful`);
+        } catch (error) {
+          console.error(`[AIHandlers] Error generating batch definitions:`, error);
+          // Continue to next batch on error
+        }
+
+        // Update progress
+        sendProgress('generating-definitions', Math.min(i + batchSize, totalTerms), totalTerms);
+
+        // Small delay between batches
+        if (i + batchSize < totalTerms) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+
+      console.log(`[AIHandlers] Generated ${successCount}/${deduplicatedTerms.length} definitions successfully`);
+
+      // Static deduplication: Remove any duplicate terms by acronym (case-insensitive)
+      // This catches duplicates that Gemini Nano missed (e.g., "Dark Energy" appearing 4 times)
+      const seenAcronyms = new Map<string, GlossaryTerm>();
+      glossaryTerms.forEach(term => {
+        const key = term.acronym.toLowerCase();
+        if (!seenAcronyms.has(key)) {
+          seenAcronyms.set(key, term);
+        } else {
+          console.log(`[AIHandlers] Removing duplicate term: ${term.acronym}`);
+        }
+      });
+      const finalGlossaryTerms = Array.from(seenAcronyms.values());
+      console.log(`[AIHandlers] After static deduplication: ${finalGlossaryTerms.length} unique terms (removed ${glossaryTerms.length - finalGlossaryTerms.length} duplicates)`);
+
+      // Sort terms alphabetically
+      finalGlossaryTerms.sort((a, b) => a.acronym.localeCompare(b.acronym));
+
+      return {
+        terms: finalGlossaryTerms,
+        timestamp: Date.now(),
+      };
     })();
 
     // Store the promise for deduplication
@@ -428,7 +634,6 @@ export async function handleGenerateGlossary(payload: any, tabId?: number): Prom
       const storedPaper = await getPaperByUrl(paperUrl);
 
       // Store in IndexedDB with the paper
-      // If storage fails, let the error propagate - we can't mark as "complete" if data isn't saved
       if (!storedPaper) {
         throw new Error('Paper not found in storage. Cannot save glossary.');
       }
@@ -454,26 +659,79 @@ export async function handleGenerateGlossary(payload: any, tabId?: number): Prom
         console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
       }
 
-      console.log('[AIHandlers] ✓ Glossary generation complete');
+      // Update operation state to show completion
+      if (tabId) {
+        const state = operationStateService.updateState(tabId, {
+          isGeneratingGlossary: false,
+          glossaryProgress: '🐻 Kuma has finished generating the glossary!',
+          glossaryProgressStage: null,
+          currentGlossaryTerm: 0,
+          totalGlossaryTerms: 0,
+          error: null,
+        });
+        broadcastStateChange(state);
+
+        // Clear the progress message after a delay
+        setTimeout(() => {
+          const state = operationStateService.updateState(tabId, {
+            glossaryProgress: '',
+            glossaryProgressStage: null,
+            currentGlossaryTerm: 0,
+            totalGlossaryTerms: 0,
+          });
+          broadcastStateChange(state);
+        }, 5000);
+      }
+
+      console.log('[AIHandlers] ✓ Manual glossary generation complete');
       return { success: true, glossary };
     } catch (glossaryError) {
-      console.error('[AIHandlers] Error generating glossary:', glossaryError);
+      console.error('[AIHandlers] Error generating manual glossary:', glossaryError);
+
+      // Update operation state to show error
+      if (tabId) {
+        const state = operationStateService.updateState(tabId, {
+          isGeneratingGlossary: false,
+          glossaryProgress: '',
+          glossaryProgressStage: null,
+          currentGlossaryTerm: 0,
+          totalGlossaryTerms: 0,
+          error: `🐻 Kuma had trouble generating glossary: ${String(glossaryError)}`,
+        });
+        broadcastStateChange(state);
+      }
+
       return {
         success: false,
-        error: `Glossary generation failed: ${String(glossaryError)}`
+        error: `Manual glossary generation failed: ${String(glossaryError)}`
       };
     } finally {
       // Clean up the active request
       requestDeduplicationService.deleteRequest(requestKey);
     }
   } catch (error) {
-    console.error('[AIHandlers] Error in glossary generation setup:', error);
+    console.error('[AIHandlers] Error in manual glossary generation setup:', error);
+
+    // Update operation state to show error
+    if (tabId) {
+      const state = operationStateService.updateState(tabId, {
+        isGeneratingGlossary: false,
+        glossaryProgress: '',
+        glossaryProgressStage: null,
+        currentGlossaryTerm: 0,
+        totalGlossaryTerms: 0,
+        error: `🐻 Kuma couldn't generate glossary: ${String(error)}`,
+      });
+      broadcastStateChange(state);
+    }
+
     return {
       success: false,
-      error: `Glossary generation failed: ${String(error)}`
+      error: `Manual glossary generation failed: ${String(error)}`
     };
   } finally {
-    // Always destroy the glossary session when done
+    // Always destroy all glossary sessions when done
+    // Clean up all context IDs used during generation
     aiService.destroySessionForContext(glossaryContextId);
   }
 }

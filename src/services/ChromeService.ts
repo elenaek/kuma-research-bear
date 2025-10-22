@@ -161,13 +161,13 @@ export interface AnalysisResponse {
 /**
  * Trigger paper analysis
  */
-export async function analyzePaper(paperUrl: string): Promise<AnalysisResponse> {
-  console.log('[ChromeService] Starting paper analysis for:', paperUrl);
+export async function analyzePaper(paperUrl: string, tabId?: number): Promise<AnalysisResponse> {
+  console.log('[ChromeService] Starting paper analysis for:', paperUrl, 'tabId:', tabId);
 
   try {
     const response = await chrome.runtime.sendMessage({
       type: MessageType.ANALYZE_PAPER,
-      payload: { url: paperUrl },
+      payload: { url: paperUrl, tabId },
     });
 
     if (response.success) {
@@ -192,13 +192,13 @@ export interface GlossaryResponse {
 /**
  * Generate glossary for a paper
  */
-export async function generateGlossary(paperUrl: string): Promise<GlossaryResponse> {
-  console.log('[ChromeService] Starting glossary generation for:', paperUrl);
+export async function generateGlossary(paperUrl: string, tabId?: number): Promise<GlossaryResponse> {
+  console.log('[ChromeService] Starting glossary generation for:', paperUrl, 'tabId:', tabId);
 
   try {
     const response = await chrome.runtime.sendMessage({
       type: MessageType.GENERATE_GLOSSARY,
-      payload: { url: paperUrl },
+      payload: { url: paperUrl, tabId },
     });
 
     if (response.success) {
@@ -279,6 +279,32 @@ export async function getOperationState(tabId: number): Promise<OperationStateRe
     }
   } catch (error) {
     console.error('[ChromeService] Error getting operation state:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Get operation state for a specific paper by URL
+ * Used by sidepanel which tracks papers independently of tabs
+ */
+export async function getOperationStateByPaper(paperUrl: string): Promise<OperationStateResponse> {
+  console.log('[ChromeService] Getting operation state for paper:', paperUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.GET_OPERATION_STATE_BY_PAPER,
+      payload: { paperUrl },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Operation state retrieved for paper');
+      return { success: true, state: response.state };
+    } else {
+      console.error('[ChromeService] Failed to get operation state by paper:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error getting operation state by paper:', error);
     return { success: false, error: String(error) };
   }
 }

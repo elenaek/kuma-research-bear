@@ -30,11 +30,13 @@ export enum MessageType {
   ASK_QUESTION = 'ASK_QUESTION',
   UPDATE_PAPER_QA_HISTORY = 'UPDATE_PAPER_QA_HISTORY',
   GENERATE_GLOSSARY = 'GENERATE_GLOSSARY',
+  GLOSSARY_PROGRESS = 'GLOSSARY_PROGRESS',
   GENERATE_EMBEDDINGS = 'GENERATE_EMBEDDINGS',
   SEMANTIC_SEARCH = 'SEMANTIC_SEARCH',
 
   // Background operation state management
   GET_OPERATION_STATE = 'GET_OPERATION_STATE',
+  GET_OPERATION_STATE_BY_PAPER = 'GET_OPERATION_STATE_BY_PAPER',
   START_DETECT_AND_EXPLAIN = 'START_DETECT_AND_EXPLAIN',
   OPERATION_STATE_CHANGED = 'OPERATION_STATE_CHANGED',
   PAPER_DELETED = 'PAPER_DELETED', // Broadcast when paper(s) deleted
@@ -257,6 +259,7 @@ export interface ContentChunk {
   endChar: number;
   tokenCount: number;
   embedding?: Float32Array; // Semantic embedding vector for RAG (256-768 dimensions)
+  terms?: string[]; // Technical terms/acronyms extracted from this chunk by LLM (5-10 per chunk)
 }
 
 // Paper Analysis types
@@ -342,6 +345,9 @@ export interface OperationState {
   explanationProgress: string;
   analysisProgress: string;
   glossaryProgress: string;
+  glossaryProgressStage: string | null;  // Current stage: 'extracting' | 'filtering-terms' | 'generating-definitions'
+  currentGlossaryTerm: number;  // Current glossary term being processed
+  totalGlossaryTerms: number;  // Total glossary terms to process
   chunkingProgress: string;  // Status message for chunking
   currentChunk: number;  // Current chunk being processed
   totalChunks: number;  // Total number of chunks to process
