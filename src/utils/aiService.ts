@@ -17,13 +17,8 @@ import {
   StudyContext
 } from '../types/index.ts';
 import { JSONSchema } from '../utils/typeToSchema.ts';
-import {
-  limitationAnalysisSchema,
-  implicationAnalysisSchema,
-  methodologyAnalysisSchema,
-  confounderAnalysisSchema,
-  glossarySchema
-} from '../schemas/analysisSchemas.ts';
+import { getSchemaForLanguage } from '../schemas/analysisSchemas.multilang.ts';
+import { getOutputLanguage } from './settingsService.ts';
 
 /**
  * Utility: Sleep for a specified duration
@@ -129,6 +124,80 @@ class ChromeAIService {
   }
 
   /**
+   * Check if Chrome Language Detector API is available
+   */
+  async checkLanguageDetectorAvailability(): Promise<{ available: boolean; availability: AIAvailability }> {
+    try {
+      // Check if LanguageDetector global is available
+      if (typeof LanguageDetector === 'undefined') {
+        console.log('[LanguageDetector] API not available (typeof LanguageDetector === undefined)');
+        return {
+          available: false,
+          availability: 'no',
+        };
+      }
+
+      const availability: AIAvailability = await LanguageDetector.availability();
+      console.log('[LanguageDetector] API availability:', availability);
+
+      return {
+        available: availability === 'available',
+        availability,
+      };
+    } catch (error) {
+      console.error('[LanguageDetector] Error checking availability:', error);
+      return {
+        available: false,
+        availability: 'no',
+      };
+    }
+  }
+
+  /**
+   * Detect the language of a text using Chrome's Language Detector API
+   * @param text Text to detect language from (title, abstract, etc.)
+   * @returns ISO 639-1 language code (e.g., 'en', 'es', 'fr') or null if detection fails
+   */
+  async detectLanguage(text: string): Promise<string | null> {
+    try {
+      if (!text || text.trim().length === 0) {
+        console.warn('[LanguageDetector] Empty text provided');
+        return null;
+      }
+
+      // Check availability first
+      const { available } = await this.checkLanguageDetectorAvailability();
+      if (!available) {
+        console.warn('[LanguageDetector] API not available, falling back to "en"');
+        return 'en'; // Default to English if detector unavailable
+      }
+
+      console.log('[LanguageDetector] Detecting language for text (length:', text.length, ')');
+
+      // Create detector and detect language
+      const detector = await LanguageDetector.create();
+      const results = await detector.detect(text);
+
+      // Cleanup detector
+      detector.destroy();
+
+      // Get the most confident result
+      if (results && results.length > 0) {
+        const topResult = results[0];
+        console.log('[LanguageDetector] Detected language:', topResult.detectedLanguage,
+                    'with confidence:', topResult.confidence);
+        return topResult.detectedLanguage;
+      }
+
+      console.warn('[LanguageDetector] No language detected, falling back to "en"');
+      return 'en';
+    } catch (error) {
+      console.error('[LanguageDetector] Error detecting language:', error);
+      return 'en'; // Default to English on error
+    }
+  }
+
+  /**
    * Create a summarizer session with specified options
    */
   async createSummarizer(options: SummarizerOptions): Promise<AISummarizer | null> {
@@ -160,6 +229,10 @@ class ChromeAIService {
     try {
       console.log('[Summarizer] Starting summary generation for:', title);
 
+      // Get user's preferred output language
+      const outputLanguage = await getOutputLanguage();
+      console.log('[Summarizer] Using output language:', outputLanguage);
+
       // Create tldr summarizer for quick summary
       const tldrSummarizer = await this.createSummarizer({
         type: 'tldr',
@@ -167,7 +240,7 @@ class ChromeAIService {
         length: 'long',
         sharedContext: `Research paper: ${title}`,
         expectedInputLanguages: ['en'],
-        outputLanguage: 'en'
+        outputLanguage: outputLanguage
       });
 
       if (!tldrSummarizer) {
@@ -182,7 +255,7 @@ class ChromeAIService {
         length: 'long',
         sharedContext: `Research paper: ${title}`,
         expectedInputLanguages: ['en'],
-        outputLanguage: 'en'
+        outputLanguage: outputLanguage
       });
 
       if (!keyPointsSummarizer) {
@@ -375,10 +448,15 @@ class ChromeAIService {
     systemPrompt?: string,
     responseConstraint?: JSONSchema,
     contextId: string = 'default',
+    expectedInputs?: Array<{ type: string; languages: string[] }>,
+    expectedOutputs?: Array<{ type: string; languages: string[] }>,
   ): Promise<string> {
     try {
+      console.log('[Prompt] contextId:', contextId);
+      console.log('[Prompt] expectedOutputs:', JSON.stringify(expectedOutputs));
+
       // Get or create session for this context
-      const session = await this.getOrCreateSession(contextId, { systemPrompt });
+      const session = await this.getOrCreateSession(contextId, { systemPrompt, expectedInputs, expectedOutputs });
 
       // Create abort controller for this request
       const abortController = new AbortController();
@@ -459,16 +537,31 @@ Important:
     contextId: string = 'default',
     hierarchicalSummary?: string
   ): Promise<ExplanationResult> {
+    // Get user's preferred output language
+    const outputLanguage = await getOutputLanguage();
+    console.log('[ExplainAbstract] Output language:', outputLanguage);
+
+    // Get language name for instructions
+    const languageNames: { [key: string]: string } = {
+      'en': 'English',
+      'es': 'Spanish',
+      'ja': 'Japanese'
+    };
+    const languageName = languageNames[outputLanguage] || 'English';
+
     const systemPrompt = `You are a helpful research assistant that explains complex academic papers in simple terms.
 Your goal is to make research papers accessible to people without specialized knowledge.
 Break down technical jargon, use analogies when helpful, and focus on the key insights.
-Use markdown formatting to enhance readability (bold for key terms, bullet points for lists, etc.).`;
+Use markdown formatting to enhance readability (bold for key terms, bullet points for lists, etc.).
+IMPORTANT: Respond in ${languageName}. Your entire explanation must be in ${languageName}.`;
 
     // If hierarchical summary is provided, use it for richer context
     let input: string;
     if (hierarchicalSummary) {
       console.log('[Explain] Using hierarchical summary for comprehensive explanation');
-      input = `Please explain this research paper in simple terms that anyone can understand.
+      input = `IMPORTANT: You must respond entirely in ${languageName}. Do not use any other language.
+
+Please explain this research paper in simple terms that anyone can understand.
 Use the full paper summary below to provide a comprehensive explanation that covers the entire study, not just the abstract.
 
 FULL PAPER SUMMARY:
@@ -485,7 +578,9 @@ Use markdown formatting for better readability:
 - Cover the key findings, methodology, and conclusions from the full paper`;
     } else {
       console.log('[Explain] Using abstract only (standard approach)');
-      input = `Please explain this research paper abstract in simple terms that anyone can understand.
+      input = `IMPORTANT: You must respond entirely in ${languageName}. Do not use any other language.
+
+Please explain this research paper abstract in simple terms that anyone can understand.
 Use markdown formatting for better readability:
 - Use **bold** for important concepts or key terms
 - Use bullet points or numbered lists where appropriate
@@ -496,7 +591,16 @@ Abstract:
 ${abstract}`;
     }
 
-    const explanation = await this.prompt(input, systemPrompt, undefined, contextId);
+    // Include language in context ID to ensure separate sessions per language
+    const languageContextId = `${contextId}-${outputLanguage}`;
+    const explanation = await this.prompt(
+      input,
+      systemPrompt,
+      undefined,
+      languageContextId,
+      [{ type: "text", languages: ["en"] }],  // expectedInputs
+      [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+    );
 
     return {
       originalText: abstract,
@@ -961,7 +1065,19 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
     hierarchicalSummary: string,
     contextId: string = 'analysis'
   ): Promise<MethodologyAnalysis> {
-    const systemPrompt = `You are a research methodology expert. Analyze research papers for their study design, methods, and rigor.`;
+    // Get user's preferred output language
+    const outputLanguage = await getOutputLanguage();
+
+    // Get language name for instructions
+    const languageNames: { [key: string]: string } = {
+      'en': 'English',
+      'es': 'Spanish',
+      'ja': 'Japanese'
+    };
+    const languageName = languageNames[outputLanguage] || 'English';
+
+    const systemPrompt = `You are a research methodology expert. Analyze research papers for their study design, methods, and rigor.
+IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
       // Import RAG function
@@ -980,7 +1096,9 @@ ${hierarchicalSummary}
 DETAILED METHODOLOGY SECTIONS:
 ${chunksText}`;
 
-      const input = `Analyze the methodology of this research paper using the full paper summary and detailed methodology sections below.
+      const input = `IMPORTANT: You must respond entirely in ${languageName}. All analysis must be in ${languageName}.
+
+Analyze the methodology of this research paper using the full paper summary and detailed methodology sections below.
 
 ${context}
 
@@ -988,7 +1106,20 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
 
       console.log('[Methodology Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
 
-      const response = await this.prompt(input, systemPrompt, methodologyAnalysisSchema, contextId);
+      // Include language in context ID to ensure separate sessions per language
+      const languageContextId = `${contextId}-${outputLanguage}`;
+
+      // Get schema with language-appropriate descriptions
+      const schema = getSchemaForLanguage('methodology', outputLanguage as 'en' | 'es' | 'ja');
+
+      const response = await this.prompt(
+        input,
+        systemPrompt,
+        schema,
+        languageContextId,
+        [{ type: "text", languages: ["en"] }],  // expectedInputs
+        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+      );
       return JSON.parse(response);
     } catch (error) {
       console.error('Methodology analysis failed:', error);
@@ -1014,7 +1145,19 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
     hierarchicalSummary: string,
     contextId: string = 'analysis'
   ): Promise<ConfounderAnalysis> {
-    const systemPrompt = `You are a research quality expert specializing in identifying biases and confounding variables.`;
+    // Get user's preferred output language
+    const outputLanguage = await getOutputLanguage();
+
+    // Get language name for instructions
+    const languageNames: { [key: string]: string } = {
+      'en': 'English',
+      'es': 'Spanish',
+      'ja': 'Japanese'
+    };
+    const languageName = languageNames[outputLanguage] || 'English';
+
+    const systemPrompt = `You are a research quality expert specializing in identifying biases and confounding variables.
+IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
       // Import RAG function
@@ -1033,7 +1176,9 @@ ${hierarchicalSummary}
 DETAILED SECTIONS (Methods, Limitations, Discussion):
 ${chunksText}`;
 
-      const input = `Identify potential confounders and biases in this research paper using the full paper summary and detailed sections below.
+      const input = `IMPORTANT: You must respond entirely in ${languageName}. All analysis must be in ${languageName}.
+
+Identify potential confounders and biases in this research paper using the full paper summary and detailed sections below.
 
 ${context}
 
@@ -1041,7 +1186,20 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
 
       console.log('[Confounder Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
 
-      const response = await this.prompt(input, systemPrompt, confounderAnalysisSchema, contextId);
+      // Include language in context ID to ensure separate sessions per language
+      const languageContextId = `${contextId}-${outputLanguage}`;
+
+      // Get schema with language-appropriate descriptions
+      const schema = getSchemaForLanguage('confounder', outputLanguage as 'en' | 'es' | 'ja');
+
+      const response = await this.prompt(
+        input,
+        systemPrompt,
+        schema,
+        languageContextId,
+        [{ type: "text", languages: ["en"] }],  // expectedInputs
+        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+      );
       return JSON.parse(response);
     } catch (error) {
       console.error('Confounder analysis failed:', error);
@@ -1063,7 +1221,19 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
     hierarchicalSummary: string,
     contextId: string = 'analysis'
   ): Promise<ImplicationAnalysis> {
-    const systemPrompt = `You are a research impact expert who identifies practical applications and significance of research.`;
+    // Get user's preferred output language
+    const outputLanguage = await getOutputLanguage();
+
+    // Get language name for instructions
+    const languageNames: { [key: string]: string } = {
+      'en': 'English',
+      'es': 'Spanish',
+      'ja': 'Japanese'
+    };
+    const languageName = languageNames[outputLanguage] || 'English';
+
+    const systemPrompt = `You are a research impact expert who identifies practical applications and significance of research.
+IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
       // Import RAG function
@@ -1082,7 +1252,9 @@ ${hierarchicalSummary}
 DETAILED SECTIONS (Results, Discussion, Conclusions):
 ${chunksText}`;
 
-      const input = `Analyze the implications of this research paper using the full paper summary and detailed sections below.
+      const input = `IMPORTANT: You must respond entirely in ${languageName}. All analysis must be in ${languageName}.
+
+Analyze the implications of this research paper using the full paper summary and detailed sections below.
 
 ${context}
 
@@ -1090,7 +1262,20 @@ Provide a comprehensive analysis of real-world applications, significance, and f
 
       console.log('[Implications Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
 
-      const response = await this.prompt(input, systemPrompt, implicationAnalysisSchema, contextId);
+      // Include language in context ID to ensure separate sessions per language
+      const languageContextId = `${contextId}-${outputLanguage}`;
+
+      // Get schema with language-appropriate descriptions
+      const schema = getSchemaForLanguage('implication', outputLanguage as 'en' | 'es' | 'ja');
+
+      const response = await this.prompt(
+        input,
+        systemPrompt,
+        schema,
+        languageContextId,
+        [{ type: "text", languages: ["en"] }],  // expectedInputs
+        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+      );
       return JSON.parse(response);
     } catch (error) {
       console.error('Implications analysis failed:', error);
@@ -1112,7 +1297,19 @@ Provide a comprehensive analysis of real-world applications, significance, and f
     hierarchicalSummary: string,
     contextId: string = 'analysis'
   ): Promise<LimitationAnalysis> {
-    const systemPrompt = `You are a research critique expert who identifies limitations and constraints in studies.`;
+    // Get user's preferred output language
+    const outputLanguage = await getOutputLanguage();
+
+    // Get language name for instructions
+    const languageNames: { [key: string]: string } = {
+      'en': 'English',
+      'es': 'Spanish',
+      'ja': 'Japanese'
+    };
+    const languageName = languageNames[outputLanguage] || 'English';
+
+    const systemPrompt = `You are a research critique expert who identifies limitations and constraints in studies.
+IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
       // Import RAG function
@@ -1131,7 +1328,9 @@ ${hierarchicalSummary}
 DETAILED SECTIONS (Limitations, Discussion):
 ${chunksText}`;
 
-      const input = `Identify the limitations of this research paper using the full paper summary and detailed sections below.
+      const input = `IMPORTANT: You must respond entirely in ${languageName}. All analysis must be in ${languageName}.
+
+Identify the limitations of this research paper using the full paper summary and detailed sections below.
 
 ${context}
 
@@ -1139,7 +1338,20 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
 
       console.log('[Limitations Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
 
-      const response = await this.prompt(input, systemPrompt, limitationAnalysisSchema, contextId);
+      // Include language in context ID to ensure separate sessions per language
+      const languageContextId = `${contextId}-${outputLanguage}`;
+
+      // Get schema with language-appropriate descriptions
+      const schema = getSchemaForLanguage('limitation', outputLanguage as 'en' | 'es' | 'ja');
+
+      const response = await this.prompt(
+        input,
+        systemPrompt,
+        schema,
+        languageContextId,
+        [{ type: "text", languages: ["en"] }],  // expectedInputs
+        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+      );
       return JSON.parse(response);
     } catch (error) {
       console.error('Limitations analysis failed:', error);
@@ -1190,6 +1402,17 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
   ): Promise<QuestionAnswer> {
     console.log('Answering question using RAG...');
 
+    // Get user's preferred output language
+    const outputLanguage = await getOutputLanguage();
+
+    // Get language name for instructions
+    const languageNames: { [key: string]: string } = {
+      'en': 'English',
+      'es': 'Spanish',
+      'ja': 'Japanese'
+    };
+    const languageName = languageNames[outputLanguage] || 'English';
+
     // Combine chunks into context with section markers
     const context = contextChunks
       .map((chunk, idx) => {
@@ -1200,7 +1423,8 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
 
     const systemPrompt = `You are Kuma, a helpful research assistant. Answer questions about research papers based ONLY on the provided context.
 Be accurate, cite which sections you used, and if the context doesn't contain enough information to answer, say so clearly.
-Use markdown formatting to make your answers more readable and well-structured.`;
+Use markdown formatting to make your answers more readable and well-structured.
+IMPORTANT: Respond in ${languageName}. Your entire answer must be in ${languageName}.`;
 
     const input = `Based on the following excerpts from a research paper, answer this question:
 
@@ -1217,7 +1441,16 @@ Use markdown formatting for better readability:
 - Mention which sections you used in your answer`;
 
     try {
-      const answer = await this.prompt(input, systemPrompt, undefined, contextId);
+      // Include language in context ID to ensure separate sessions per language
+      const languageContextId = `${contextId}-${outputLanguage}`;
+      const answer = await this.prompt(
+        input,
+        systemPrompt,
+        undefined,
+        languageContextId,
+        [{ type: "text", languages: ["en"] }],  // expectedInputs
+        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+      );
 
       // Extract section references from the answer (simple heuristic)
       const sources: string[] = [];
@@ -1261,14 +1494,28 @@ Use markdown formatting for better readability:
   ): Promise<GlossaryResult> {
     console.log('Generating glossary of terms and acronyms...');
 
+    // Get user's preferred output language
+    const outputLanguage = await getOutputLanguage();
+
+    // Get language name for instructions
+    const languageNames: { [key: string]: string } = {
+      'en': 'English',
+      'es': 'Spanish',
+      'ja': 'Japanese'
+    };
+    const languageName = languageNames[outputLanguage] || 'English';
+
     const maxChars = 15000; // ~3750tokens
     const truncatedContent = paperContent.slice(0, maxChars);
     const systemPrompt = `You are a research paper terminology expert who creates comprehensive glossaries.
-    Extract acronyms, initialisms, and key technical terms from research papers.
-    Provide clear definitions and helpful analogies for each term.
+Extract acronyms, initialisms, and key technical terms from research papers.
+Provide clear definitions and helpful analogies for each term.
+IMPORTANT: All definitions, contexts, and analogies must be in ${languageName}. Keep acronyms in their original form, but explain them in ${languageName}.
 `;
 
-    const input = `Extract all UNIQUE acronyms, initialisms, and important technical abbreviations from this research paper and create a glossary.
+    const input = `IMPORTANT: All definitions, study contexts, and analogies must be in ${languageName}. Keep acronyms in their original form, but explain them in ${languageName}.
+
+Extract all UNIQUE acronyms, initialisms, and important technical abbreviations from this research paper and create a glossary.
 
 For each key acronym/initialisms/technical terms, provide:
 1. The acronym/initialism/technical term (e.g., "RCT", "CI", "FDA")
@@ -1288,7 +1535,20 @@ Paper Content:
 ${truncatedContent}`;
     try {
       console.log('[Glossary] Attempting to generate glossary with schema validation...');
-      const response = await this.prompt(input, systemPrompt, glossarySchema, contextId);
+      // Include language in context ID to ensure separate sessions per language
+      const languageContextId = `${contextId}-${outputLanguage}`;
+
+      // Get schema with language-appropriate descriptions
+      const schema = getSchemaForLanguage('glossary', outputLanguage as 'en' | 'es' | 'ja');
+
+      const response = await this.prompt(
+        input,
+        systemPrompt,
+        schema,
+        languageContextId,
+        [{ type: "text", languages: ["en"] }],  // expectedInputs
+        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+      );
       console.log('[Glossary] AI response received, length:', response.length);
       console.log('[Glossary] Raw response preview:', response.substring(0, 500));
 

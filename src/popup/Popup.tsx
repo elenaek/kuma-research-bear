@@ -9,6 +9,7 @@ import { PaperInfoCard } from './components/PaperInfoCard.tsx';
 import { OperationBadges } from './components/OperationBadges.tsx';
 import { ActionButtons } from './components/ActionButtons.tsx';
 import { LottieAnimationHandle } from './components/LottieAnimation.tsx';
+import { LanguageDropdown } from './components/LanguageDropdown.tsx';
 
 export function Popup() {
   // Ref for Lottie animation control
@@ -210,6 +211,11 @@ export function Popup() {
   return (
     <div class="w-90 max-h-80 bg-gradient-to-br from-gray-50 to-gray-100">
       <div class="p-6">
+        {/* Language Selector - Top Left Corner */}
+        <div class="absolute p-2 top-0 left-0 hover:cursor-pointer">
+          <LanguageDropdown />
+        </div>
+
         {/* Header */}
         <Header ref={lottieRef} autoStartLoop={shouldAutoLoop} />
 

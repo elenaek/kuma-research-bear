@@ -7,11 +7,11 @@ interface HeaderProps {
 
 /**
  * Header component for the popup
- * Displays the Kuma logo (Lottie animation) and title
+ * Displays the Kuma logo (Lottie animation), title, and language selector
  */
 export const Header = forwardRef<LottieAnimationHandle, HeaderProps>(({ autoStartLoop }, ref) => {
   return (
-    <header class="mb-6 text-center">
+    <header class="mb-6 relative">
       {/* Logo - Lottie Animation */}
       <div class="flex justify-center mb-4">
         <LottieAnimation
@@ -24,8 +24,10 @@ export const Header = forwardRef<LottieAnimationHandle, HeaderProps>(({ autoStar
         />
       </div>
 
-      <h1 class="text-2xl font-bold text-gray-800">Kuma the Research Bear</h1>
-      <p class="text-sm text-gray-600 pt-2 font-light">
+      {/* Title */}
+      <h1 class="text-2xl font-bold text-gray-800 text-center">Kuma the Research Bear</h1>
+
+      <p class="text-sm text-gray-600 text-center font-light pt-2">
         AI-Powered Bear that helps you understand research papers
       </p>
     </header>

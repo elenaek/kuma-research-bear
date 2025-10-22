@@ -464,7 +464,8 @@ export async function updatePaperQAHistory(paperId: string, qaHistory: any[]): P
 export async function updatePaperExplanation(
   paperId: string,
   explanation: any,
-  summary: any
+  summary: any,
+  outputLanguage?: string
 ): Promise<boolean> {
   const db = await initDB();
 
@@ -490,6 +491,14 @@ export async function updatePaperExplanation(
     paper.summary = summary;
     paper.lastAccessedAt = Date.now();
 
+    // Store output language in metadata if provided
+    if (outputLanguage) {
+      if (!paper.metadata) {
+        paper.metadata = {};
+      }
+      paper.metadata.outputLanguage = outputLanguage;
+    }
+
     const updateTransaction = db.transaction([PAPERS_STORE], 'readwrite');
     const updateStore = updateTransaction.objectStore(PAPERS_STORE);
     await new Promise<void>((resolve, reject) => {
@@ -511,7 +520,7 @@ export async function updatePaperExplanation(
 /**
  * Update analysis for a paper
  */
-export async function updatePaperAnalysis(paperId: string, analysis: any): Promise<boolean> {
+export async function updatePaperAnalysis(paperId: string, analysis: any, outputLanguage?: string): Promise<boolean> {
   const db = await initDB();
 
   try {
@@ -535,6 +544,14 @@ export async function updatePaperAnalysis(paperId: string, analysis: any): Promi
     paper.analysis = analysis;
     paper.lastAccessedAt = Date.now();
 
+    // Store output language in metadata if provided
+    if (outputLanguage) {
+      if (!paper.metadata) {
+        paper.metadata = {};
+      }
+      paper.metadata.outputLanguage = outputLanguage;
+    }
+
     // Write in the same transaction (prevents race conditions)
     await new Promise<void>((resolve, reject) => {
       const request = store.put(paper);
@@ -555,7 +572,7 @@ export async function updatePaperAnalysis(paperId: string, analysis: any): Promi
 /**
  * Update glossary for a paper
  */
-export async function updatePaperGlossary(paperId: string, glossary: any): Promise<boolean> {
+export async function updatePaperGlossary(paperId: string, glossary: any, outputLanguage?: string): Promise<boolean> {
   const db = await initDB();
 
   try {
@@ -578,6 +595,14 @@ export async function updatePaperGlossary(paperId: string, glossary: any): Promi
     // Update the paper with glossary
     paper.glossary = glossary;
     paper.lastAccessedAt = Date.now();
+
+    // Store output language in metadata if provided
+    if (outputLanguage) {
+      if (!paper.metadata) {
+        paper.metadata = {};
+      }
+      paper.metadata.outputLanguage = outputLanguage;
+    }
 
     // Write in the same transaction (prevents race conditions)
     await new Promise<void>((resolve, reject) => {

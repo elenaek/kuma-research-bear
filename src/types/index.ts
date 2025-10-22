@@ -77,6 +77,10 @@ export interface PaperMetadata {
   keywords?: string[];
   citations?: number;
 
+  // Language metadata
+  originalLanguage?: string; // Detected language of the paper (ISO 639-1 code)
+  outputLanguage?: string; // User's chosen output language for generated content
+
   // AI extraction metadata
   extractionMethod?: 'manual' | 'schema.org' | 'site-specific' | 'ai';
   extractionTimestamp?: number;
@@ -127,6 +131,8 @@ export interface AISessionOptions {
   topK?: number;
   systemPrompt?: string;
   signal?: AbortSignal;
+  expectedInputs?: Array<{ type: string; languages: string[] }>;
+  expectedOutputs?: Array<{ type: string; languages: string[] }>;
 }
 
 export interface AILanguageModelSession {
@@ -170,13 +176,52 @@ declare global {
     static availability(): Promise<AIAvailability>;
     static create(options?: SummarizerOptions): Promise<AISummarizer>;
   }
+
+  // Chrome Language Detector API types (Chrome 138+)
+  interface LanguageDetectorResult {
+    detectedLanguage: string; // ISO 639-1 language code
+    confidence: number; // 0-1 confidence score
+  }
+
+  interface AILanguageDetector {
+    detect(text: string): Promise<LanguageDetectorResult[]>;
+    destroy(): void;
+  }
+
+  class LanguageDetector {
+    static availability(): Promise<AIAvailability>;
+    static create(): Promise<AILanguageDetector>;
+  }
 }
+
+// Language types
+export interface LanguageOption {
+  code: string; // ISO 639-1 language code
+  name: string; // English name
+  nativeName: string; // Native language name
+}
+
+/**
+ * Supported languages for AI-generated content
+ *
+ * NOTE: This list is limited by Chrome's Prompt API support.
+ * As of Chrome 138+, only English, Spanish, and Japanese are supported.
+ * More languages will be added as Chrome extends Prompt API language support.
+ *
+ * See: https://developer.chrome.com/docs/ai/built-in-apis
+ */
+export const SUPPORTED_LANGUAGES: LanguageOption[] = [
+  { code: 'en', name: 'English', nativeName: 'English' },
+  { code: 'es', name: 'Spanish', nativeName: 'Español' },
+  { code: 'ja', name: 'Japanese', nativeName: '日本語' },
+];
 
 // Storage types
 export interface ExtensionSettings {
   enableAutoDetect: boolean;
   defaultExplanationLevel: 'simple' | 'intermediate' | 'detailed';
   theme: 'light' | 'dark' | 'auto';
+  outputLanguage?: string; // User's preferred output language (ISO 639-1 code)
 }
 
 export interface SavedExplanation {

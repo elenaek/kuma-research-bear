@@ -1,6 +1,7 @@
 import { MessageType, ResearchPaper } from '../../types/index.ts';
 import { detectPaperWithAIOnly } from '../services/paperDetectionService.ts';
 import { storePaper } from '../services/paperStorageService.ts';
+import { aiService } from '../../utils/aiService.ts';
 
 /**
  * Message Handlers
@@ -16,6 +17,27 @@ export async function handleDetectPaper(currentPaper: ResearchPaper | null) {
 
   // Manual detection uses AI-first approach
   const paper = await detectPaperWithAIOnly();
+
+  // Detect language if paper found
+  if (paper) {
+    try {
+      // Use title + abstract for best language detection accuracy
+      const textForDetection = `${paper.title} ${paper.abstract}`.trim();
+      const detectedLanguage = await aiService.detectLanguage(textForDetection);
+
+      if (detectedLanguage) {
+        // Initialize metadata if it doesn't exist
+        if (!paper.metadata) {
+          paper.metadata = {};
+        }
+        paper.metadata.originalLanguage = detectedLanguage;
+        console.log('[MessageHandler] Detected paper language:', detectedLanguage);
+      }
+    } catch (error) {
+      console.error('[MessageHandler] Error detecting language:', error);
+      // Continue anyway - language detection is optional
+    }
+  }
 
   // Store in IndexedDB if detected
   let stored = false;

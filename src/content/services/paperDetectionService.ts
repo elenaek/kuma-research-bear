@@ -1,6 +1,7 @@
 import { ResearchPaper } from '../../types/index.ts';
 import { detectPaper, detectPaperWithAI } from '../../utils/paperDetectors.ts';
 import { storePaperSimple } from './paperStorageService.ts';
+import { aiService } from '../../utils/aiService.ts';
 
 /**
  * Paper Detection Service
@@ -19,6 +20,23 @@ export async function detectAndStorePaper(): Promise<ResearchPaper | null> {
 
     if (paper) {
       console.log('[PaperDetection] Research paper detected:', paper.title);
+
+      // Detect language
+      try {
+        const textForDetection = `${paper.title} ${paper.abstract}`.trim();
+        const detectedLanguage = await aiService.detectLanguage(textForDetection);
+
+        if (detectedLanguage) {
+          if (!paper.metadata) {
+            paper.metadata = {};
+          }
+          paper.metadata.originalLanguage = detectedLanguage;
+          console.log('[PaperDetection] Detected paper language:', detectedLanguage);
+        }
+      } catch (error) {
+        console.error('[PaperDetection] Error detecting language:', error);
+        // Continue anyway - language detection is optional
+      }
 
       // Store in IndexedDB via background worker (single source of truth)
       await storePaperSimple(paper);

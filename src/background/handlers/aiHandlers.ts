@@ -106,8 +106,12 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
       broadcastStateChange(state);
     }
 
+    // Get output language for metadata
+    const { getOutputLanguage } = await import('../../utils/settingsService.ts');
+    const outputLanguage = await getOutputLanguage();
+
     const { updatePaperExplanation } = await import('../../utils/dbService.ts');
-    await updatePaperExplanation(storedPaper.id, explanation, summary);
+    await updatePaperExplanation(storedPaper.id, explanation, summary, outputLanguage);
     console.log('[AIHandlers] ✓ Explanation stored in IndexedDB');
 
     // Update completion tracking in operation state
@@ -269,8 +273,12 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
         throw new Error('Paper not found in storage. Cannot save analysis.');
       }
 
+      // Get output language for metadata
+      const { getOutputLanguage } = await import('../../utils/settingsService.ts');
+      const outputLanguage = await getOutputLanguage();
+
       const { updatePaperAnalysis } = await import('../../utils/dbService.ts');
-      await updatePaperAnalysis(storedPaper.id, analysis);
+      await updatePaperAnalysis(storedPaper.id, analysis, outputLanguage);
       console.log('[AIHandlers] ✓ Analysis stored in IndexedDB');
 
       // Update completion tracking in operation state
@@ -400,8 +408,12 @@ export async function handleGenerateGlossary(payload: any, tabId?: number): Prom
         throw new Error('Paper not found in storage. Cannot save glossary.');
       }
 
+      // Get output language for metadata
+      const { getOutputLanguage } = await import('../../utils/settingsService.ts');
+      const outputLanguage = await getOutputLanguage();
+
       const { updatePaperGlossary } = await import('../../utils/dbService.ts');
-      await updatePaperGlossary(storedPaper.id, glossary);
+      await updatePaperGlossary(storedPaper.id, glossary, outputLanguage);
       console.log('[AIHandlers] ✓ Glossary stored in IndexedDB');
 
       // Update completion tracking in operation state

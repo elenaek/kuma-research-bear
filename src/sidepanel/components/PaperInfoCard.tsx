@@ -1,9 +1,17 @@
-import { ExternalLink, Database, Clock, Calendar, BookOpen, Hash, Download } from 'lucide-preact';
-import { ResearchPaper, StoredPaper } from '../../types/index.ts';
+import { ExternalLink, Database, Clock, Calendar, BookOpen, Hash, Download, Globe } from 'lucide-preact';
+import { ResearchPaper, StoredPaper, SUPPORTED_LANGUAGES } from '../../types/index.ts';
 
 interface PaperInfoCardProps {
   paper: ResearchPaper | null;
   storedPaper: StoredPaper | null;
+}
+
+/**
+ * Helper function to get language display name from language code
+ */
+function getLanguageName(code: string): string {
+  const language = SUPPORTED_LANGUAGES.find(lang => lang.code === code);
+  return language ? language.nativeName : code.toUpperCase();
 }
 
 /**
@@ -66,6 +74,22 @@ export function PaperInfoCard(props: PaperInfoCardProps) {
                 <span>{storedPaper.chunkCount} content chunks for Q&A</span>
               </div>
             </>
+          )}
+
+          {/* Language Info */}
+          {paper.metadata?.originalLanguage && (
+            <div class="flex items-center gap-2 text-sm text-gray-700">
+              <Globe size={14} class="text-gray-400" />
+              <span class="font-medium">Original Language:</span>
+              <span>{getLanguageName(paper.metadata.originalLanguage)}</span>
+            </div>
+          )}
+          {paper.metadata?.outputLanguage && (
+            <div class="flex items-center gap-2 text-sm text-gray-700">
+              <Globe size={14} class="text-gray-400" />
+              <span class="font-medium">Output Language:</span>
+              <span>{getLanguageName(paper.metadata.outputLanguage)}</span>
+            </div>
           )}
 
           {paper.metadata && (
