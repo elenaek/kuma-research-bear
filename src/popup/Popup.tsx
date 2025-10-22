@@ -198,6 +198,32 @@ export function Popup() {
     }
   }
 
+  async function handleGenerateAnalysis() {
+    // Guard against missing paper or already analyzing
+    if (!paperStatus.paper || operationState.isAnalyzing) {
+      return;
+    }
+
+    try {
+      await ChromeService.analyzePaper(paperStatus.paper.url, currentTabId);
+    } catch (error) {
+      console.error('[Popup] Failed to generate analysis:', error);
+    }
+  }
+
+  async function handleGenerateGlossary() {
+    // Guard against missing paper or already generating glossary
+    if (!paperStatus.paper || operationState.isGeneratingGlossary) {
+      return;
+    }
+
+    try {
+      await ChromeService.generateGlossary(paperStatus.paper.url, currentTabId);
+    } catch (error) {
+      console.error('[Popup] Failed to generate glossary:', error);
+    }
+  }
+
   // Determine if Lottie animation should auto-start looping
   const isOperationActive =
     operationState.isDetecting ||
@@ -234,6 +260,7 @@ export function Popup() {
           detectionStatus={operationState.detectionStatus}
           onInitialize={aiStatus.handleInitializeAI}
           onReset={aiStatus.handleResetAI}
+          paperReady={operationState.hasExplanation && operationState.hasSummary}
         />
 
         {/* Show operation badges early when operations are active but no paper yet */}
@@ -270,6 +297,8 @@ export function Popup() {
             hasAnalysis={operationState.hasAnalysis}
             hasGlossary={operationState.hasGlossary}
             completionPercentage={operationState.completionPercentage}
+            onGenerateAnalysis={handleGenerateAnalysis}
+            onGenerateGlossary={handleGenerateGlossary}
           />
         )}
 

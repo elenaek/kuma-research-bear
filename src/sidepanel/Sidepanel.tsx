@@ -980,7 +980,6 @@ Source: ${paper.url}
                       label: 'Analysis',
                       active: activeTab === 'analysis',
                       loading: storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false,
-                      disabled: !analysis && !(storedPaper?.url && operationState.isAnalyzing(storedPaper.url)),
                       title: (storedPaper?.url && operationState.isAnalyzing(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : '',
                       onClick: () => setActiveTab('analysis'),
                     },
@@ -997,7 +996,6 @@ Source: ${paper.url}
                       label: 'Glossary',
                       active: activeTab === 'glossary',
                       loading: storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false,
-                      disabled: !glossary && !(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)),
                       title: (storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : '',
                       onClick: () => setActiveTab('glossary'),
                     },
@@ -1038,7 +1036,6 @@ Source: ${paper.url}
                     active={activeTab === 'analysis'}
                     onClick={() => setActiveTab('analysis')}
                     loading={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-                    disabled={!analysis && !(storedPaper?.url && operationState.isAnalyzing(storedPaper.url))}
                     title={(storedPaper?.url && operationState.isAnalyzing(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : ''}
                   >
                     Analysis
@@ -1088,6 +1085,7 @@ Source: ${paper.url}
                     <AnalysisSection
                       analysis={analysis}
                       isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+                      onGenerateAnalysis={storedPaper?.url ? () => triggerAnalysis(storedPaper.url) : undefined}
                     />
                   </div>
                 )}

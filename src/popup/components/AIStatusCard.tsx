@@ -14,6 +14,7 @@ interface AIStatusCardProps {
   isGeneratingGlossary: boolean;
   isChunking: boolean;
   detectionStatus: string | null;
+  paperReady?: boolean;
   onInitialize: () => void;
   onReset: () => void;
 }
@@ -34,6 +35,7 @@ export function AIStatusCard({
   isGeneratingGlossary,
   isChunking,
   detectionStatus,
+  paperReady = false,
   onInitialize,
   onReset,
 }: AIStatusCardProps) {
@@ -56,10 +58,13 @@ export function AIStatusCard({
     if (aiStatus === 'ready' && detectionStatus && (isDetecting || isExplaining || isAnalyzing || isGeneratingGlossary || isChunking)) {
       return detectionStatus;
     }
-    if (aiStatus === 'ready') {
+    else if (aiStatus === 'ready' && paperReady) {
+      return 'Kuma has prepared this paper for your review!';
+    }
+    else if (aiStatus === 'ready') {
       return 'Kuma is ready to help you with your research!';
     }
-    if (aiStatus === 'error') {
+    else if (aiStatus === 'error') {
       return 'Kuma is full asleep again. (AI Model Crashed)';
     }
     return statusMessage;

@@ -1,4 +1,4 @@
-import { FileText, AlertTriangle, TrendingUp, AlertCircle, CheckCircle } from 'lucide-preact';
+import { FileText, AlertTriangle, TrendingUp, AlertCircle, CheckCircle, Sparkles } from 'lucide-preact';
 import { PaperAnalysisResult } from '../../types/index.ts';
 import { Tooltip } from '../../components/Tooltip.tsx';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
@@ -8,6 +8,7 @@ import { LottieLoader } from './ui/LottieLoader.tsx';
 interface AnalysisSectionProps {
   analysis: PaperAnalysisResult | null;
   isAnalyzing: boolean;
+  onGenerateAnalysis?: () => void;
 }
 
 /**
@@ -15,7 +16,7 @@ interface AnalysisSectionProps {
  * Displays paper analysis results including methodology, confounders, implications, and limitations
  */
 export function AnalysisSection(props: AnalysisSectionProps) {
-  const { analysis, isAnalyzing } = props;
+  const { analysis, isAnalyzing, onGenerateAnalysis } = props;
 
   // Loading state
   if (isAnalyzing && !analysis) {
@@ -37,10 +38,24 @@ export function AnalysisSection(props: AnalysisSectionProps) {
   // No analysis yet
   if (!analysis) {
     return (
-      <div class="card text-center py-8">
-        <TrendingUp size={32} class="mx-auto mb-3 text-gray-400" />
-        <p class="text-sm text-gray-600">Analysis will begin automatically</p>
-        <p class="text-xs text-gray-500 mt-1">Please wait...</p>
+      <div class="card">
+        <div class="text-center py-8">
+          <TrendingUp size={48} class="text-gray-300 mx-auto mb-4" />
+          <p class="text-gray-500 mb-2">No analysis available yet</p>
+          <p class="text-sm text-gray-400 mb-4">
+            Click the button below to analyze this paper's methodology, confounders, implications, and limitations.
+          </p>
+
+          {onGenerateAnalysis && (
+            <button
+              onClick={onGenerateAnalysis}
+              class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200 font-medium hover:cursor-pointer"
+            >
+              <Sparkles size={18} />
+              Generate Analysis
+            </button>
+          )}
+        </div>
       </div>
     );
   }

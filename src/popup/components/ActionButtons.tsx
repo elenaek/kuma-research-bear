@@ -64,7 +64,7 @@ export function ActionButtons({
           </>
         ) : isPaperStored ? (
           <>
-            <Backpack size={18} />
+            <Backpack size={32} />
             Kuma has found this research paper stored. (Paper already stored)
           </>
         ) : (

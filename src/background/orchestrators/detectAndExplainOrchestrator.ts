@@ -9,7 +9,7 @@ import * as iconService from '../services/iconService.ts';
  * Orchestrates the multi-phase workflow:
  * 1. Detection - Detect paper on page
  * 2. Explanation - Generate explanation and summary
- * 3. Analysis - Deep analysis (glossary must be manually triggered)
+ * (Analysis and Glossary must be manually triggered by user)
  */
 
 /**
@@ -108,64 +108,18 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
     await updatePaperExplanation(paperId, explanation, summary);
     console.log('[Orchestrator] ✓ Explanation stored in IndexedDB');
 
+    // Mark explanation phase complete
     updateOperationState(tabId, {
       isDetecting: false,
-      isExplaining: true,
+      isExplaining: false,
       explanationProgress: '🐻 Kuma has finished explaining the research paper! (Explanation complete!)',
+      isPaperStored: true,
       // Update completion tracking (explanation + summary = 2 of 4 features)
+      // Analysis and Glossary are manual operations
       hasExplanation: true,
       hasSummary: true,
       completionPercentage: 50,
     });
-
-    // Phase 3: Analysis (auto-trigger)
-    updateOperationState(tabId, {
-      isDetecting: false,
-      isExplaining: false,
-      isAnalyzing: true,
-      analysisProgress: '🐻 Kuma is deeply analyzing the research paper... (Analyzing paper)',
-    });
-
-    const paperUrl = detectResponse.paper.url;
-    const storedPaper = await getPaperByUrl(paperUrl);
-
-    if (storedPaper) {
-      // Update state to show paper is stored
-      updateOperationState(tabId, {
-        isPaperStored: true,
-      });
-
-      const analysisContextId = `tab-${tabId}-analysis`;
-
-      // Run analysis
-      const analysis = await aiService.analyzePaper(storedPaper.id, storedPaper.hierarchicalSummary || '', analysisContextId);
-
-      // Store analysis in IndexedDB (single source of truth)
-      // If storage fails, let the error propagate - we can't mark as "complete" if data isn't saved
-      const { updatePaperAnalysis } = await import('../../utils/dbService.ts');
-      await updatePaperAnalysis(storedPaper.id, analysis);
-      console.log('[Orchestrator] ✓ Analysis stored in IndexedDB');
-
-      updateOperationState(tabId, {
-        isDetecting: false,
-        isExplaining: false,
-        isAnalyzing: false,
-        analysisProgress: '🐻 Kuma has finished analyzing the research paper! (Analysis complete!)',
-        // Update completion tracking (automatic features complete - glossary is manual)
-        hasExplanation: true,
-        hasSummary: true,
-        hasAnalysis: true,
-        completionPercentage: 100,
-      });
-    } else {
-      updateOperationState(tabId, {
-        isDetecting: false,
-        isAnalyzing: false,
-        isExplaining: false,
-        analysisProgress: '',
-        error: '🐻 Kuma could not find a research paper to analyze. (Paper not found for analysis)',
-      });
-    }
 
     return { success: true, paper: detectResponse.paper };
   } catch (flowError) {

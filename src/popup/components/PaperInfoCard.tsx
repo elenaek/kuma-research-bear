@@ -22,6 +22,9 @@ interface PaperInfoCardProps {
   hasAnalysis?: boolean;
   hasGlossary?: boolean;
   completionPercentage?: number;
+  // Callbacks
+  onGenerateAnalysis?: () => void;
+  onGenerateGlossary?: () => void;
 }
 
 /**
@@ -44,34 +47,18 @@ export function PaperInfoCard({
   hasSummary = false,
   hasAnalysis = false,
   hasGlossary = false,
-  completionPercentage = 0,
+  onGenerateAnalysis,
+  onGenerateGlossary,
 }: PaperInfoCardProps) {
-  const getCompletionBadgeText = () => {
-    if (completionPercentage === 100) return 'Ready';
-    if (completionPercentage === 0) return '0% Ready';
-    return `${Math.round(completionPercentage)}% Ready`;
-  };
-
-  const getCompletionBadgeColor = () => {
-    if (completionPercentage === 100) return 'bg-green-100 text-green-700';
-    if (completionPercentage >= 50) return 'bg-yellow-100 text-yellow-700';
-    return 'bg-orange-100 text-orange-700';
-  };
-
   return (
     <div class="card mb-4 bg-blue-50 border-blue-200">
       <div class="flex items-start justify-between gap-2 mb-2">
         <h3 class="text-sm font-semibold text-gray-700">Current Paper</h3>
         {isPaperStored && (
-          <div class="flex items-center gap-2">
-            <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 flex items-center gap-1">
-              <Database size={10} />
-              Stored
-            </span>
-            <span class={`px-2 py-1 text-xs font-medium rounded-full ${getCompletionBadgeColor()}`}>
-              {getCompletionBadgeText()}
-            </span>
-          </div>
+          <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700 flex items-center gap-1">
+            <Database size={10} />
+            Stored
+          </span>
         )}
       </div>
       <p class="text-sm font-medium text-gray-900 mb-1 line-clamp-2">{paper.title}</p>
@@ -97,6 +84,8 @@ export function PaperInfoCard({
           isExplaining={isExplaining}
           isAnalyzing={isAnalyzing}
           isGeneratingGlossary={isGeneratingGlossary}
+          onAnalysisClick={onGenerateAnalysis}
+          onGlossaryClick={onGenerateGlossary}
         />
       )}
     </div>
