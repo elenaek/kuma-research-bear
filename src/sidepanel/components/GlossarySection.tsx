@@ -1,7 +1,8 @@
 import { BookOpen, Sparkles } from 'lucide-preact';
 import { GlossaryResult } from '../../types/index.ts';
 import { GlossaryList } from '../../components/GlossaryCard.tsx';
-import { LottieLoader } from './ui/LottieLoader.tsx';
+import { LottiePlayer } from '../../shared/components/LottiePlayer.tsx';
+import { LoopPurpose } from '../../shared/components/LottiePlayer.tsx';
 
 interface GlossarySectionProps {
   glossary: GlossaryResult | null;
@@ -51,7 +52,7 @@ export function GlossarySection(props: GlossarySectionProps) {
     return (
       <div class="card">
         <div class="text-center py-8">
-          <LottieLoader path="/lotties/kuma-thinking.lottie" size={80} className="mx-auto mb-3" />
+          <LottiePlayer path="/lotties/kuma-thinking-glasses.lottie" size={100} className="mx-auto mb-1" autoStartLoop={true} loopPurpose={LoopPurpose.SIDEPANEL} />
           <p class="text-gray-900 font-medium text-base">{progressMessage}</p>
           <p class="text-sm text-gray-600">{progressDetail}</p>
 
@@ -74,16 +75,16 @@ export function GlossarySection(props: GlossarySectionProps) {
   return (
     <div class="card">
       <div class="text-center py-8">
-        <BookOpen size={48} class="text-gray-300 mx-auto mb-4" />
-        <p class="text-gray-500 mb-2">No glossary available yet</p>
-        <p class="text-sm text-gray-400 mb-4">
+        <LottiePlayer path="/lotties/kuma-thinking-glasses.lottie" size={100} className="mx-auto mb-1" autoStartLoop={false} />
+        <p class="text-gray-900 font-medium text-base mb-2">No glossary available yet</p>
+        <p class="text-sm text-gray-600 mb-4">
           Click the button below to generate a glossary of key terms and concepts from this paper.
         </p>
 
         {onGenerateGlossary && (
           <button
             onClick={onGenerateGlossary}
-            class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200 font-medium hover:cursor-pointer"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-blue-400 hover:bg-blue-500 text-white rounded-lg transition-colors duration-200 font-medium hover:cursor-pointer active:scale-95"
           >
             <Sparkles size={18} />
             Generate Glossary

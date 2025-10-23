@@ -19,10 +19,9 @@ import { TabDropdown } from './components/ui/TabDropdown.tsx';
 import { IntegratedHeader } from './components/ui/IntegratedHeader.tsx';
 import { EmptyState } from './components/ui/EmptyState.tsx';
 import { LoadingButton } from './components/ui/LoadingButton.tsx';
-import { LottieLoader } from './components/ui/LottieLoader.tsx';
+import { LottiePlayer, LoopPurpose } from '../shared/components/LottiePlayer.tsx';
 import { DebugPanel } from './components/DebugPanel.tsx';
 import { PaperInfoCard } from './components/PaperInfoCard.tsx';
-import { AvailableFeaturesCard } from './components/AvailableFeaturesCard.tsx';
 import { SummaryTab } from './components/tabs/SummaryTab.tsx';
 import { ExplanationTab } from './components/tabs/ExplanationTab.tsx';
 import * as ChromeService from '../services/ChromeService.ts';
@@ -876,11 +875,11 @@ Source: ${paper.url}
     return (
       <div class="h-screen flex items-center justify-center bg-gray-50">
         <div class="text-center">
-          <LottieLoader path="/lotties/kuma-thinking.lottie" size={120} className="mb-4 mx-auto" />
+          <LottiePlayer path="/lotties/kuma-thinking.lottie" size={120} className="mb-4 mx-auto" autoStartLoop={true} loopPurpose={LoopPurpose.SIDEPANEL} />
           {isCheckingStorage ? (
             <div>
-              <p class="text-gray-600 font-medium">Kuma is retrieving papers from storage...</p>
-              <p class="text-xs text-gray-500 mt-2">Retrying with exponential backoff</p>
+              <p class="text-gray-600 font-medium text-base">Kuma is retrieving papers from storage...</p>
+              <p class="text-sm text-gray-500 mt-2">Retrying with exponential backoff</p>
             </div>
           ) : (
             <p class="text-gray-600">Loading explanation...</p>
@@ -948,7 +947,7 @@ Source: ${paper.url}
 
           {(viewState === 'stored-only') && (
               <div class="card">
-                <LottieLoader path="/lotties/kuma-thinking.lottie" size={120} className="mb-4 mx-auto" />
+                <LottiePlayer path="/lotties/kuma-thinking.lottie" size={120} className="mb-4 mx-auto" autoStartLoop={true} loopPurpose={LoopPurpose.SIDEPANEL} />
                 <div class="text-center">
                   <p class="text-gray-900 text-base font-medium">Kuma is working on explaining this research paper</p>
                   <p class="text-xs text-gray-500 mt-2 mb-2">Generating explanation and summary</p>

@@ -8,12 +8,12 @@ import { AIStatusCard } from './components/AIStatusCard.tsx';
 import { PaperInfoCard } from './components/PaperInfoCard.tsx';
 import { OperationBadges } from './components/OperationBadges.tsx';
 import { ActionButtons } from './components/ActionButtons.tsx';
-import { LottieAnimationHandle } from './components/LottieAnimation.tsx';
+import { LottiePlayerHandle } from '../shared/components/LottiePlayer.tsx';
 import { LanguageDropdown } from './components/LanguageDropdown.tsx';
 
 export function Popup() {
   // Ref for Lottie animation control
-  const lottieRef = useRef<LottieAnimationHandle>(null);
+  const lottieRef = useRef<LottiePlayerHandle>(null);
   // Track current tab info for filtering operation state broadcasts
   const [currentTabUrl, setCurrentTabUrl] = useState<string | undefined>();
   const [currentTabId, setCurrentTabId] = useState<number | undefined>();

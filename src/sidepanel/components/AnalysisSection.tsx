@@ -3,7 +3,7 @@ import { PaperAnalysisResult } from '../../types/index.ts';
 import { Tooltip } from '../../components/Tooltip.tsx';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
 import { CollapsibleSection } from './ui/CollapsibleSection.tsx';
-import { LottieLoader } from './ui/LottieLoader.tsx';
+import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.tsx';
 
 interface AnalysisSectionProps {
   analysis: PaperAnalysisResult | null;
@@ -23,7 +23,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
     return (
       <div class="card">
         <div class="flex flex-col items-center justify-center gap-4 py-12">
-          <LottieLoader path="/lotties/kuma-thinking.lottie" size={80} />
+          <LottiePlayer path="/lotties/kuma-thinking-glasses.lottie" className="mx-auto mb-1" autoStartLoop={true} size={100} loopPurpose={LoopPurpose.SIDEPANEL} />
           <div class="text-center">
             <p class="text-base font-medium text-gray-900 mb-2">Analyzing Paper...</p>
             <p class="text-sm text-gray-600">
@@ -40,16 +40,16 @@ export function AnalysisSection(props: AnalysisSectionProps) {
     return (
       <div class="card">
         <div class="text-center py-8">
-          <TrendingUp size={48} class="text-gray-300 mx-auto mb-4" />
-          <p class="text-gray-500 mb-2">No analysis available yet</p>
-          <p class="text-sm text-gray-400 mb-4">
+          <LottiePlayer path="/lotties/kuma-thinking-glasses.lottie" className="mx-auto mb-1" size={100} autoStartLoop={false} />
+          <p class="text-gray-900 font-medium text-base mb-2">No analysis available yet</p>
+          <p class="text-sm text-gray-600 mb-4">
             Click the button below to analyze this paper's methodology, confounders, implications, and limitations.
           </p>
 
           {onGenerateAnalysis && (
             <button
               onClick={onGenerateAnalysis}
-              class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors duration-200 font-medium hover:cursor-pointer"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-blue-400 hover:bg-blue-500 text-white rounded-lg transition-colors duration-200 font-medium hover:cursor-pointer active:scale-95"
             >
               <Sparkles size={18} />
               Generate Analysis

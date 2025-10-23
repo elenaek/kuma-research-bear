@@ -1,5 +1,5 @@
 import { forwardRef } from 'preact/compat';
-import { LottieAnimation, LottieAnimationHandle } from './LottieAnimation.tsx';
+import { LottiePlayer, LottiePlayerHandle, LoopPurpose } from '../../shared/components/LottiePlayer.tsx';
 
 interface HeaderProps {
   autoStartLoop?: boolean;
@@ -9,18 +9,20 @@ interface HeaderProps {
  * Header component for the popup
  * Displays the Kuma logo (Lottie animation), title, and language selector
  */
-export const Header = forwardRef<LottieAnimationHandle, HeaderProps>(({ autoStartLoop }, ref) => {
+export const Header = forwardRef<LottiePlayerHandle, HeaderProps>(({ autoStartLoop }, ref) => {
   return (
     <header class="mb-6 relative">
       {/* Logo - Lottie Animation */}
       <div class="flex justify-center mb-4">
-        <LottieAnimation
+        <LottiePlayer
           ref={ref}
           path="/lotties/kuma-research-bear.lottie"
           width="118px"
           height="118px"
           className="w-28 h-28"
+          autoplay={false}
           autoStartLoop={autoStartLoop}
+          loopPurpose={LoopPurpose.POPUP}
         />
       </div>
 

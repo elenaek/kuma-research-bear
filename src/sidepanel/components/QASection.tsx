@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp } from 'lucide-preact';
 import { QuestionAnswer, StoredPaper } from '../../types/index.ts';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
-import { LottieLoader } from './ui/LottieLoader.tsx';
+import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.tsx';
 
 interface QASectionProps {
   question: string;
@@ -61,7 +61,12 @@ function QACard(props: QACardProps) {
       >
         <div class="flex items-start justify-between gap-2 mb-3 pb-3 border-b border-gray-200">
           <div class="flex-grow">
-            <p class="text-sm font-semibold text-gray-900 mb-1">Question:</p>
+          <p class="text-sm font-semibold text-gray-900 mb-1 inline-block">
+              Question:
+              {!qa.answer && (
+                <Loader size={16} class="animate-spin text-blue-400 ml-2 inline-block" />
+              )}
+            </p>
             <p class="text-sm text-gray-700">{qa.question}</p>
           </div>
           <div class="flex-shrink-0 mt-1">
@@ -109,7 +114,7 @@ function QACard(props: QACardProps) {
           </>
         ) : (
           <div class="text-center">
-            <LottieLoader path="/lotties/kuma-qanda.lottie" size={80} className="mx-auto mt-2 mb-3"/>
+            <LottiePlayer path="/lotties/kuma-qanda.lottie" size={80} className="mx-auto mt-2 mb-3" autoStartLoop={true} loopPurpose={LoopPurpose.QASection} />
             <p class="text-gray-900 font-medium text-base">Kuma is thinking about your question...</p>
             <p class="text-sm text-gray-600 mb-2">
               Researching an answer to your question using the research paper.
