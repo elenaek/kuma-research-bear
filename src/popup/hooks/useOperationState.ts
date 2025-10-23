@@ -52,6 +52,8 @@ interface UseOperationStateReturn {
   setDetectionStatus: (status: string | null) => void;
   setIsDetecting: (value: boolean) => void;
   setCompletionStatus: (status: {
+    hasDetected: boolean;
+    hasChunked: boolean;
     hasExplanation: boolean;
     hasSummary: boolean;
     hasAnalysis: boolean;
@@ -193,8 +195,11 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
           if (state.hasSummary !== undefined) setHasSummary(state.hasSummary);
           if (state.hasAnalysis !== undefined) setHasAnalysis(state.hasAnalysis);
           if (state.hasGlossary !== undefined) setHasGlossary(state.hasGlossary);
-          if (state.hasDetected !== undefined) setHasDetected(state.hasDetected);
-          if (state.hasChunked !== undefined) setHasChunked(state.hasChunked);
+
+          // Only update hasDetected/hasChunked if they're true (don't let empty operation states overwrite database truth)
+          if (state.hasDetected) setHasDetected(true);
+          if (state.hasChunked) setHasChunked(true);
+
           if (state.completionPercentage !== undefined) setCompletionPercentage(state.completionPercentage);
         }
 
@@ -227,12 +232,16 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
     hasSummary: boolean;
     hasAnalysis: boolean;
     hasGlossary: boolean;
+    hasDetected: boolean;
+    hasChunked: boolean;
     completionPercentage: number;
   }) {
     setHasExplanation(status.hasExplanation);
     setHasSummary(status.hasSummary);
     setHasAnalysis(status.hasAnalysis);
     setHasGlossary(status.hasGlossary);
+    setHasDetected(status.hasDetected);
+    setHasChunked(status.hasChunked);
     setCompletionPercentage(status.completionPercentage);
   }
 

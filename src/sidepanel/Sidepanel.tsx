@@ -700,6 +700,20 @@ Source: ${paper.url}
     await loadExplanation();
   }
 
+  async function handleOpenChat() {
+    if (!storedPaper) return;
+
+    try {
+      // Get the active tab
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab.id) {
+        await ChromeService.toggleChatbox(tab.id);
+      }
+    } catch (error) {
+      console.error('[Sidepanel] Failed to toggle chatbox:', error);
+    }
+  }
+
   // Paper navigation and management functions
   async function switchToPaper(index: number, papersArray?: StoredPaper[]) {
     // Use provided array or fall back to hook state
@@ -920,6 +934,8 @@ Source: ${paper.url}
         isDeletingAll={isDeletingAll}
         showDeleteAllConfirm={showDeleteAllConfirm}
         onCancelDeleteAll={() => setShowDeleteAllConfirm(false)}
+        onOpenChat={handleOpenChat}
+        hasChatEnabled={!!storedPaper && storedPaper.chunkCount > 0}
       />
 
       {/* Content */}

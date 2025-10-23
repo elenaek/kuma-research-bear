@@ -64,7 +64,9 @@
         "ort-wasm-simd-threaded.wasm",
         "ort-wasm-simd-threaded.jsep.wasm",
         "ort-wasm-simd-threaded.mjs",
-        "ort-wasm-simd-threaded.jsep.mjs"
+        "ort-wasm-simd-threaded.jsep.mjs",
+        "src/content/components/chatbox.css",
+        "lotties/*"
       ],
       "matches": ["<all_urls>"]
     }

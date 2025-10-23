@@ -1,4 +1,4 @@
-import { Search, PanelRight, Loader, Backpack } from 'lucide-preact';
+import { Search, PanelRight, Loader, Backpack, MessageCircle } from 'lucide-preact';
 import type { AIStatus } from '../hooks/useAIStatus.ts';
 
 interface ActionButtonsProps {
@@ -10,8 +10,10 @@ interface ActionButtonsProps {
   isPaperStored: boolean;
   isSidepanelOpen: boolean;
   currentUrlHasPaper: boolean;
+  hasChunked: boolean; // For chat button enabled state
   onDetectPaper: () => void;
   onOpenSidepanel: () => void;
+  onOpenChat: () => void;
 }
 
 /**
@@ -27,8 +29,10 @@ export function ActionButtons({
   isPaperStored,
   isSidepanelOpen,
   currentUrlHasPaper,
+  hasChunked,
   onDetectPaper,
   onOpenSidepanel,
+  onOpenChat,
 }: ActionButtonsProps) {
   const isOperationRunning = isDetecting || isExplaining || isAnalyzing || isGeneratingGlossary;
   const isDetectDisabled = aiStatus !== 'ready' || isOperationRunning || isPaperStored;
@@ -90,6 +94,23 @@ export function ActionButtons({
       >
         <PanelRight size={16} />
         {isSidepanelOpen ? 'Open in Sidepanel' : 'Open in Sidepanel'}
+      </button>
+
+      {/* Open Chat Button */}
+      <button
+        onClick={onOpenChat}
+        disabled={!isPaperStored || !hasChunked}
+        class="btn btn-secondary w-full hover:cursor-pointer"
+        title={
+          !isPaperStored
+            ? 'Detect and store a paper first'
+            : !hasChunked
+            ? 'Waiting for paper to be processed...'
+            : 'Open floating chat window'
+        }
+      >
+        <MessageCircle size={16} />
+        Chat with Kuma
       </button>
     </div>
   );

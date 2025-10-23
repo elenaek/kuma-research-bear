@@ -8,7 +8,8 @@ import {
   RefreshCw,
   Loader,
   MoreVertical,
-  X
+  X,
+  MessageCircle
 } from 'lucide-preact';
 import { StoredPaper } from '../../../types/index.ts';
 
@@ -42,6 +43,10 @@ interface IntegratedHeaderProps {
   // Refresh handler
   onRefresh?: () => void;
 
+  // Chat handler
+  onOpenChat?: () => void;
+  hasChatEnabled?: boolean;
+
   // Optional subtitle (for "content" view)
   subtitle?: string;
 }
@@ -69,6 +74,8 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
     showDeleteAllConfirm,
     onCancelDeleteAll,
     onRefresh,
+    onOpenChat,
+    hasChatEnabled = false,
     subtitle
   } = props;
 
@@ -186,6 +193,18 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
             >
               {isDeleting ? <Loader size={14} class="animate-spin" /> : <Trash2 size={14} />}
             </button>
+
+            {/* Chat Button */}
+            {onOpenChat && (
+              <button
+                onClick={onOpenChat}
+                disabled={!hasChatEnabled}
+                class="btn btn-secondary px-2 py-2 hover:cursor-pointer flex-shrink-0"
+                title={hasChatEnabled ? "Open floating chat" : "Paper not ready for chat"}
+              >
+                <MessageCircle size={14} />
+              </button>
+            )}
 
             {/* Settings Menu */}
             <div class="relative" ref={settingsMenuRef}>

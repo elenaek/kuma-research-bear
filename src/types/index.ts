@@ -34,6 +34,15 @@ export enum MessageType {
   GENERATE_EMBEDDINGS = 'GENERATE_EMBEDDINGS',
   SEMANTIC_SEARCH = 'SEMANTIC_SEARCH',
 
+  // Chatbox operations
+  TOGGLE_CHATBOX = 'TOGGLE_CHATBOX',
+  SEND_CHAT_MESSAGE = 'SEND_CHAT_MESSAGE',
+  CHAT_STREAM_CHUNK = 'CHAT_STREAM_CHUNK',
+  CHAT_STREAM_END = 'CHAT_STREAM_END',
+  GET_CHAT_HISTORY = 'GET_CHAT_HISTORY',
+  CLEAR_CHAT_HISTORY = 'CLEAR_CHAT_HISTORY',
+  UPDATE_CHAT_HISTORY = 'UPDATE_CHAT_HISTORY',
+
   // Background operation state management
   GET_OPERATION_STATE = 'GET_OPERATION_STATE',
   GET_OPERATION_STATE_BY_PAPER = 'GET_OPERATION_STATE_BY_PAPER',
@@ -243,6 +252,7 @@ export interface StoredPaper extends ResearchPaper {
   lastAccessedAt: number;
   hierarchicalSummary?: string; // Compressed summary of entire paper (~2000 chars) for full document coverage
   qaHistory?: QuestionAnswer[]; // Q&A history for this paper
+  chatHistory?: ChatMessage[]; // Chat conversation history for this paper
   explanation?: ExplanationResult; // Stored explanation for this paper
   summary?: SummaryResult; // Stored summary for this paper
   analysis?: PaperAnalysisResult; // Stored analysis for this paper
@@ -328,6 +338,28 @@ export interface QuestionAnswer {
 export interface QAHistoryItem extends QuestionAnswer {
   paperId: string;
   paperTitle: string;
+}
+
+// Chat types
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+  sources?: string[]; // Sources for assistant messages
+}
+
+export interface ChatboxPosition {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ChatboxSettings {
+  position: ChatboxPosition;
+  visible: boolean;
+  minimized: boolean;
+  transparencyEnabled: boolean;
 }
 
 // Background operation state (per-tab tracking)

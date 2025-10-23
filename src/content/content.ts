@@ -2,6 +2,7 @@ import { ResearchPaper } from '../types/index.ts';
 import { detectAndStorePaper } from './services/paperDetectionService.ts';
 import { createMessageRouter } from './handlers/messageHandlers.ts';
 import { createMutationObserver, startObserving } from './handlers/mutationHandler.ts';
+import { chatboxInjector } from './services/chatboxInjector.ts';
 
 /**
  * Content Script
@@ -60,6 +61,19 @@ function setupMutationObserver() {
 }
 
 /**
+ * Initialize chatbox
+ * Sets up the floating chatbox UI
+ */
+async function setupChatbox() {
+  try {
+    await chatboxInjector.initialize();
+    console.log('[Content] ✓ Chatbox initialized');
+  } catch (error) {
+    console.error('[Content] Error initializing chatbox:', error);
+  }
+}
+
+/**
  * Bootstrap the content script
  */
 (async () => {
@@ -71,6 +85,9 @@ function setupMutationObserver() {
 
   // Set up mutation observer for SPA detection
   setupMutationObserver();
+
+  // Initialize chatbox
+  await setupChatbox();
 
   console.log('[Content] ✓ Content script initialized successfully');
 })();

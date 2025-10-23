@@ -125,6 +125,8 @@ export function Popup() {
             hasSummary: status.hasSummary,
             hasAnalysis: status.hasAnalysis,
             hasGlossary: status.hasGlossary,
+            hasDetected: status.hasDetected,
+            hasChunked: status.hasChunked,
             completionPercentage: status.completionPercentage,
           });
         }
@@ -224,6 +226,14 @@ export function Popup() {
     }
   }
 
+  async function handleOpenChat() {
+    try {
+      await ChromeService.toggleChatbox(currentTabId);
+    } catch (error) {
+      console.error('[Popup] Failed to toggle chatbox:', error);
+    }
+  }
+
   // Determine if Lottie animation should auto-start looping
   const isOperationActive =
     operationState.isDetecting ||
@@ -312,8 +322,10 @@ export function Popup() {
           isPaperStored={paperStatus.isPaperStored}
           isSidepanelOpen={isSidepanelOpen}
           currentUrlHasPaper={currentUrlHasPaper}
+          hasChunked={operationState.hasChunked}
           onDetectPaper={handleDetectPaper}
           onOpenSidepanel={handleOpenSidepanel}
+          onOpenChat={handleOpenChat}
         />
       </div>
     </div>

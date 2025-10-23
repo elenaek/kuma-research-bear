@@ -2,6 +2,7 @@ import { MessageType, ResearchPaper } from '../../types/index.ts';
 import { detectPaperWithAIOnly } from '../services/paperDetectionService.ts';
 import { storePaper } from '../services/paperStorageService.ts';
 import { aiService } from '../../utils/aiService.ts';
+import { chatboxInjector } from '../services/chatboxInjector.ts';
 
 /**
  * Message Handlers
@@ -125,6 +126,11 @@ export function createMessageRouter(getCurrentPaper: () => ResearchPaper | null)
           case MessageType.EXPLAIN_SECTION:
             const sectionResult = await handleExplainSection(message.payload);
             sendResponse(sectionResult);
+            break;
+
+          case MessageType.TOGGLE_CHATBOX:
+            await chatboxInjector.toggle();
+            sendResponse({ success: true });
             break;
 
           default:

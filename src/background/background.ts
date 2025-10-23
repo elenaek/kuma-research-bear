@@ -17,6 +17,7 @@ import * as dbHandlers from './handlers/dbHandlers.ts';
 import * as aiHandlers from './handlers/aiHandlers.ts';
 import * as stateHandlers from './handlers/stateHandlers.ts';
 import * as uiHandlers from './handlers/uiHandlers.ts';
+import * as chatHandlers from './handlers/chatHandlers.ts';
 import { executeDetectAndExplainFlow } from './orchestrators/detectAndExplainOrchestrator.ts';
 
 // Handle extension installation
@@ -96,6 +97,23 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
       case MessageType.ASK_QUESTION:
         const qaTabId = message.payload.tabId || sender.tab?.id;
         sendResponse(await aiHandlers.handleAskQuestion(message.payload, qaTabId));
+        break;
+
+      // Chat Operations
+      case MessageType.SEND_CHAT_MESSAGE:
+        sendResponse(await chatHandlers.handleSendChatMessage(message.payload, sender));
+        break;
+
+      case MessageType.UPDATE_CHAT_HISTORY:
+        sendResponse(await chatHandlers.handleUpdateChatHistory(message.payload));
+        break;
+
+      case MessageType.GET_CHAT_HISTORY:
+        sendResponse(await chatHandlers.handleGetChatHistory(message.payload));
+        break;
+
+      case MessageType.CLEAR_CHAT_HISTORY:
+        sendResponse(await chatHandlers.handleClearChatHistory(message.payload));
         break;
 
       // UI Operations

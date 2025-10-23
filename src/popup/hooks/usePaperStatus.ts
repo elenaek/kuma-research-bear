@@ -90,6 +90,8 @@ export function usePaperStatus(currentTabUrl?: string): UsePaperStatusReturn {
         hasSummary: false,
         hasAnalysis: false,
         hasGlossary: false,
+        hasDetected: false,
+        hasChunked: false,
         completionPercentage: 0,
       };
     }

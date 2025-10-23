@@ -34,7 +34,7 @@ function FeatureBadge({ name, completed, active, onClick, readyIdle = false, too
   const getIcon = () => {
     if (completed) return <CheckCircle size={12} class="text-green-600" />;
     if (active) return <Loader size={12} class="text-yellow-600 animate-spin" />;
-    if (readyIdle) return <ArrowBigUpDash size={12} class="text-gray-400 rotate-180" />;
+    if (readyIdle) return <ArrowBigUpDash size={12} class="text-gray-400 rotate-180 animate-bounce" />;
     return <Clock size={12} class="text-gray-400" />;
   };
 

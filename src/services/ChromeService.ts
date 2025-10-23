@@ -1,4 +1,4 @@
-import { MessageType, StoredPaper, QuestionAnswer, PaperAnalysisResult, GlossaryResult } from '../types/index.ts';
+import { MessageType, StoredPaper, QuestionAnswer, PaperAnalysisResult, GlossaryResult, ChatMessage } from '../types/index.ts';
 
 /**
  * ChromeService - Centralized service for all Chrome runtime messaging operations
@@ -404,6 +404,8 @@ export interface PaperStatusInfo {
   hasSummary: boolean;
   hasAnalysis: boolean;
   hasGlossary: boolean;
+  hasDetected: boolean;
+  hasChunked: boolean;
   completionPercentage: number;
 }
 
@@ -424,6 +426,8 @@ export async function getPaperStatus(url: string): Promise<PaperStatusInfo> {
         hasSummary: false,
         hasAnalysis: false,
         hasGlossary: false,
+        hasDetected: false,
+        hasChunked: false,
         completionPercentage: 0,
       };
     }
@@ -432,6 +436,8 @@ export async function getPaperStatus(url: string): Promise<PaperStatusInfo> {
     const hasSummary = !!paper.summary;
     const hasAnalysis = !!paper.analysis;
     const hasGlossary = !!paper.glossary;
+    const hasDetected = true; // If paper exists in DB, it was detected
+    const hasChunked = paper.chunkCount > 0; // If chunks exist, chunking completed
 
     const completedFeatures = [hasExplanation, hasSummary, hasAnalysis, hasGlossary].filter(Boolean).length;
     const completionPercentage = (completedFeatures / 4) * 100;
@@ -442,6 +448,8 @@ export async function getPaperStatus(url: string): Promise<PaperStatusInfo> {
       hasSummary,
       hasAnalysis,
       hasGlossary,
+      hasDetected,
+      hasChunked,
       completionPercentage,
     };
   } catch (error) {
@@ -452,6 +460,8 @@ export async function getPaperStatus(url: string): Promise<PaperStatusInfo> {
       hasSummary: false,
       hasAnalysis: false,
       hasGlossary: false,
+      hasDetected: false,
+      hasChunked: false,
       completionPercentage: 0,
     };
   }
@@ -590,3 +600,158 @@ export async function navigateSidepanelToPaper(url: string): Promise<void> {
     console.error('[ChromeService] Error navigating sidepanel:', error);
   }
 }
+
+/**
+ * Chat Operations
+ */
+
+export interface SendChatMessageResponse {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Send a chat message about a paper
+ * Returns immediately - streaming responses are sent via CHAT_STREAM_CHUNK messages
+ */
+export async function sendChatMessage(paperUrl: string, message: string): Promise<SendChatMessageResponse> {
+  console.log('[ChromeService] Sending chat message:', message);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.SEND_CHAT_MESSAGE,
+      payload: {
+        paperUrl,
+        message: message.trim(),
+      },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Chat message sent successfully');
+      return { success: true };
+    } else {
+      console.error('[ChromeService] Chat message failed:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error sending chat message:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export interface UpdateChatHistoryResponse {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Update chat history for a paper in IndexedDB
+ */
+export async function updateChatHistory(paperUrl: string, chatHistory: ChatMessage[]): Promise<UpdateChatHistoryResponse> {
+  console.log('[ChromeService] Updating chat history for paper:', paperUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.UPDATE_CHAT_HISTORY,
+      payload: { paperUrl, chatHistory },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Chat history updated successfully');
+      return { success: true };
+    } else {
+      console.error('[ChromeService] Failed to update chat history:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error updating chat history:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export interface GetChatHistoryResponse {
+  success: boolean;
+  error?: string;
+  chatHistory?: ChatMessage[];
+}
+
+/**
+ * Get chat history for a paper from IndexedDB
+ */
+export async function getChatHistory(paperUrl: string): Promise<GetChatHistoryResponse> {
+  console.log('[ChromeService] Getting chat history for paper:', paperUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.GET_CHAT_HISTORY,
+      payload: { paperUrl },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Chat history retrieved successfully');
+      return { success: true, chatHistory: response.chatHistory || [] };
+    } else {
+      console.error('[ChromeService] Failed to get chat history:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error getting chat history:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Clear chat history for a paper
+ */
+export async function clearChatHistory(paperUrl: string): Promise<UpdateChatHistoryResponse> {
+  console.log('[ChromeService] Clearing chat history for paper:', paperUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.CLEAR_CHAT_HISTORY,
+      payload: { paperUrl },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Chat history cleared successfully');
+      return { success: true };
+    } else {
+      console.error('[ChromeService] Failed to clear chat history:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error clearing chat history:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Toggle the chatbox visibility (content script)
+ */
+export async function toggleChatbox(tabId?: number): Promise<void> {
+  console.log('[ChromeService] Toggling chatbox');
+
+  try {
+    if (tabId) {
+      await chrome.tabs.sendMessage(tabId, {
+        type: MessageType.TOGGLE_CHATBOX,
+      });
+    } else {
+      // Send to active tab
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs[0]?.id) {
+        await chrome.tabs.sendMessage(tabs[0].id, {
+          type: MessageType.TOGGLE_CHATBOX,
+        });
+      }
+    }
+    console.log('[ChromeService] ✓ Chatbox toggle message sent');
+  } catch (error) {
+    console.error('[ChromeService] Error toggling chatbox:', error);
+  }
+}
+
+/**
+ * Alias for getPaperByUrl for backwards compatibility
+ */
+export const getPaperFromDBByUrl = getPaperByUrl;
