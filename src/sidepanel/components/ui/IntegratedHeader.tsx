@@ -195,7 +195,7 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
             </button>
 
             {/* Chat Button */}
-            {onOpenChat && (
+            {/* {onOpenChat && (
               <button
                 onClick={onOpenChat}
                 disabled={!hasChatEnabled}
@@ -204,7 +204,7 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
               >
                 <MessageCircle size={14} />
               </button>
-            )}
+            )} */}
 
             {/* Settings Menu */}
             <div class="relative" ref={settingsMenuRef}>
