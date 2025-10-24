@@ -41,6 +41,10 @@ export default defineConfig({
           src: 'src/content/styles/askKumaButton.css',
           dest: 'src/content/styles',
         },
+        {
+          src: 'src/content/styles/imageExplainButton.css',
+          dest: 'src/content/styles',
+        },
       ],
     }),
   ],

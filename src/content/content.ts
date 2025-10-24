@@ -4,6 +4,7 @@ import { createMessageRouter } from './handlers/messageHandlers.ts';
 import { createMutationObserver, startObserving } from './handlers/mutationHandler.ts';
 import { chatboxInjector } from './services/chatboxInjector.ts';
 import { textSelectionHandler } from './services/textSelectionHandler.ts';
+import { imageExplanationHandler } from './services/imageExplanationHandler.ts';
 
 /**
  * Content Script
@@ -88,6 +89,27 @@ async function setupTextSelection() {
 }
 
 /**
+ * Initialize image explanation handler
+ * Sets up AI-powered image explanations for figures in papers
+ */
+async function setupImageExplanations() {
+  try {
+    // Query IndexedDB directly using current URL
+    const { getPaperFromDBByUrl } = await import('../services/ChromeService.ts');
+    const storedPaper = await getPaperFromDBByUrl(window.location.href);
+
+    if (storedPaper && storedPaper.id) {
+      await imageExplanationHandler.initialize(storedPaper);
+      console.log('[Content] ✓ Image explanation handler initialized for paper:', storedPaper.title);
+    } else {
+      console.log('[Content] Skipping image explanation handler (no stored paper for this URL)');
+    }
+  } catch (error) {
+    console.error('[Content] Error initializing image explanation handler:', error);
+  }
+}
+
+/**
  * Bootstrap the content script
  */
 (async () => {
@@ -105,6 +127,9 @@ async function setupTextSelection() {
 
   // Initialize text selection handler (depends on chatbox)
   await setupTextSelection();
+
+  // Initialize image explanation handler (depends on paper detection)
+  await setupImageExplanations();
 
   console.log('[Content] ✓ Content script initialized successfully');
 })();

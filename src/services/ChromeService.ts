@@ -1,4 +1,4 @@
-import { MessageType, StoredPaper, QuestionAnswer, PaperAnalysisResult, GlossaryResult, ChatMessage } from '../types/index.ts';
+import { MessageType, StoredPaper, QuestionAnswer, PaperAnalysisResult, GlossaryResult, ChatMessage, ImageExplanation } from '../types/index.ts';
 
 /**
  * ChromeService - Centralized service for all Chrome runtime messaging operations
@@ -784,3 +784,111 @@ export async function getChatboxState(tabId?: number): Promise<boolean> {
  * Alias for getPaperByUrl for backwards compatibility
  */
 export const getPaperFromDBByUrl = getPaperByUrl;
+
+/**
+ * Image Explanation Operations
+ */
+
+export interface StoreImageExplanationResponse {
+  success: boolean;
+  error?: string;
+  explanation?: ImageExplanation;
+}
+
+export interface GetImageExplanationResponse {
+  success: boolean;
+  error?: string;
+  explanation?: ImageExplanation | null;
+}
+
+export interface GetImageExplanationsByPaperResponse {
+  success: boolean;
+  error?: string;
+  explanations?: ImageExplanation[];
+}
+
+/**
+ * Store an image explanation in IndexedDB
+ */
+export async function storeImageExplanation(
+  paperId: string,
+  imageUrl: string,
+  title: string,
+  explanation: string,
+  imageHash?: string
+): Promise<StoreImageExplanationResponse> {
+  console.log('[ChromeService] Storing image explanation for:', imageUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.STORE_IMAGE_EXPLANATION,
+      payload: { paperId, imageUrl, title, explanation, imageHash },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Image explanation stored successfully');
+      return response;
+    } else {
+      console.error('[ChromeService] Failed to store image explanation:', response.error);
+      return response;
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error storing image explanation:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Get an image explanation from IndexedDB
+ */
+export async function getImageExplanation(
+  paperId: string,
+  imageUrl: string
+): Promise<GetImageExplanationResponse> {
+  console.log('[ChromeService] Getting image explanation for:', imageUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.GET_IMAGE_EXPLANATION,
+      payload: { paperId, imageUrl },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Image explanation retrieved');
+      return response;
+    } else {
+      console.error('[ChromeService] Failed to get image explanation:', response.error);
+      return response;
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error getting image explanation:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Get all image explanations for a paper from IndexedDB
+ */
+export async function getImageExplanationsByPaper(
+  paperId: string
+): Promise<GetImageExplanationsByPaperResponse> {
+  console.log('[ChromeService] Getting all image explanations for paper:', paperId);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.GET_IMAGE_EXPLANATIONS_BY_PAPER,
+      payload: { paperId },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Retrieved', response.explanations?.length || 0, 'image explanations');
+      return response;
+    } else {
+      console.error('[ChromeService] Failed to get image explanations:', response.error);
+      return response;
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error getting image explanations:', error);
+    return { success: false, error: String(error), explanations: [] };
+  }
+}

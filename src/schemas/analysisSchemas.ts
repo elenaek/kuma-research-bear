@@ -310,3 +310,24 @@ export const glossarySchema: JSONSchema = {
   required: ['terms'],
   additionalProperties: false,
 };
+
+/**
+ * Schema for ImageExplanationResult
+ * Corresponds to: src/types/index.ts - ImageExplanationResult interface
+ */
+export const imageExplanationSchema: JSONSchema = {
+  type: 'object',
+  properties: {
+    title: {
+      type: 'string',
+      description: 'Concise 3-7 word title describing what the image shows (e.g., "Neural Network Architecture Diagram", "Comparison of Treatment Outcomes")',
+      maxLength: 100,
+    },
+    explanation: {
+      type: 'string',
+      description: 'Detailed explanation of what the image shows in the context of the research paper, including key findings, trends, and relevance',
+    },
+  },
+  required: ['title', 'explanation'],
+  additionalProperties: false,
+};

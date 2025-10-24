@@ -1,0 +1,392 @@
+/**
+ * Image Explanation Button and Bubble Styles
+ * Docked button with kuma animation and explanation bubble
+ */
+
+.image-explain-button {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  position: relative;
+}
+
+.image-explain-button:hover {
+  transform: scale(1.15);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+}
+
+.image-explain-button.has-explanation {
+  /* Optional: Could add a subtle glow or indicator */
+}
+
+.image-explain-button.loading {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+/* Explanation Bubble */
+.image-explanation-bubble {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+.image-explanation-bubble.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Bubble Header */
+.bubble-header {
+  background: oklch(37.9% 0.146 265.522);
+  color: white;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: move;
+  user-select: none;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+  flex-shrink: 0;
+}
+
+.bubble-title {
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Compass arrow that points to source image button */
+.compass-arrow {
+  display: inline-flex;
+  flex-shrink: 0;
+  transform-origin: center;
+}
+
+.bubble-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.bubble-control-btn {
+  background: transparent;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+
+.bubble-control-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.bubble-control-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bubble-control-btn:disabled:hover {
+  background: transparent;
+}
+
+.bubble-control-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.w-4 {
+  width: 16px;
+}
+
+.h-4 {
+  height: 16px;
+}
+
+.bubble-content {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.bubble-close {
+  background: transparent;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.bubble-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Markdown content styling with compact spacing (same as chatbox) */
+.markdown-content {
+  line-height: 1.4;
+  user-select: text; /* Allow text selection in markdown */
+}
+
+.markdown-content > * {
+  margin: 0;
+}
+
+.markdown-content > * + * {
+  margin-top: 0.5em;
+}
+
+.markdown-content p {
+  margin: 0;
+}
+
+.markdown-content p + p {
+  margin-top: 0.5em;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+  color: inherit;
+}
+
+.markdown-content em {
+  font-style: italic;
+}
+
+.markdown-content code {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+
+.markdown-content pre {
+  background: #f5f5f5;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.markdown-content pre code {
+  background: none;
+  padding: 0;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.markdown-content li {
+  margin: 0.2em 0;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4,
+.markdown-content h5,
+.markdown-content h6 {
+  margin: 0.8em 0 0.4em 0;
+  font-weight: 600;
+  color: #111;
+}
+
+.markdown-content h1 {
+  font-size: 1.5em;
+}
+
+.markdown-content h2 {
+  font-size: 1.3em;
+}
+
+.markdown-content h3 {
+  font-size: 1.1em;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid oklch(37.9% 0.146 265.522);
+  padding-left: 12px;
+  margin: 0.5em 0;
+  color: #666;
+}
+
+.markdown-content a {
+  color: oklch(37.9% 0.146 265.522);
+  text-decoration: underline;
+}
+
+.markdown-content a:hover {
+  color: oklch(42.4% 0.199 265.638);
+}
+
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5em 0;
+}
+
+.markdown-content th {
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.markdown-content td {
+  border: 1px solid #e5e7eb;
+  padding: 8px 12px;
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 1em 0;
+}
+
+/* KaTeX styling for LaTeX math */
+.katex-html {
+  display: none !important;
+}
+
+.katex,
+.katex-mathml {
+  font-size: 1.1em !important;
+}
+
+/* Legacy bubble-text class support (kept for backward compatibility) */
+.bubble-text {
+  color: #333;
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+/* Resize Handles */
+.resize-handle {
+  position: absolute;
+  background: transparent;
+  z-index: 100;
+  transition: background 0.2s;
+}
+
+.resize-n,
+.resize-s {
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.resize-n {
+  top: -4px;
+}
+
+.resize-s {
+  bottom: -4px;
+}
+
+.resize-e,
+.resize-w {
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.resize-e {
+  right: -4px;
+}
+
+.resize-w {
+  left: -4px;
+}
+
+.resize-ne,
+.resize-nw,
+.resize-se,
+.resize-sw {
+  width: 24px;
+  height: 24px;
+}
+
+.resize-ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.resize-nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.resize-se {
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
+}
+
+.resize-sw {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+/* Spin animation for loading states */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

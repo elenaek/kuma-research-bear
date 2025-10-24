@@ -1,4 +1,4 @@
-import { ResearchPaper, StoredPaper, ContentChunk } from '../types/index.ts';
+import { ResearchPaper, StoredPaper, ContentChunk, ImageExplanation } from '../types/index.ts';
 
 /**
  * IndexedDB Service for storing research papers locally
@@ -6,9 +6,10 @@ import { ResearchPaper, StoredPaper, ContentChunk } from '../types/index.ts';
  */
 
 const DB_NAME = 'KumaResearchBearDB';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 const PAPERS_STORE = 'papers';
 const CHUNKS_STORE = 'chunks';
+const IMAGE_EXPLANATIONS_STORE = 'imageExplanations';
 
 /**
  * Initialize IndexedDB
@@ -27,6 +28,8 @@ function initDB(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
+      const oldVersion = (event as IDBVersionChangeEvent).oldVersion;
+      const transaction = (event.target as IDBOpenDBRequest).transaction;
 
       // Create papers store
       if (!db.objectStoreNames.contains(PAPERS_STORE)) {
@@ -44,7 +47,36 @@ function initDB(): Promise<IDBDatabase> {
         chunksStore.createIndex('index', 'index', { unique: false });
       }
 
-      console.log('✓ IndexedDB initialized with stores:', PAPERS_STORE, CHUNKS_STORE);
+      // Create image explanations store (DB_VERSION 2)
+      if (!db.objectStoreNames.contains(IMAGE_EXPLANATIONS_STORE)) {
+        const imageExplanationsStore = db.createObjectStore(IMAGE_EXPLANATIONS_STORE, { keyPath: 'id' });
+        imageExplanationsStore.createIndex('paperId', 'paperId', { unique: false });
+        imageExplanationsStore.createIndex('imageUrl', 'imageUrl', { unique: false });
+        imageExplanationsStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // Migration: Add title field to existing image explanations (DB_VERSION 2 -> 3)
+      if (oldVersion < 3 && db.objectStoreNames.contains(IMAGE_EXPLANATIONS_STORE) && transaction) {
+        const imageExplanationsStore = transaction.objectStore(IMAGE_EXPLANATIONS_STORE);
+        const cursorRequest = imageExplanationsStore.openCursor();
+
+        cursorRequest.onsuccess = (e) => {
+          const cursor = (e.target as IDBRequest).result;
+          if (cursor) {
+            const record = cursor.value;
+            // Add title field if it doesn't exist
+            if (!record.title) {
+              record.title = 'Image Explanation';
+              cursor.update(record);
+            }
+            cursor.continue();
+          }
+        };
+
+        console.log('✓ Migrated image explanations to DB_VERSION 3 (added title field)');
+      }
+
+      console.log('✓ IndexedDB initialized with stores:', PAPERS_STORE, CHUNKS_STORE, IMAGE_EXPLANATIONS_STORE);
     };
   });
 }
@@ -917,4 +949,176 @@ export async function getStorageStats(): Promise<{
     oldestPaper: Math.min(...storedTimes),
     newestPaper: Math.max(...storedTimes),
   };
+}
+
+/**
+ * Generate unique ID for an image explanation
+ */
+function generateImageExplanationId(paperId: string, imageUrl: string): string {
+  let hash = 0;
+  const combined = `${paperId}_${imageUrl}`;
+  for (let i = 0; i < combined.length; i++) {
+    const char = combined.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return `img_${Math.abs(hash)}`;
+}
+
+/**
+ * Store an image explanation
+ */
+export async function storeImageExplanation(
+  paperId: string,
+  imageUrl: string,
+  title: string,
+  explanation: string,
+  imageHash?: string
+): Promise<ImageExplanation> {
+  const db = await initDB();
+
+  try {
+    const id = generateImageExplanationId(paperId, imageUrl);
+
+    const imageExplanation: ImageExplanation = {
+      id,
+      paperId,
+      imageUrl,
+      imageHash,
+      title,
+      explanation,
+      timestamp: Date.now(),
+    };
+
+    const transaction = db.transaction([IMAGE_EXPLANATIONS_STORE], 'readwrite');
+    const store = transaction.objectStore(IMAGE_EXPLANATIONS_STORE);
+
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put(imageExplanation);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to store image explanation'));
+    });
+
+    console.log('✓ Stored image explanation for:', imageUrl);
+    db.close();
+    return imageExplanation;
+  } catch (error) {
+    db.close();
+    console.error('Error storing image explanation:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get an image explanation by image URL and paper ID
+ */
+export async function getImageExplanation(
+  paperId: string,
+  imageUrl: string
+): Promise<ImageExplanation | null> {
+  const db = await initDB();
+
+  try {
+    const id = generateImageExplanationId(paperId, imageUrl);
+    const transaction = db.transaction([IMAGE_EXPLANATIONS_STORE], 'readonly');
+    const store = transaction.objectStore(IMAGE_EXPLANATIONS_STORE);
+
+    const explanation = await new Promise<ImageExplanation | null>((resolve) => {
+      const request = store.get(id);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+
+    db.close();
+    return explanation;
+  } catch (error) {
+    db.close();
+    console.error('Error getting image explanation:', error);
+    return null;
+  }
+}
+
+/**
+ * Get all image explanations for a paper
+ */
+export async function getImageExplanationsByPaper(paperId: string): Promise<ImageExplanation[]> {
+  const db = await initDB();
+
+  try {
+    const transaction = db.transaction([IMAGE_EXPLANATIONS_STORE], 'readonly');
+    const store = transaction.objectStore(IMAGE_EXPLANATIONS_STORE);
+    const index = store.index('paperId');
+
+    const explanations = await new Promise<ImageExplanation[]>((resolve, reject) => {
+      const request = index.getAll(paperId);
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(new Error('Failed to get image explanations'));
+    });
+
+    db.close();
+    return explanations;
+  } catch (error) {
+    db.close();
+    console.error('Error getting image explanations for paper:', error);
+    return [];
+  }
+}
+
+/**
+ * Delete an image explanation
+ */
+export async function deleteImageExplanation(
+  paperId: string,
+  imageUrl: string
+): Promise<boolean> {
+  const db = await initDB();
+
+  try {
+    const id = generateImageExplanationId(paperId, imageUrl);
+    const transaction = db.transaction([IMAGE_EXPLANATIONS_STORE], 'readwrite');
+    const store = transaction.objectStore(IMAGE_EXPLANATIONS_STORE);
+
+    await new Promise<void>((resolve, reject) => {
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to delete image explanation'));
+    });
+
+    console.log('✓ Deleted image explanation for:', imageUrl);
+    db.close();
+    return true;
+  } catch (error) {
+    db.close();
+    console.error('Error deleting image explanation:', error);
+    return false;
+  }
+}
+
+/**
+ * Delete all image explanations for a paper
+ */
+export async function deleteImageExplanationsByPaper(paperId: string): Promise<number> {
+  const db = await initDB();
+
+  try {
+    const explanations = await getImageExplanationsByPaper(paperId);
+    const transaction = db.transaction([IMAGE_EXPLANATIONS_STORE], 'readwrite');
+    const store = transaction.objectStore(IMAGE_EXPLANATIONS_STORE);
+
+    for (const explanation of explanations) {
+      await new Promise<void>((resolve, reject) => {
+        const request = store.delete(explanation.id);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(new Error('Failed to delete image explanation'));
+      });
+    }
+
+    console.log(`✓ Deleted ${explanations.length} image explanations for paper:`, paperId);
+    db.close();
+    return explanations.length;
+  } catch (error) {
+    db.close();
+    console.error('Error deleting image explanations for paper:', error);
+    return 0;
+  }
 }

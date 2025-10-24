@@ -166,6 +166,19 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         sendResponse(await dbHandlers.handleUpdateQAHistory(message.payload));
         break;
 
+      // Image Explanation Operations
+      case MessageType.STORE_IMAGE_EXPLANATION:
+        sendResponse(await dbHandlers.handleStoreImageExplanation(message.payload));
+        break;
+
+      case MessageType.GET_IMAGE_EXPLANATION:
+        sendResponse(await dbHandlers.handleGetImageExplanation(message.payload));
+        break;
+
+      case MessageType.GET_IMAGE_EXPLANATIONS_BY_PAPER:
+        sendResponse(await dbHandlers.handleGetImageExplanationsByPaper(message.payload));
+        break;
+
       // State Operations
       case MessageType.GET_OPERATION_STATE:
         const getStateTabId = message.payload?.tabId || sender.tab?.id;

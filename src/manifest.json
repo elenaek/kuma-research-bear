@@ -68,6 +68,7 @@
         "ort-wasm-simd-threaded.jsep.mjs",
         "src/content/components/chatbox.css",
         "src/content/styles/askKumaButton.css",
+        "src/content/styles/imageExplainButton.css",
         "lotties/*",
         "fonts/*",
         "katex/*",

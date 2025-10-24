@@ -52,6 +52,12 @@ export enum MessageType {
   PAPER_DELETED = 'PAPER_DELETED', // Broadcast when paper(s) deleted
   CHECK_SIDEPANEL_OPEN = 'CHECK_SIDEPANEL_OPEN',
   NAVIGATE_TO_PAPER = 'NAVIGATE_TO_PAPER',
+
+  // Image explanation operations
+  EXPLAIN_IMAGE = 'EXPLAIN_IMAGE',
+  GET_IMAGE_EXPLANATION = 'GET_IMAGE_EXPLANATION',
+  STORE_IMAGE_EXPLANATION = 'STORE_IMAGE_EXPLANATION',
+  GET_IMAGE_EXPLANATIONS_BY_PAPER = 'GET_IMAGE_EXPLANATIONS_BY_PAPER',
 }
 
 export interface Message {
@@ -126,6 +132,13 @@ export interface SummarizerCapabilities {
   model: string;
 }
 
+export interface MultimodalCapabilities {
+  available: boolean;
+  availability: AIAvailability;
+  model: string;
+  supportsImages: boolean;
+}
+
 export interface ExplanationResult {
   originalText: string;
   explanation: string;
@@ -153,10 +166,21 @@ export interface AISessionOptions {
 export interface AILanguageModelSession {
   prompt: (input: string, options?: { responseConstraint?: JSONSchema }) => Promise<string>;
   promptStreaming: (input: string) => ReadableStream;
+  append: (messages: AIMessage[]) => Promise<void>; // For multimodal inputs
   destroy: () => void;
   clone: () => Promise<AILanguageModelSession>; // Clone session to reset token count
   inputUsage: number; // Current token usage
   inputQuota: number; // Maximum tokens allowed
+}
+
+// Multimodal message content types
+export type AIMessageContent =
+  | { type: 'text'; value: string }
+  | { type: 'image'; value: Blob | File };
+
+export interface AIMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string | AIMessageContent[];
 }
 
 export interface AILanguageModelParams {
@@ -276,6 +300,24 @@ export interface ContentChunk {
   tokenCount: number;
   embedding?: Float32Array; // Semantic embedding vector for RAG (256-768 dimensions)
   terms?: string[]; // Technical terms/acronyms extracted from this chunk by LLM (5-10 per chunk)
+}
+
+// Image explanation types
+export interface ImageExplanation {
+  id: string; // Generated ID
+  paperId: string;
+  imageUrl: string;
+  imageHash?: string; // Hash of image content for deduplication
+  title: string; // Concise title describing the image
+  explanation: string;
+  timestamp: number;
+}
+
+export interface ImageExplanationResult {
+  imageUrl: string;
+  explanation: string;
+  cached: boolean;
+  timestamp: number;
 }
 
 // Paper Analysis types

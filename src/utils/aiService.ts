@@ -6,6 +6,7 @@ import {
   SummaryResult,
   AIAvailability,
   SummarizerCapabilities,
+  MultimodalCapabilities,
   PaperAnalysisResult,
   MethodologyAnalysis,
   ConfounderAnalysis,
@@ -147,6 +148,172 @@ class ChromeAIService {
         available: false,
         availability: 'no',
       };
+    }
+  }
+
+  /**
+   * Check if Chrome Multimodal API (image support) is available
+   */
+  async checkMultimodalAvailability(): Promise<MultimodalCapabilities> {
+    try {
+      // Check if LanguageModel global is available
+      if (typeof LanguageModel === 'undefined') {
+        console.log('[Multimodal] API not available (typeof LanguageModel === undefined)');
+        return {
+          available: false,
+          availability: 'no',
+          model: 'Gemini Nano',
+          supportsImages: false,
+        };
+      }
+
+      const availability: AIAvailability = await LanguageModel.availability();
+      console.log('[Multimodal] API availability:', availability);
+
+      // Multimodal capabilities are only available in origin trial
+      // We need to try creating a session with image inputs to check support
+      let supportsImages = false;
+      if (availability === 'available') {
+        try {
+          const testSession = await LanguageModel.create({
+            expectedInputs: [{ type: 'image' }],
+          });
+          supportsImages = true;
+          testSession.destroy();
+          console.log('[Multimodal] Image input support confirmed');
+        } catch (error) {
+          console.log('[Multimodal] Image input not supported:', error);
+          supportsImages = false;
+        }
+      }
+
+      return {
+        available: availability === 'available' && supportsImages,
+        availability,
+        model: 'Gemini Nano',
+        supportsImages,
+      };
+    } catch (error) {
+      console.error('[Multimodal] Error checking availability:', error);
+      return {
+        available: false,
+        availability: 'no',
+        model: 'Gemini Nano',
+        supportsImages: false,
+      };
+    }
+  }
+
+  /**
+   * Generate an explanation for an image in the context of a research paper
+   * Uses the Prompt API's multimodal capabilities with structured output
+   * @returns Object with title and explanation, or null if generation fails
+   */
+  async explainImage(
+    imageBlob: Blob,
+    paperTitle: string,
+    paperAbstract: string,
+    contextId: string = 'default'
+  ): Promise<{ title: string; explanation: string } | null> {
+    try {
+      console.log('[ImageExplain] Starting image explanation for paper:', paperTitle);
+
+      // Check multimodal availability first
+      const { available } = await this.checkMultimodalAvailability();
+      if (!available) {
+        console.warn('[ImageExplain] Multimodal API not available');
+        return null;
+      }
+
+      // Get user's preferred output language
+      const outputLanguage = await getOutputLanguage();
+      console.log('[ImageExplain] Using output language:', outputLanguage);
+
+      // Import schema for structured output
+      const { imageExplanationSchema } = await import('../schemas/analysisSchemas.ts');
+
+      // Create a session with image input support
+      const session = await LanguageModel.create({
+        temperature: 0.7,
+        topK: 40,
+        expectedInputs: [{ type: 'image' }],
+        systemPrompt: `You are an expert research assistant helping readers understand scientific figures and images in research papers. Provide clear, concise explanations of images in the context of the paper.`,
+      });
+
+      console.log('[ImageExplain] Session created, sending image...');
+
+      // Use append() method to send multimodal content
+      await session.append([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              value: `This image is from the research paper titled "${paperTitle}".
+
+Paper abstract: ${paperAbstract}
+
+Please analyze this image and provide:
+1. A concise title (3-7 words) describing what the image shows
+2. A detailed explanation covering:
+   - What the image depicts (chart, diagram, photo, etc.)
+   - Key findings or information shown
+   - How it relates to the paper's research
+   - Any important trends, patterns, or notable elements
+
+Keep the explanation concise (2-3 paragraphs) and accessible to readers who may not be experts in the field.
+
+FORMATTING INSTRUCTIONS:
+- Use markdown formatting (headers, bold, italic, lists, etc.) to structure your explanation
+- For mathematical equations, formulas, or variables, use LaTeX notation:
+  * Inline math: $equation$ (e.g., $E = mc^2$)
+  * Display math: $$equation$$ (e.g., $$\\frac{1}{2}mv^2$$)
+- Use code blocks for algorithms or code snippets
+- Use bullet points or numbered lists for clarity
+
+Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Spanish' : outputLanguage === 'ja' ? 'Japanese' : 'English'}.`,
+            },
+            {
+              type: 'image',
+              value: imageBlob,
+            },
+          ],
+        },
+      ]);
+
+      // Use structured output with responseConstraint
+      const response = await session.prompt('Please explain this image.', {
+        responseConstraint: imageExplanationSchema,
+      });
+
+      console.log('[ImageExplain] Raw response:', response);
+
+      // Parse JSON response
+      const parsed = JSON.parse(response);
+
+      console.log('[ImageExplain] Explanation generated successfully');
+      console.log('[ImageExplain] Title:', parsed.title);
+
+      // Cleanup
+      session.destroy();
+
+      return {
+        title: parsed.title,
+        explanation: parsed.explanation,
+      };
+    } catch (error) {
+      console.error('[ImageExplain] Error generating image explanation:', error);
+
+      // Try to extract partial data if JSON parsing failed but we got a response
+      if (error instanceof SyntaxError && typeof error === 'object') {
+        console.warn('[ImageExplain] JSON parsing failed, using fallback');
+        return {
+          title: 'Image Explanation',
+          explanation: 'Unable to generate explanation due to parsing error.',
+        };
+      }
+
+      return null;
     }
   }
 

@@ -246,3 +246,61 @@ export async function handleUpdateQAHistory(payload: any): Promise<any> {
     return { success: false, error: String(dbError) };
   }
 }
+
+/**
+ * Image Explanation Handlers
+ */
+
+/**
+ * Store an image explanation in IndexedDB
+ */
+export async function handleStoreImageExplanation(payload: any): Promise<any> {
+  try {
+    console.log('[DBHandlers] Storing image explanation for:', payload.imageUrl);
+    const { storeImageExplanation } = await import('../../utils/dbService.ts');
+    const explanation = await storeImageExplanation(
+      payload.paperId,
+      payload.imageUrl,
+      payload.title,
+      payload.explanation,
+      payload.imageHash
+    );
+    console.log('[DBHandlers] ✓ Image explanation stored');
+    return { success: true, explanation };
+  } catch (dbError) {
+    console.error('[DBHandlers] Failed to store image explanation:', dbError);
+    return { success: false, error: String(dbError) };
+  }
+}
+
+/**
+ * Get an image explanation from IndexedDB
+ */
+export async function handleGetImageExplanation(payload: any): Promise<any> {
+  try {
+    console.log('[DBHandlers] Getting image explanation for:', payload.imageUrl);
+    const { getImageExplanation } = await import('../../utils/dbService.ts');
+    const explanation = await getImageExplanation(payload.paperId, payload.imageUrl);
+    console.log('[DBHandlers] Image explanation result:', explanation ? 'Found' : 'Not found');
+    return { success: true, explanation };
+  } catch (dbError) {
+    console.error('[DBHandlers] Failed to get image explanation:', dbError);
+    return { success: false, error: String(dbError) };
+  }
+}
+
+/**
+ * Get all image explanations for a paper from IndexedDB
+ */
+export async function handleGetImageExplanationsByPaper(payload: any): Promise<any> {
+  try {
+    console.log('[DBHandlers] Getting all image explanations for paper:', payload.paperId);
+    const { getImageExplanationsByPaper } = await import('../../utils/dbService.ts');
+    const explanations = await getImageExplanationsByPaper(payload.paperId);
+    console.log('[DBHandlers] ✓ Retrieved', explanations.length, 'image explanations');
+    return { success: true, explanations };
+  } catch (dbError) {
+    console.error('[DBHandlers] Failed to get image explanations:', dbError);
+    return { success: false, error: String(dbError), explanations: [] };
+  }
+}
