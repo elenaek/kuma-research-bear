@@ -20,6 +20,9 @@ import * as uiHandlers from './handlers/uiHandlers.ts';
 import * as chatHandlers from './handlers/chatHandlers.ts';
 import { executeDetectAndExplainFlow } from './orchestrators/detectAndExplainOrchestrator.ts';
 
+// Context menu ID for opening chatbox
+const CONTEXT_MENU_ID = 'open-chat';
+
 // Handle extension installation
 chrome.runtime.onInstalled.addListener(() => {
   console.log('Research Bear extension installed');
@@ -32,6 +35,16 @@ chrome.runtime.onInstalled.addListener(() => {
       theme: 'auto',
     },
   });
+
+  // Create context menu for opening chatbox
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_ID,
+    title: 'Open Chat',
+    contexts: ['action'],
+    enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
+  });
+
+  console.log('Context menu created');
 });
 
 /**
@@ -186,5 +199,78 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
 // Register tab lifecycle handlers
 registerTabLifecycleHandlers();
+
+/**
+ * Context Menu Setup for Opening Chatbox
+ */
+
+/**
+ * Check if a tab has a paper stored with chunks
+ */
+async function hasChunkedPaper(tabId: number): Promise<boolean> {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.url) return false;
+
+    const paper = await dbHandlers.handleGetPaperByUrl({ url: tab.url });
+    return !!(paper.success && paper.paper && paper.paper.chunkCount > 0);
+  } catch (error) {
+    console.error('[ContextMenu] Error checking paper status:', error);
+    return false;
+  }
+}
+
+/**
+ * Update context menu state for the active tab
+ */
+async function updateContextMenuState() {
+  try {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!activeTab || !activeTab.id) return;
+
+    const hasChunked = await hasChunkedPaper(activeTab.id);
+
+    await chrome.contextMenus.update(CONTEXT_MENU_ID, {
+      enabled: hasChunked,
+    });
+  } catch (error) {
+    // Context menu might not exist yet, that's ok
+    console.debug('[ContextMenu] Could not update menu state:', error);
+  }
+}
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === CONTEXT_MENU_ID && tab?.id) {
+    try {
+      // Send message to content script to toggle chatbox
+      await chrome.tabs.sendMessage(tab.id, {
+        type: MessageType.TOGGLE_CHATBOX,
+      });
+    } catch (error) {
+      console.error('[ContextMenu] Error opening chatbox:', error);
+    }
+  }
+});
+
+// Update menu state when switching tabs
+chrome.tabs.onActivated.addListener(async () => {
+  await updateContextMenuState();
+});
+
+// Update menu state when tab URL changes
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.url && tab.active) {
+    await updateContextMenuState();
+  }
+});
+
+// Update menu state when paper operations complete
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === MessageType.OPERATION_STATE_CHANGED ||
+      message.type === MessageType.PAPER_DELETED) {
+    updateContextMenuState();
+  }
+});
 
 console.log('Research Bear background service worker loaded');
