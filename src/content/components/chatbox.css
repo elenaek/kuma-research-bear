@@ -268,11 +268,18 @@
   flex-shrink: 0;
 }
 
+.chatbox-input-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+}
+
 .chatbox-input {
   flex: 1;
   border: 1px solid #d1d5db;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 10px 36px 10px 12px;
   font-size: 14px;
   font-family: inherit;
   resize: none;
@@ -293,6 +300,32 @@
 
 .chatbox-input::placeholder {
   color: #9ca3af;
+}
+
+.chatbox-input-clear-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 10px;
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.chatbox-input-clear-btn:hover {
+  background: #f3f4f6;
+  color: #6b7280;
+  transform: scale(1.1);
+}
+
+.chatbox-input-clear-btn:active {
+  transform: scale(0.95);
 }
 
 .chatbox-send-btn {
@@ -326,8 +359,13 @@
 .resize-handle {
   position: absolute;
   background: transparent;
-  z-index: 10;
+  z-index: 100;
+  transition: background 0.2s;
 }
+
+/* .resize-handle:hover {
+  background: rgba(99, 102, 241, 0.15);
+} */
 
 .resize-n,
 .resize-s {
@@ -365,31 +403,31 @@
 .resize-nw,
 .resize-se,
 .resize-sw {
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
 }
 
 .resize-ne {
-  top: -8px;
-  right: -8px;
+  top: 0;
+  right: 0;
   cursor: nesw-resize;
 }
 
 .resize-nw {
-  top: -8px;
-  left: -8px;
+  top: 0;
+  left: 0;
   cursor: nwse-resize;
 }
 
 .resize-se {
-  bottom: -8px;
-  right: -8px;
+  bottom: 0;
+  right: 0;
   cursor: nwse-resize;
 }
 
 .resize-sw {
-  bottom: -8px;
-  left: -8px;
+  bottom: 0;
+  left: 0;
   cursor: nesw-resize;
 }
 

@@ -28,6 +28,7 @@ class ChatboxInjector {
   private currentPaper: StoredPaper | null = null;
   private isInitialized = false;
   private hasInteractedSinceOpen = false;
+  private initialInputValue = '';
 
   async initialize() {
     if (this.isInitialized) {
@@ -185,11 +186,18 @@ class ChatboxInjector {
         align-items: flex-end;
       }
 
+      .chatbox-input-wrapper {
+        flex: 1;
+        position: relative;
+        display: flex;
+        align-items: flex-end;
+      }
+
       .chatbox-input {
         flex: 1;
         border: 1px solid #d1d5db;
         border-radius: 8px;
-        padding: 10px 12px;
+        padding: 10px 36px 10px 12px;
         font-size: 14px;
         font-family: inherit;
         resize: none;
@@ -209,6 +217,32 @@ class ChatboxInjector {
 
       .chatbox-input::placeholder {
         color: #9ca3af;
+      }
+
+      .chatbox-input-clear-btn {
+        position: absolute;
+        right: 8px;
+        bottom: 10px;
+        background: transparent;
+        border: none;
+        color: #9ca3af;
+        cursor: pointer;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: all 0.2s;
+      }
+
+      .chatbox-input-clear-btn:hover {
+        background: #f3f4f6;
+        color: #6b7280;
+        transform: scale(1.1);
+      }
+
+      .chatbox-input-clear-btn:active {
+        transform: scale(0.95);
       }
 
       .chatbox-send-btn {
@@ -390,12 +424,12 @@ class ChatboxInjector {
       .resize-handle {
         position: absolute;
         background: transparent;
-        z-index: 10;
+        z-index: 100;
         transition: background 0.2s;
       }
 
       .resize-handle:hover {
-        background: rgba(99, 102, 241, 0.1);
+        background: rgba(99, 102, 241, 0.15);
       }
 
       .resize-n,
@@ -434,8 +468,8 @@ class ChatboxInjector {
       .resize-nw,
       .resize-se,
       .resize-sw {
-        width: 20px;
-        height: 20px;
+        width: 24px;
+        height: 24px;
       }
 
       .resize-ne {
@@ -756,6 +790,32 @@ class ChatboxInjector {
     }
   }
 
+  async openWithQuery(query: string) {
+    console.log('[Kuma Chat] Opening with query:', query);
+
+    // Set the initial input value
+    this.initialInputValue = query;
+
+    // Force chat open and expanded
+    this.settings.visible = true;
+    this.settings.minimized = false;
+
+    // Reset interaction state
+    this.hasInteractedSinceOpen = false;
+
+    // Load current paper context if not already loaded
+    await this.updateCurrentPaper();
+    await this.loadChatHistory();
+
+    await this.saveSettings();
+    this.render();
+
+    // Clear the initial input value after a short delay to allow the component to read it
+    setTimeout(() => {
+      this.initialInputValue = '';
+    }, 100);
+  }
+
   minimize() {
     this.settings.minimized = !this.settings.minimized;
     this.saveSettings();
@@ -902,6 +962,7 @@ class ChatboxInjector {
           onToggleTransparency: this.toggleTransparency.bind(this),
           hasInteractedSinceOpen: this.hasInteractedSinceOpen,
           onFirstInteraction: this.handleFirstInteraction.bind(this),
+          initialInputValue: this.initialInputValue,
         }),
         rootElement
       );

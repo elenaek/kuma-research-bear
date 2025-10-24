@@ -37,6 +37,10 @@ export default defineConfig({
           src: 'src/content/components/chatbox.css',
           dest: 'src/content/components',
         },
+        {
+          src: 'src/content/styles/askKumaButton.css',
+          dest: 'src/content/styles',
+        },
       ],
     }),
   ],

@@ -2,6 +2,7 @@ import { h } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChatMessage, ChatboxPosition } from '../../types/index.ts';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
+import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.tsx';
 
 interface ChatBoxProps {
   messages: ChatMessage[];
@@ -22,6 +23,7 @@ interface ChatBoxProps {
   onToggleTransparency: () => void;
   hasInteractedSinceOpen: boolean;
   onFirstInteraction: () => void;
+  initialInputValue?: string;
 }
 
 export const ChatBox = ({
@@ -42,7 +44,8 @@ export const ChatBox = ({
   transparencyEnabled,
   onToggleTransparency,
   hasInteractedSinceOpen,
-  onFirstInteraction
+  onFirstInteraction,
+  initialInputValue
 }: ChatBoxProps) => {
   const [inputValue, setInputValue] = useState('');
   const [position, setPosition] = useState(initialPosition);
@@ -154,6 +157,30 @@ export const ChatBox = ({
       return () => clearTimeout(timer);
     }
   }, [isMinimized, disabled]);
+
+  // Handle initial input value from text selection
+  useEffect(() => {
+    if (initialInputValue && initialInputValue !== inputValue) {
+      setInputValue(initialInputValue);
+
+      // Auto-resize textarea to fit content
+      if (inputRef.current) {
+        inputRef.current.style.height = 'auto';
+        inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px';
+      }
+
+      // Focus the input so user can immediately edit or send
+      const timer = setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          // Place cursor at end of text
+          inputRef.current.setSelectionRange(initialInputValue.length, initialInputValue.length);
+        }
+      }, 150);
+
+      return () => clearTimeout(timer);
+    }
+  }, [initialInputValue]);
 
   // Maintain scroll position at bottom when resizing (if user was near bottom)
   useEffect(() => {
@@ -295,6 +322,15 @@ export const ChatBox = ({
     target.style.height = Math.min(target.scrollHeight, 120) + 'px';
   };
 
+  // Clear input handler
+  const handleClearInput = () => {
+    setInputValue('');
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.focus();
+    }
+  };
+
   if (isMinimized) {
     return (
       <div
@@ -319,9 +355,11 @@ export const ChatBox = ({
           onMouseDown={handleDragStart}
         >
           <div class="flex items-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
+            <img
+              src={chrome.runtime.getURL('icons/icon32.png')}
+              class="w-5 h-5"
+              alt="Kuma icon"
+            />
             <span class="font-medium">Kuma Chat</span>
           </div>
           <div class="chatbox-controls flex items-center gap-1">
@@ -398,9 +436,11 @@ export const ChatBox = ({
         onMouseDown={handleDragStart}
       >
         <div class="flex items-center gap-2 flex-1 min-w-0" style={{margin: '5px'}}>
-          <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
+          <img
+            src={chrome.runtime.getURL('icons/icon32.png')}
+            class="w-xl h-xl flex-shrink-0"
+            alt="Kuma icon"
+          />
           <div class="flex-1 min-w-0">
             <div class="font-medium">Kuma Chat</div>
             {paperTitle && (
@@ -489,8 +529,19 @@ export const ChatBox = ({
           <div class="chatbox-message chatbox-message-assistant">
             <div class="chatbox-message-role">Kuma</div>
             <div class="chatbox-message-content">
-              <MarkdownRenderer content={streamingMessage} />
-              <span class="chatbox-cursor">▊</span>
+              {streamingMessage.trim() === '' ? (
+                <LottiePlayer
+                  path={chrome.runtime.getURL('lotties/kuma-thinking.lottie')}
+                  size={40}
+                  autoStartLoop={true}
+                  loopPurpose={LoopPurpose.QASection}
+                />
+              ) : (
+                <>
+                  <MarkdownRenderer content={streamingMessage} />
+                  <span class="chatbox-cursor">▊</span>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -500,16 +551,30 @@ export const ChatBox = ({
 
       {/* Input area */}
       <div class="chatbox-input-container">
-        <textarea
-          ref={inputRef}
-          class="chatbox-input"
-          value={inputValue}
-          onInput={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder={disabled ? 'Load a paper to start chatting...' : 'Ask about this paper...'}
-          disabled={disabled || isStreaming}
-          rows={1}
-        />
+        <div class="chatbox-input-wrapper">
+          <textarea
+            ref={inputRef}
+            class="chatbox-input"
+            value={inputValue}
+            onInput={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder={disabled ? 'Load a paper to start chatting...' : 'Ask about this paper...'}
+            disabled={disabled || isStreaming}
+            rows={1}
+          />
+          {inputValue.trim() && !disabled && !isStreaming && (
+            <button
+              class="chatbox-input-clear-btn"
+              onClick={handleClearInput}
+              title="Clear input"
+              type="button"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
         <button
           class="chatbox-send-btn"
           onClick={handleSend}

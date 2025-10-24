@@ -3,6 +3,7 @@ import { detectAndStorePaper } from './services/paperDetectionService.ts';
 import { createMessageRouter } from './handlers/messageHandlers.ts';
 import { createMutationObserver, startObserving } from './handlers/mutationHandler.ts';
 import { chatboxInjector } from './services/chatboxInjector.ts';
+import { textSelectionHandler } from './services/textSelectionHandler.ts';
 
 /**
  * Content Script
@@ -74,6 +75,19 @@ async function setupChatbox() {
 }
 
 /**
+ * Initialize text selection handler
+ * Sets up the "Ask Kuma" button for text selection
+ */
+async function setupTextSelection() {
+  try {
+    await textSelectionHandler.initialize(chatboxInjector);
+    console.log('[Content] ✓ Text selection handler initialized');
+  } catch (error) {
+    console.error('[Content] Error initializing text selection handler:', error);
+  }
+}
+
+/**
  * Bootstrap the content script
  */
 (async () => {
@@ -88,6 +102,9 @@ async function setupChatbox() {
 
   // Initialize chatbox
   await setupChatbox();
+
+  // Initialize text selection handler (depends on chatbox)
+  await setupTextSelection();
 
   console.log('[Content] ✓ Content script initialized successfully');
 })();
