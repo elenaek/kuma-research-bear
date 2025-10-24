@@ -2,6 +2,7 @@ import { getPaperByUrl } from '../../utils/dbService.ts';
 import * as operationStateService from '../services/operationStateService.ts';
 import * as paperCleanupService from '../services/paperCleanupService.ts';
 import * as iconService from '../services/iconService.ts';
+import { tabPaperTracker } from '../services/tabPaperTracker.ts';
 import { MessageType } from '../../types/index.ts';
 
 /**
@@ -27,19 +28,14 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
         hasChunked: false,  // Reset chunking completion flag
       });
 
-      // Broadcast initial chunking state
-      chrome.runtime.sendMessage({
-        type: MessageType.OPERATION_STATE_CHANGED,
-        payload: { state: initialState },
-      }).catch(() => {
-        // No listeners, that's ok
-      });
+      // Broadcast initial chunking state to all relevant tabs
+      await operationStateService.broadcastStateChange(initialState);
     }
 
     const { storePaper } = await import('../../utils/dbService.ts');
 
     // Create progress callback to update state during chunk summarization
-    const onChunkProgress = (current: number, total: number) => {
+    const onChunkProgress = async (current: number, total: number) => {
       if (tabId) {
         let progressMessage = "";
         if(current === total) {
@@ -55,28 +51,11 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
           chunkingProgress: progressMessage,
           currentChunk: current,
           totalChunks: total,
+          hasChunked: current === total,  // Mark as chunked when current === total
         });
 
-        // Broadcast chunking progress
-        if(state.currentChunk === state.totalChunks) {
-          chrome.runtime.sendMessage({
-            type: MessageType.OPERATION_STATE_CHANGED,
-            payload: { state: {
-              ...state,
-              hasChunked: true
-            } },
-          }).catch(() => {
-            // No listeners, that's ok
-          });
-        }
-        else {
-          chrome.runtime.sendMessage({
-            type: MessageType.OPERATION_STATE_CHANGED,
-            payload: { state },
-          }).catch(() => {
-            // No listeners, that's ok
-          });
-        }
+        // Broadcast chunking progress to all relevant tabs
+        await operationStateService.broadcastStateChange(state);
       }
     };
 
@@ -84,6 +63,9 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
 
     // Update operation state to show paper is stored and chunking is complete
     if (tabId) {
+      // Register paper with tab tracker
+      tabPaperTracker.registerPaper(tabId, storedPaper);
+
       const state = operationStateService.updateState(tabId, {
         currentPaper: storedPaper,
         isPaperStored: true,
@@ -95,13 +77,8 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
         hasChunked: true,  // Mark chunking as complete
       });
 
-      // Broadcast state change
-      chrome.runtime.sendMessage({
-        type: MessageType.OPERATION_STATE_CHANGED,
-        payload: { state },
-      }).catch(() => {
-        // No listeners, that's ok
-      });
+      // Broadcast state change to all relevant tabs
+      await operationStateService.broadcastStateChange(state);
     }
 
     // Generate embeddings in offscreen document (non-blocking)
@@ -134,12 +111,7 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
         totalChunks: 0,
       });
 
-      chrome.runtime.sendMessage({
-        type: MessageType.OPERATION_STATE_CHANGED,
-        payload: { state },
-      }).catch(() => {
-        // No listeners, that's ok
-      });
+      await operationStateService.broadcastStateChange(state);
     }
 
     return { success: false, error: String(dbError) };

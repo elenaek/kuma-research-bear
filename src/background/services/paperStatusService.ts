@@ -1,6 +1,7 @@
 import { StoredPaper, ResearchPaper } from '../../types/index.ts';
 import * as dbService from '../../utils/dbService.ts';
 import * as operationStateService from './operationStateService.ts';
+import { tabPaperTracker } from './tabPaperTracker.ts';
 
 /**
  * Paper Status Service
@@ -88,6 +89,9 @@ export function updateOperationStateFromStoredPaper(tabId: number, status: Paper
     console.log('[PaperStatus] No stored paper, keeping operation state as-is');
     return;
   }
+
+  // Register paper with tab tracker
+  tabPaperTracker.registerPaper(tabId, status.paper);
 
   // Update the operation state with completion info
   operationStateService.updateState(tabId, {

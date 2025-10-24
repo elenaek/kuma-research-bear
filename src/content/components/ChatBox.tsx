@@ -310,7 +310,7 @@ export const ChatBox = ({
           left: `${position.x}px`,
           top: `${position.y}px`,
           zIndex: 2147483647,
-          opacity: (transparencyEnabled && hasInteractedSinceOpen) ? ((isHovered || isFocused || isResizing || isDragging) ? 1 : 0.3) : 1,
+          opacity: 1, // Never transparent when minimized
           transition: 'opacity 0.2s ease-in-out',
         }}
       >

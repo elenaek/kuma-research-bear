@@ -3,6 +3,7 @@ import * as operationStateService from '../services/operationStateService.ts';
 import * as requestDeduplicationService from '../services/requestDeduplicationService.ts';
 import * as iconService from '../services/iconService.ts';
 import * as paperStatusService from '../services/paperStatusService.ts';
+import { tabPaperTracker } from '../services/tabPaperTracker.ts';
 
 /**
  * Tab Lifecycle Handlers
@@ -96,6 +97,9 @@ async function checkAndUpdatePaperStatus(tabId: number, url: string): Promise<vo
 export function handleTabRemoved(tabId: number, removeInfo: chrome.tabs.TabRemoveInfo): void {
   console.log(`[TabLifecycle] Tab ${tabId} closed, cleaning up AI sessions...`);
 
+  // Get the paper URL before unregistering (for chat session cleanup)
+  const paperUrl = tabPaperTracker.getPaperForTab(tabId);
+
   // Clean up all session contexts for this tab
   const contextPrefixes = [
     `tab-${tabId}-explain`,
@@ -109,6 +113,26 @@ export function handleTabRemoved(tabId: number, removeInfo: chrome.tabs.TabRemov
 
   for (const contextId of contextPrefixes) {
     aiService.destroySessionForContext(contextId);
+  }
+
+  // Unregister tab from tracker
+  tabPaperTracker.unregisterTab(tabId);
+
+  // Clean up chat session ONLY if no other tabs are viewing this paper
+  if (paperUrl && !tabPaperTracker.hasPaper(paperUrl)) {
+    console.log(`[TabLifecycle] No more tabs viewing paper ${paperUrl}, cleaning up chat session`);
+
+    // We need to get the paper ID to construct the chat context ID
+    // Since we only have the URL, we need to look it up
+    // For now, we'll rely on the aiService to clean up sessions that match the pattern
+    const state = operationStateService.getRawState(tabId);
+    if (state?.currentPaper?.id) {
+      const chatContextId = `chat-${state.currentPaper.id}`;
+      aiService.destroySessionForContext(chatContextId);
+      console.log(`[TabLifecycle] Destroyed chat session ${chatContextId}`);
+    }
+  } else if (paperUrl) {
+    console.log(`[TabLifecycle] Other tabs still viewing paper ${paperUrl}, keeping chat session alive`);
   }
 
   // Clean up active requests for this tab

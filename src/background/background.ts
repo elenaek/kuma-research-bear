@@ -13,6 +13,7 @@
 
 import { MessageType } from '../types/index.ts';
 import { registerTabLifecycleHandlers } from './utils/tabLifecycleHandlers.ts';
+import { tabPaperTracker } from './services/tabPaperTracker.ts';
 import * as dbHandlers from './handlers/dbHandlers.ts';
 import * as aiHandlers from './handlers/aiHandlers.ts';
 import * as stateHandlers from './handlers/stateHandlers.ts';
@@ -239,6 +240,25 @@ async function updateContextMenuState() {
   }
 }
 
+/**
+ * Update context menu state for all tabs viewing a specific paper
+ * Called when paper operations complete to ensure all relevant tabs are updated
+ */
+export async function updateContextMenuForPaper(paperUrl: string) {
+  try {
+    const tabIds = tabPaperTracker.getTabsForPaperUrl(paperUrl);
+    if (tabIds.length === 0) return;
+
+    // Check if any of these tabs is currently active
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (activeTab?.id && tabIds.includes(activeTab.id)) {
+      await updateContextMenuState();
+    }
+  } catch (error) {
+    console.debug('[ContextMenu] Could not update menu for paper:', error);
+  }
+}
+
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === CONTEXT_MENU_ID && tab?.id) {
@@ -262,14 +282,6 @@ chrome.tabs.onActivated.addListener(async () => {
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.url && tab.active) {
     await updateContextMenuState();
-  }
-});
-
-// Update menu state when paper operations complete
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === MessageType.OPERATION_STATE_CHANGED ||
-      message.type === MessageType.PAPER_DELETED) {
-    updateContextMenuState();
   }
 });
 

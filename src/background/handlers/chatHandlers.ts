@@ -8,10 +8,29 @@ import { aiService } from '../../utils/aiService.ts';
  */
 
 /**
+ * Validate that a tab exists and is still available
+ */
+async function isTabValid(tabId: number): Promise<boolean> {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return !!tab;
+  } catch (error) {
+    // Tab was closed or doesn't exist
+    return false;
+  }
+}
+
+/**
  * Send a streaming chat message chunk to content script
  */
 async function sendChatChunk(tabId: number, chunk: string): Promise<void> {
   try {
+    // Validate tab exists before sending
+    if (!await isTabValid(tabId)) {
+      console.warn('[ChatHandlers] Tab', tabId, 'no longer exists, skipping chunk');
+      return;
+    }
+
     await chrome.tabs.sendMessage(tabId, {
       type: MessageType.CHAT_STREAM_CHUNK,
       payload: chunk,
@@ -26,6 +45,12 @@ async function sendChatChunk(tabId: number, chunk: string): Promise<void> {
  */
 async function sendChatEnd(tabId: number, fullMessage: string, sources?: string[]): Promise<void> {
   try {
+    // Validate tab exists before sending
+    if (!await isTabValid(tabId)) {
+      console.warn('[ChatHandlers] Tab', tabId, 'no longer exists, skipping stream end');
+      return;
+    }
+
     await chrome.tabs.sendMessage(tabId, {
       type: MessageType.CHAT_STREAM_END,
       payload: { fullMessage, sources },

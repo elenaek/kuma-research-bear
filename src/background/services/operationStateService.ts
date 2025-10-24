@@ -1,4 +1,6 @@
-import { OperationState } from '../../types/index.ts';
+import { OperationState, MessageType } from '../../types/index.ts';
+import { tabPaperTracker } from './tabPaperTracker.ts';
+import { updateContextMenuForPaper } from '../background.ts';
 
 /**
  * Operation State Service
@@ -118,4 +120,55 @@ export function getRawState(tabId: number): OperationState | undefined {
  */
 export function getStateByPaperUrl(paperUrl: string): OperationState | undefined {
   return paperToState.get(paperUrl);
+}
+
+/**
+ * Broadcast operation state changes to all relevant listeners
+ * - Sends to runtime (popup, sidepanel)
+ * - Sends to all tabs viewing this paper
+ * - Updates context menu for the paper
+ */
+export async function broadcastStateChange(state: OperationState): Promise<void> {
+  try {
+    // Broadcast to runtime listeners (popup, sidepanel, background)
+    chrome.runtime.sendMessage({
+      type: MessageType.OPERATION_STATE_CHANGED,
+      payload: { state },
+    }).catch(() => {
+      // No listeners, that's okay
+    });
+
+    // If we have a paper URL, send to all tabs viewing this paper
+    if (state.currentPaper?.url) {
+      const tabIds = tabPaperTracker.getTabsForPaperUrl(state.currentPaper.url);
+
+      for (const tabId of tabIds) {
+        try {
+          await chrome.tabs.sendMessage(tabId, {
+            type: MessageType.OPERATION_STATE_CHANGED,
+            payload: { state },
+          });
+        } catch (error) {
+          // Tab might have been closed or content script not ready
+          console.debug(`[OperationState] Could not send to tab ${tabId}:`, error);
+        }
+      }
+
+      // Update context menu for this paper
+      await updateContextMenuForPaper(state.currentPaper.url);
+    }
+  } catch (error) {
+    console.error('[OperationState] Error broadcasting state change:', error);
+  }
+}
+
+/**
+ * Update operation state and broadcast changes
+ * This is the preferred method to use when updating state
+ * @returns The updated state
+ */
+export async function updateStateAndBroadcast(tabId: number, updates: Partial<OperationState>): Promise<OperationState> {
+  const state = updateState(tabId, updates);
+  await broadcastStateChange(state);
+  return state;
 }
