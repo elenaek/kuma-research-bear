@@ -781,13 +781,9 @@ select:focus {
   margin-left: 0.5rem;
 }
 
-/* Hide KaTeX HTML fallback - use native MathML rendering instead */
-.katex-html {
-  display: none !important;
-}
-
 /* Increase MathML font size for better readability */
 .katex,
-.katex-mathml {
+.katex-mathml,
+.katex-html {
   font-size: 1.1em !important;
 }

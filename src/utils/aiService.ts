@@ -297,6 +297,7 @@ class ChromeAIService {
   /**
    * Get or create a session for a specific context (tab)
    * Creates a fresh session for each operation
+   * Converts deprecated systemPrompt to initialPrompts format
    */
   async getOrCreateSession(contextId: string, options?: AISessionOptions): Promise<AILanguageModelSession> {
     // Always create a new session - simpler and more reliable
@@ -306,7 +307,24 @@ class ChromeAIService {
       }
 
       console.log(`[AI] Creating new session for context: ${contextId}`);
-      const session = await LanguageModel.create(options);
+
+      // Convert systemPrompt to initialPrompts if present (new API format)
+      let sessionOptions = options;
+      if (options?.systemPrompt) {
+        sessionOptions = {
+          ...options,
+          initialPrompts: [
+            {
+              role: 'system',
+              content: options.systemPrompt
+            }
+          ]
+        };
+        // Remove deprecated systemPrompt field
+        delete sessionOptions.systemPrompt;
+      }
+
+      const session = await LanguageModel.create(sessionOptions);
 
       this.sessions.set(contextId, session);
       console.log(`[AI] Session created successfully. Total sessions: ${this.sessions.size}`);
@@ -614,7 +632,8 @@ ${abstract}`;
     console.log('[Summary] Using Prompt API for summary generation');
     const systemPrompt = `You are a research assistant that creates concise summaries of academic papers.
 Extract the most important information and present it clearly.
-Use markdown formatting to enhance readability.`;
+Use markdown formatting to enhance readability.
+For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations, or \\(expression\\)/\\[expression\\]. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).`;
 
     // If hierarchical summary is provided, use it for comprehensive summary
     let input: string;
@@ -697,7 +716,8 @@ KEY POINTS:
    */
   async simplifyText(text: string, contextId: string = 'default'): Promise<string> {
     const systemPrompt = `You are a helpful assistant that rewrites complex academic text in simple, clear language
-while preserving the original meaning.`;
+while preserving the original meaning.
+For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\alpha, \\sum, etc.).`;
 
     const input = `Rewrite this text in simpler terms:\n\n${text}`;
 
@@ -1044,6 +1064,7 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
     const languageName = languageNames[outputLanguage] || 'English';
 
     const systemPrompt = `You are a research methodology expert. Analyze research papers for their study design, methods, and rigor.
+For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
@@ -1124,6 +1145,7 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
     const languageName = languageNames[outputLanguage] || 'English';
 
     const systemPrompt = `You are a research quality expert specializing in identifying biases and confounding variables.
+For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
@@ -1200,6 +1222,7 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
     const languageName = languageNames[outputLanguage] || 'English';
 
     const systemPrompt = `You are a research impact expert who identifies practical applications and significance of research.
+For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
@@ -1276,6 +1299,7 @@ Provide a comprehensive analysis of real-world applications, significance, and f
     const languageName = languageNames[outputLanguage] || 'English';
 
     const systemPrompt = `You are a research critique expert who identifies limitations and constraints in studies.
+For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
@@ -1992,7 +2016,8 @@ CRITICAL:
 - Maintain domain-specific language
 - Include acronym definitions if present
 - Capture key findings, methods, data
-- Extract 5-10 most important technical terms, acronyms, initialisms, and domain-specific jargon a user would need to know to understand this section`;
+- Extract 5-10 most important technical terms, acronyms, initialisms, and domain-specific jargon a user would need to know to understand this section
+For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).`;
 
     // Get chunk summary schema with terms extraction
     const outputLanguage = await getOutputLanguage();
@@ -2076,6 +2101,7 @@ CRITICAL:
 - Do NOT paraphrase specialized terms
 - Maintain term consistency across sections
 - Include methodology, findings, results, conclusions
+For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).
 `;
     const metaInput = `Create a comprehensive summary of this research paper from these section summaries. Capture all key findings, methodology, results, and conclusions:\n\n${combinedSummaries.slice(0, 20000)}`;
 
