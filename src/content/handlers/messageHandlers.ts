@@ -133,6 +133,13 @@ export function createMessageRouter(getCurrentPaper: () => ResearchPaper | null)
             sendResponse({ success: true });
             break;
 
+          case MessageType.GET_CHATBOX_STATE:
+            sendResponse({
+              success: true,
+              isOpen: chatboxInjector.settings.visible
+            });
+            break;
+
           default:
             sendResponse({ success: false, error: 'Unknown message type' });
         }

@@ -752,6 +752,35 @@ export async function toggleChatbox(tabId?: number): Promise<void> {
 }
 
 /**
+ * Get the current chatbox state (open/closed) from content script
+ */
+export async function getChatboxState(tabId?: number): Promise<boolean> {
+  console.log('[ChromeService] Getting chatbox state');
+
+  try {
+    let response;
+    if (tabId) {
+      response = await chrome.tabs.sendMessage(tabId, {
+        type: MessageType.GET_CHATBOX_STATE,
+      });
+    } else {
+      // Send to active tab
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs[0]?.id) {
+        response = await chrome.tabs.sendMessage(tabs[0].id, {
+          type: MessageType.GET_CHATBOX_STATE,
+        });
+      }
+    }
+    console.log('[ChromeService] ✓ Chatbox state received:', response?.isOpen);
+    return response?.isOpen || false;
+  } catch (error) {
+    console.error('[ChromeService] Error getting chatbox state:', error);
+    return false;
+  }
+}
+
+/**
  * Alias for getPaperByUrl for backwards compatibility
  */
 export const getPaperFromDBByUrl = getPaperByUrl;

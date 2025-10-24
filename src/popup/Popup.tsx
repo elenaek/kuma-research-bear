@@ -22,6 +22,9 @@ export function Popup() {
   const [isSidepanelOpen, setIsSidepanelOpen] = useState(false);
   const [currentUrlHasPaper, setCurrentUrlHasPaper] = useState(false);
 
+  // Track chatbox state for dynamic button behavior
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
   // Custom hooks
   const aiStatus = useAIStatus();
   const operationState = useOperationState(currentTabUrl, currentTabId);
@@ -107,6 +110,16 @@ export function Popup() {
     }
   }
 
+  // Helper function to update chatbox button state
+  async function updateChatboxState() {
+    try {
+      const isOpen = await ChromeService.getChatboxState(currentTabId);
+      setIsChatOpen(isOpen);
+    } catch (error) {
+      console.error('[Popup] Error updating chatbox state:', error);
+    }
+  }
+
   async function checkInitialState() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -139,6 +152,9 @@ export function Popup() {
 
       // Step 3: Update sidepanel button state
       await updateSidepanelButtonState();
+
+      // Step 4: Update chatbox state
+      await updateChatboxState();
     } catch (error) {
       console.error('[Popup] Failed to check initial state:', error);
     }
@@ -229,6 +245,8 @@ export function Popup() {
   async function handleOpenChat() {
     try {
       await ChromeService.toggleChatbox(currentTabId);
+      // Update chatbox state after toggling
+      await updateChatboxState();
     } catch (error) {
       console.error('[Popup] Failed to toggle chatbox:', error);
     }
@@ -322,6 +340,7 @@ export function Popup() {
           isPaperStored={paperStatus.isPaperStored}
           isSidepanelOpen={isSidepanelOpen}
           currentUrlHasPaper={currentUrlHasPaper}
+          isChatOpen={isChatOpen}
           hasChunked={operationState.hasChunked}
           onDetectPaper={handleDetectPaper}
           onOpenSidepanel={handleOpenSidepanel}
