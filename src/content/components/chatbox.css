@@ -169,11 +169,14 @@
   font-size: 14px;
   line-height: 1.3;
   word-wrap: break-word;
+  user-select: text; /* Allow text selection in messages */
+  cursor: text;
 }
 
 /* Markdown content styling with compact spacing */
 .markdown-content {
   line-height: 1.4;
+  user-select: text; /* Allow text selection in markdown */
 }
 
 .markdown-content > * {
@@ -236,6 +239,7 @@
   padding: 0 14px;
   font-size: 11px;
   color: #6b7280;
+  user-select: text; /* Allow text selection in sources */
 }
 
 .chatbox-cursor {
