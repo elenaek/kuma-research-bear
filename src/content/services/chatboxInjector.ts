@@ -846,7 +846,7 @@ class ChatboxInjector {
   }
 
   private render() {
-    console.log('[Kuma Chat] Render called, initialized:', this.isInitialized, 'visible:', this.settings.visible);
+    // console.log('[Kuma Chat] Render called, initialized:', this.isInitialized, 'visible:', this.settings.visible);
 
     if (!this.shadowRoot || !this.isInitialized) {
       console.log('[Kuma Chat] Render aborted - not initialized');
@@ -870,7 +870,7 @@ class ChatboxInjector {
       return;
     }
 
-    console.log('[Kuma Chat] Rendering chatbox, disabled:', isDisabled, 'messages:', this.messages.length);
+    // console.log('[Kuma Chat] Rendering chatbox, disabled:', isDisabled, 'messages:', this.messages.length);
 
     try {
       render(
@@ -894,7 +894,7 @@ class ChatboxInjector {
         }),
         rootElement
       );
-      console.log('[Kuma Chat] ✓ Chatbox rendered successfully');
+      // console.log('[Kuma Chat] ✓ Chatbox rendered successfully');
     } catch (error) {
       console.error('[Kuma Chat] Error rendering chatbox:', error);
     }

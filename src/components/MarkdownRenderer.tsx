@@ -22,7 +22,6 @@ if (typeof document !== 'undefined' && !document.querySelector('link[href*="kate
   // Use bundled CSS from extension to bypass host page CSP
   link.href = chrome.runtime.getURL('katex/katex.min.css');
   document.head.appendChild(link);
-  console.log('[KaTeX CSS] Injected local stylesheet at module load from:', link.href);
 }
 
 interface MarkdownRendererProps {
@@ -35,8 +34,6 @@ interface MarkdownRendererProps {
  * Returns the modified content and an array of extracted LaTeX expressions
  */
 function extractLatexWithPlaceholders(content: string): { content: string; expressions: Array<{ placeholder: string; latex: string; displayMode: boolean }> } {
-  console.log('[LaTeX Extract] Raw input content:', content);
-
   const expressions: Array<{ placeholder: string; latex: string; displayMode: boolean }> = [];
   let processed = content;
   let counter = 0;
@@ -45,7 +42,6 @@ function extractLatexWithPlaceholders(content: string): { content: string; expre
   // Match $$...$$ (display mode)
   processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (match, latex) => {
     const placeholder = `{{KATEX_DISPLAY_${counter}}}`;
-    console.log(`[LaTeX Extract] Found $$...$$ at position, LaTeX:`, latex.trim());
     expressions.push({ placeholder, latex: latex.trim(), displayMode: true });
     counter++;
     return placeholder;
@@ -54,7 +50,6 @@ function extractLatexWithPlaceholders(content: string): { content: string; expre
   // Match \[...\] (display mode)
   processed = processed.replace(/\\\[([\s\S]+?)\\\]/g, (match, latex) => {
     const placeholder = `{{KATEX_DISPLAY_${counter}}}`;
-    console.log(`[LaTeX Extract] Found \\[...\\] at position, LaTeX:`, latex.trim());
     expressions.push({ placeholder, latex: latex.trim(), displayMode: true });
     counter++;
     return placeholder;
@@ -64,7 +59,6 @@ function extractLatexWithPlaceholders(content: string): { content: string; expre
   // Match $...$ (inline mode) - simpler pattern since $$ was already removed
   processed = processed.replace(/\$([^\$]+?)\$/g, (match, latex) => {
     const placeholder = `{{KATEX_INLINE_${counter}}}`;
-    console.log(`[LaTeX Extract] Found $...$ inline, LaTeX:`, latex.trim());
     expressions.push({ placeholder, latex: latex.trim(), displayMode: false });
     counter++;
     return placeholder;
@@ -73,14 +67,10 @@ function extractLatexWithPlaceholders(content: string): { content: string; expre
   // Match \(...\) (inline mode) - support multiline with [\s\S]
   processed = processed.replace(/\\\(([\s\S]+?)\\\)/g, (match, latex) => {
     const placeholder = `{{KATEX_INLINE_${counter}}}`;
-    console.log(`[LaTeX Extract] Found \\(...\\) inline, LaTeX:`, latex.trim());
     expressions.push({ placeholder, latex: latex.trim(), displayMode: false });
     counter++;
     return placeholder;
   });
-
-  console.log(`[LaTeX Extract] Total expressions found: ${expressions.length}`);
-  console.log('[LaTeX Extract] Content with placeholders:', processed);
 
   return { content: processed, expressions };
 }
@@ -99,39 +89,22 @@ async function renderLatexExpressions(
 
   try {
     // Dynamically import KaTeX only when LaTeX content is detected
-    console.log('[LaTeX Render] Importing KaTeX module...');
     const katexModule = await import('katex');
     const katex = katexModule.default;
-    console.log('[LaTeX Render] KaTeX module loaded');
 
     let processed = content;
-
-    console.log('[LaTeX Render] Input HTML content:', content);
-    console.log('[LaTeX Render] Replacing', expressions.length, 'LaTeX placeholders');
 
     // Replace each placeholder with rendered KaTeX HTML
     for (const { placeholder, latex, displayMode } of expressions) {
       try {
-        console.log(`[LaTeX Render] Processing ${placeholder}:`, {
-          latex,
-          displayMode,
-          placeholderExists: content.includes(placeholder)
-        });
-
         const rendered = katex.renderToString(latex, { displayMode, throwOnError: false });
-
-        // Use replaceAll to ensure all instances are replaced
-        const beforeCount = (processed.match(new RegExp(placeholder.replace(/[{}]/g, '\\$&'), 'g')) || []).length;
         processed = processed.replaceAll(placeholder, rendered);
-
-        console.log(`[LaTeX Render] ✓ Replaced ${beforeCount} instance(s) of ${placeholder}`);
       } catch (error) {
-        console.error('[LaTeX Render] ✗ KaTeX rendering error for:', latex, error);
+        console.error('[LaTeX Render] KaTeX rendering error for:', latex, error);
         // Keep placeholder if rendering fails
       }
     }
 
-    console.log('[LaTeX Render] Final HTML output:', processed);
     return processed;
   } catch (error) {
     console.error('Failed to load KaTeX:', error);
@@ -151,21 +124,14 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
   useEffect(() => {
     // Process content asynchronously
     const processContent = async () => {
-      console.log('=== MarkdownRenderer Processing Start ===');
-      console.log('[Step 0] Original content:', content);
-
       // Step 1: Extract LaTeX and replace with placeholders (protects from markdown escaping)
       const { content: contentWithPlaceholders, expressions } = extractLatexWithPlaceholders(content);
-      console.log('[Step 1] After LaTeX extraction:', contentWithPlaceholders);
-      console.log('[Step 1] Expressions extracted:', expressions.length);
 
       // Step 2: Parse markdown to HTML (placeholders are safe from escaping)
       const rawHTML = marked.parse(contentWithPlaceholders) as string;
-      console.log('[Step 2] After markdown parsing:', rawHTML);
 
       // Step 3: Render LaTeX expressions and replace placeholders with KaTeX HTML
       const htmlWithLatex = await renderLatexExpressions(rawHTML, expressions);
-      console.log('[Step 3] After LaTeX rendering:', htmlWithLatex);
 
       // Step 4: Sanitize HTML to prevent XSS attacks
       const sanitizedHTML = DOMPurify.sanitize(htmlWithLatex, {
@@ -197,8 +163,6 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
           'lspace', 'rspace', 'notation', 'encoding',
         ],
       });
-      console.log('[Step 4] After sanitization:', sanitizedHTML);
-      console.log('=== MarkdownRenderer Processing End ===');
 
       setProcessedHTML(sanitizedHTML);
     };

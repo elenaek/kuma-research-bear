@@ -143,6 +143,7 @@ export interface AISessionOptions {
   temperature?: number;
   topK?: number;
   systemPrompt?: string;
+  initialPrompts?: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; // For conversation history
   signal?: AbortSignal;
   expectedInputs?: Array<{ type: string; languages: string[] }>;
   expectedOutputs?: Array<{ type: string; languages: string[] }>;
@@ -152,6 +153,9 @@ export interface AILanguageModelSession {
   prompt: (input: string, options?: { responseConstraint?: JSONSchema }) => Promise<string>;
   promptStreaming: (input: string) => ReadableStream;
   destroy: () => void;
+  clone: () => Promise<AILanguageModelSession>; // Clone session to reset token count
+  inputUsage: number; // Current token usage
+  inputQuota: number; // Maximum tokens allowed
 }
 
 export interface AILanguageModelParams {
@@ -253,6 +257,7 @@ export interface StoredPaper extends ResearchPaper {
   hierarchicalSummary?: string; // Compressed summary of entire paper (~2000 chars) for full document coverage
   qaHistory?: QuestionAnswer[]; // Q&A history for this paper
   chatHistory?: ChatMessage[]; // Chat conversation history for this paper
+  conversationState?: ConversationState; // Conversation summarization state for token management
   explanation?: ExplanationResult; // Stored explanation for this paper
   summary?: SummaryResult; // Stored summary for this paper
   analysis?: PaperAnalysisResult; // Stored analysis for this paper
@@ -346,6 +351,23 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   sources?: string[]; // Sources for assistant messages
+}
+
+// Conversation history management
+export interface ConversationState {
+  summary: string | null; // Summarized older messages
+  recentMessages: ChatMessage[]; // Last 4-6 messages (unsummarized)
+  lastSummarizedIndex: number; // Track where we last summarized in the full history
+  summaryCount: number; // Number of summaries combined (triggers re-summarization at 2)
+}
+
+// Session metadata for token tracking
+export interface SessionMetadata {
+  inputUsage: number; // Current token usage
+  inputQuota: number; // Maximum tokens allowed
+  usagePercentage: number; // Calculated percentage (0-100)
+  lastChecked: number; // Timestamp of last check
+  needsSummarization: boolean; // Flag when >= 80% usage
 }
 
 export interface ChatboxPosition {

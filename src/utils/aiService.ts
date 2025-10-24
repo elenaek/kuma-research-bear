@@ -14,7 +14,10 @@ import {
   QuestionAnswer,
   GlossaryResult,
   GlossaryTerm,
-  StudyContext
+  StudyContext,
+  ChatMessage,
+  SessionMetadata,
+  ConversationState
 } from '../types/index.ts';
 import { JSONSchema } from '../utils/typeToSchema.ts';
 import { getSchemaForLanguage } from '../schemas/analysisSchemas.multilang.ts';
@@ -35,6 +38,7 @@ function sleep(ms: number): Promise<void> {
 class ChromeAIService {
   // Multiple sessions support - one per context (tab)
   private sessions: Map<string, AILanguageModelSession> = new Map();
+  private sessionMetadata: Map<string, SessionMetadata> = new Map(); // Track token usage per session
   private activeRequests: Map<string, AbortController> = new Map(); // Track active requests
   private capabilities: AICapabilities | null = null;
   private extractionRetries: Map<string, number> = new Map(); // Track retries per URL
@@ -2114,6 +2118,173 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       // Fallback to truncated combined summaries
       return { summary: combinedSummaries.slice(0, 8000) + '...', chunkTerms };
     }
+  }
+
+  /**
+   * Summarize conversation history using Summarizer API
+   * Takes a list of messages and creates a concise summary
+   * @param messages Array of chat messages to summarize
+   * @param paperTitle Optional paper title for context
+   * @returns Summary string or null if summarization fails
+   */
+  async summarizeConversation(
+    messages: ChatMessage[],
+    paperTitle?: string
+  ): Promise<string | null> {
+    try {
+      console.log('[Conversation Summarizer] Starting summarization of', messages.length, 'messages');
+
+      // Format messages as conversation text
+      const conversationText = messages
+        .map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+        .join('\n\n');
+
+      // Create summarizer with conversation-appropriate settings
+      const summarizer = await this.createSummarizer({
+        type: 'tldr',
+        format: 'plain-text',
+        length: 'medium',
+        sharedContext: paperTitle ? `Research paper discussion: ${paperTitle}` : 'Research paper discussion',
+      });
+
+      if (!summarizer) {
+        console.warn('[Conversation Summarizer] Failed to create summarizer');
+        return null;
+      }
+
+      // Generate summary
+      const summary = await summarizer.summarize(conversationText);
+      summarizer.destroy();
+
+      console.log('[Conversation Summarizer] ✓ Summary created:', summary.length, 'chars');
+      return summary;
+    } catch (error) {
+      console.error('[Conversation Summarizer] Error summarizing conversation:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get session metadata including token usage
+   * @param contextId Context ID for the session
+   * @returns SessionMetadata or null if session doesn't exist or data unavailable
+   */
+  getSessionMetadata(contextId: string): SessionMetadata | null {
+    try {
+      const session = this.sessions.get(contextId);
+      if (!session) {
+        console.warn(`[Session Metadata] No session found for context: ${contextId}`);
+        return null;
+      }
+
+      // Safely access session properties with defensive checks
+      // These properties might be undefined or throw errors depending on session state
+      let inputUsage = 0;
+      let inputQuota = 0;
+
+      try {
+        inputUsage = session.inputUsage ?? 0;
+        inputQuota = session.inputQuota ?? 0;
+      } catch (propertyError) {
+        console.warn('[Session Metadata] Could not access session usage properties:', propertyError);
+        // Continue with default values (0)
+      }
+
+      const usagePercentage = inputQuota > 0 ? (inputUsage / inputQuota) * 100 : 0;
+      const needsSummarization = usagePercentage >= 80;
+
+      const metadata: SessionMetadata = {
+        inputUsage,
+        inputQuota,
+        usagePercentage,
+        lastChecked: Date.now(),
+        needsSummarization,
+      };
+
+      // Store metadata
+      this.sessionMetadata.set(contextId, metadata);
+
+      console.log(`[Session Metadata] ${contextId}:`, {
+        usage: inputUsage,
+        quota: inputQuota,
+        percentage: usagePercentage.toFixed(2) + '%',
+        needsSummarization,
+      });
+
+      return metadata;
+    } catch (error) {
+      console.error('[Session Metadata] Error getting session metadata:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Clone a session with conversation history
+   * Used when token usage approaches limit - resets tokens while preserving context
+   * @param contextId Context ID for the session to clone
+   * @param conversationState Current conversation state (summary + recent messages)
+   * @param systemPrompt System prompt for the session
+   * @param options Additional session options
+   * @returns New cloned session
+   */
+  async cloneSessionWithHistory(
+    contextId: string,
+    conversationState: ConversationState,
+    systemPrompt: string,
+    options?: AISessionOptions
+  ): Promise<AILanguageModelSession> {
+    console.log('[Session Clone] Cloning session for', contextId);
+    console.log('[Session Clone] Conversation state:', {
+      hasSummary: !!conversationState.summary,
+      recentMessages: conversationState.recentMessages.length,
+    });
+
+    // Build initialPrompts array with system prompt, summary, and recent messages
+    // Combine system prompt and conversation summary into single system message
+    // (Prompt API only allows one system message at the first position)
+    let systemPromptContent = systemPrompt;
+    if (conversationState.summary) {
+      systemPromptContent += `\n\nPrevious conversation summary: ${conversationState.summary}`;
+    }
+
+    const initialPrompts: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPromptContent }
+    ];
+
+    // Add recent messages
+    for (const msg of conversationState.recentMessages) {
+      initialPrompts.push({
+        role: msg.role,
+        content: msg.content
+      });
+    }
+
+    console.log('[Session Clone] Creating new session with', initialPrompts.length, 'initial prompts');
+
+    // Destroy old session
+    const oldSession = this.sessions.get(contextId);
+    if (oldSession) {
+      try {
+        oldSession.destroy();
+      } catch (error) {
+        console.warn('[Session Clone] Error destroying old session:', error);
+      }
+    }
+
+    // Create new session with conversation history
+    const newSession = await LanguageModel.create({
+      ...options,
+      initialPrompts,
+    });
+
+    // Update session map
+    this.sessions.set(contextId, newSession);
+
+    // Reset metadata
+    this.sessionMetadata.delete(contextId);
+
+    console.log('[Session Clone] ✓ Session cloned successfully');
+    return newSession;
   }
 
   /**
