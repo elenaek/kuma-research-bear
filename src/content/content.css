@@ -52,3 +52,14 @@
     transform: rotate(360deg);
   }
 }
+
+/* Hide KaTeX HTML fallback - use native MathML rendering instead */
+.katex-html {
+  display: none !important;
+}
+
+/* Increase MathML font size for better readability */
+.katex,
+.katex-mathml {
+  font-size: 1.1em !important;
+}

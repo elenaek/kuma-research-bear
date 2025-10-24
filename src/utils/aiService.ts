@@ -466,6 +466,11 @@ Important:
 Your goal is to make research papers accessible to people without specialized knowledge.
 Break down technical jargon, use analogies when helpful, and focus on the key insights.
 Use markdown formatting to enhance readability (bold for key terms, bullet points for lists, etc.).
+When mathematical expressions, equations, or formulas are needed:
+- Use $expression$ for inline math (e.g., $E = mc^2$)
+- Use $$expression$$ for display equations on separate lines
+- Alternative: \\(expression\\) for inline, \\[expression\\] for display
+- Ensure proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, \\alpha, \\beta)
 IMPORTANT: Respond in ${languageName}. Your entire explanation must be in ${languageName}.`;
 
     // If hierarchical summary is provided, use it for richer context
@@ -507,7 +512,13 @@ Use markdown formatting for better readability:
 - Use bullet points or numbered lists where appropriate
 - Use *italic* for emphasis
 - Keep paragraphs concise
-- Cover the key findings, methodology, and conclusions from the full paper`;
+- Cover the key findings, methodology, and conclusions from the full paper
+
+For mathematical expressions, equations, or formulas:
+- Use $expression$ for inline math (e.g., $E = mc^2$, $p < 0.05$)
+- Use $$expression$$ for display equations on separate lines
+- You can also use \\(expression\\) for inline, \\[expression\\] for display
+- Use proper LaTeX syntax (e.g., \\frac{numerator}{denominator}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)`;
     } else {
       console.log('[Explain] Using abstract only (standard approach)');
       input = `IMPORTANT: You must respond entirely in ${languageName}. Do not use any other language.
@@ -518,6 +529,12 @@ Use markdown formatting for better readability:
 - Use bullet points or numbered lists where appropriate
 - Use *italic* for emphasis
 - Keep paragraphs concise
+
+For mathematical expressions, equations, or formulas:
+- Use $expression$ for inline math (e.g., $E = mc^2$, $p < 0.05$)
+- Use $$expression$$ for display equations on separate lines
+- You can also use \\(expression\\) for inline, \\[expression\\] for display
+- Use proper LaTeX syntax (e.g., \\frac{numerator}{denominator}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)
 
 <OUTPUT FORMAT BEGIN>
 ### What is the main problem or research question being addressed?
@@ -1374,6 +1391,11 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
     const systemPrompt = `You are Kuma, a helpful research assistant. Answer questions about research papers based ONLY on the provided context.
 Be accurate, cite which sections you used, and if the context doesn't contain enough information to answer, say so clearly.
 Use markdown formatting to make your answers more readable and well-structured.
+When mathematical expressions, equations, or formulas are needed:
+- Use $expression$ for inline math (e.g., $E = mc^2$, $p < 0.05$)
+- Use $$expression$$ for display equations on separate lines
+- Alternative: \\(expression\\) for inline, \\[expression\\] for display
+- Ensure proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)
 IMPORTANT: Respond in ${languageName}. Your entire answer must be in ${languageName}.`;
 
     const input = `Based on the following excerpts from a research paper, answer this question:
@@ -1602,6 +1624,11 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
 
       // Step 3: Generate definition using GeminiNano
       const systemPrompt = `You are a research paper terminology expert who provides clear, accurate definitions for technical terms and acronyms.
+When mathematical expressions, equations, or formulas are needed in definitions or contexts:
+- Use $expression$ for inline math (e.g., $E = mc^2$, $\\alpha$)
+- Use $$expression$$ for display equations on separate lines
+- Alternative: \\(expression\\) for inline, \\[expression\\] for display
+- Ensure proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters)
 IMPORTANT: All definitions, contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.`;
 
       const input = `IMPORTANT: All definitions, study contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.
@@ -1623,7 +1650,12 @@ Provide:
    - sections: array of section names where this usage appears (array of strings like ["Introduction", "Methods"])
 5. A simple analogy to help understand it
 
-Focus on how this term is specifically used in THIS paper.`;
+Focus on how this term is specifically used in THIS paper.
+
+For mathematical expressions in definitions, contexts, or analogies:
+- Use $expression$ for inline math (e.g., $\\alpha$, $n=100$)
+- Use $$expression$$ for display equations
+- Alternatively use \\(expression\\) for inline, \\[expression\\] for display`;
 
       // Use the glossary schema for the single term
       const schema = getSchemaForLanguage('glossary', outputLanguage as 'en' | 'es' | 'ja');
@@ -1763,6 +1795,11 @@ Focus on how this term is specifically used in THIS paper.`;
       const languageName = languageNames[outputLanguage] || 'English';
 
       const systemPrompt = `You are a research paper terminology expert who provides clear, accurate definitions for technical terms and acronyms.
+When mathematical expressions, equations, or formulas are needed in definitions or contexts:
+- Use $expression$ for inline math (e.g., $E = mc^2$, $\\alpha$)
+- Use $$expression$$ for display equations on separate lines
+- Alternative: \\(expression\\) for inline, \\[expression\\] for display
+- Ensure proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters)
 IMPORTANT: All definitions, contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.`;
 
       // Build the input with all keywords
@@ -1792,7 +1829,12 @@ For EACH term, provide:
 5. A simple analogy to help understand it
 
 Focus on how each term is specifically used in THIS paper.
-Return an array with ${keywords.length} term definitions in the same order as listed above.`;
+Return an array with ${keywords.length} term definitions in the same order as listed above.
+
+For mathematical expressions in definitions, contexts, or analogies:
+- Use $expression$ for inline math (e.g., $\\alpha$, $n=100$)
+- Use $$expression$$ for display equations
+- Alternatively use \\(expression\\) for inline, \\[expression\\] for display`;
 
       // Step 3: Use batch schema (array of terms)
       const schema = getSchemaForLanguage('glossary', outputLanguage as 'en' | 'es' | 'ja');

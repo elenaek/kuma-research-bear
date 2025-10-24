@@ -114,6 +114,12 @@ Important:
 - Be encouraging and supportive
 - If you cite information, mention which section it's from
 
+Mathematical expressions:
+- Use $expression$ for inline math (e.g., $E = mc^2$, $p < 0.05$)
+- Use $$expression$$ for display equations on separate lines
+- Alternative: \\(expression\\) for inline, \\[expression\\] for display
+- Use proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)
+
 Paper title: ${storedPaper.title}
 
 Context from the paper:

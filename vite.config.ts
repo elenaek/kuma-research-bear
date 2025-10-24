@@ -14,7 +14,7 @@ export default defineConfig({
         'src/offscreen/offscreen.html',
       ],
     }),
-    // Copy PDF.js worker, DotLottie WASM, ONNX Runtime WASM, and chatbox CSS to dist folder
+    // Copy PDF.js worker, DotLottie WASM, ONNX Runtime WASM, KaTeX fonts, and chatbox CSS to dist folder
     viteStaticCopy({
       targets: [
         {
@@ -30,6 +30,10 @@ export default defineConfig({
           dest: '.',
         },
         {
+          src: 'node_modules/katex/dist/fonts/*',
+          dest: 'fonts',
+        },
+        {
           src: 'src/content/components/chatbox.css',
           dest: 'src/content/components',
         },
@@ -42,9 +46,26 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    minify: 'terser',
+    // Fix Chrome Windows UTF-8 encoding bug by escaping all Unicode characters
+    terserOptions: {
+      format: {
+        ascii_only: true,
+      },
+    },
     // Disable polyfills that reference document
     modulePreload: {
       polyfill: false,
+    },
+    rollupOptions: {
+      output: {
+        // Prevent extremely long lines that Chrome on Windows can't parse
+        compact: false,
+        // Enforce readable formatting with proper line breaks
+        generatedCode: {
+          constBindings: true,
+        },
+      },
     },
   },
 });

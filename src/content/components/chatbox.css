@@ -565,6 +565,16 @@
   background: #dc2626;
 }
 
+.katex-html {
+  display: none !important;
+}
+
+.katex,
+.katex-mathml {
+  font-size: 1.1em !important;
+}
+
+
 @keyframes fadeIn {
   from {
     opacity: 0;
