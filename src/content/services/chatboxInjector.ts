@@ -27,6 +27,7 @@ class ChatboxInjector {
   private streamingMessage = '';
   private currentPaper: StoredPaper | null = null;
   private isInitialized = false;
+  private hasInteractedSinceOpen = false;
 
   async initialize() {
     if (this.isInitialized) {
@@ -725,6 +726,9 @@ class ChatboxInjector {
       this.settings.minimized = false;
       console.log('[Kuma Chat] Forcing expanded mode (minimized: false)');
 
+      // Reset interaction state (transparency won't activate until user clicks)
+      this.hasInteractedSinceOpen = false;
+
       // Load current paper context when opening
       console.log('[Kuma Chat] Loading paper context...');
       await this.updateCurrentPaper();
@@ -845,6 +849,11 @@ class ChatboxInjector {
     this.saveSettings();
   }
 
+  private handleFirstInteraction() {
+    this.hasInteractedSinceOpen = true;
+    this.render();
+  }
+
   private render() {
     // console.log('[Kuma Chat] Render called, initialized:', this.isInitialized, 'visible:', this.settings.visible);
 
@@ -891,6 +900,8 @@ class ChatboxInjector {
           hasChunked: hasChunked,
           transparencyEnabled: this.settings.transparencyEnabled,
           onToggleTransparency: this.toggleTransparency.bind(this),
+          hasInteractedSinceOpen: this.hasInteractedSinceOpen,
+          onFirstInteraction: this.handleFirstInteraction.bind(this),
         }),
         rootElement
       );

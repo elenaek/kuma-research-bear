@@ -20,6 +20,8 @@ interface ChatBoxProps {
   hasChunked: boolean;
   transparencyEnabled: boolean;
   onToggleTransparency: () => void;
+  hasInteractedSinceOpen: boolean;
+  onFirstInteraction: () => void;
 }
 
 export const ChatBox = ({
@@ -38,7 +40,9 @@ export const ChatBox = ({
   hasPaper,
   hasChunked,
   transparencyEnabled,
-  onToggleTransparency
+  onToggleTransparency,
+  hasInteractedSinceOpen,
+  onFirstInteraction
 }: ChatBoxProps) => {
   const [inputValue, setInputValue] = useState('');
   const [position, setPosition] = useState(initialPosition);
@@ -84,6 +88,17 @@ export const ChatBox = ({
       }
     }
   }, [messages, streamingMessage]);
+
+  // Force scroll to bottom when streaming ends (after DOM settles)
+  useEffect(() => {
+    if (!isStreaming && messages.length > 0) {
+      // Delay ensures DOM has fully updated after streaming->final message transition
+      const timer = setTimeout(() => {
+        scrollToBottom('smooth');
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming]);
 
   // Track scroll position and near-bottom state continuously
   useEffect(() => {
@@ -285,6 +300,7 @@ export const ChatBox = ({
       <div
         ref={chatboxRef}
         class="kuma-chatbox-minimized"
+        onClick={() => !hasInteractedSinceOpen && onFirstInteraction()}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         onFocus={() => setIsFocused(true)}
@@ -294,7 +310,7 @@ export const ChatBox = ({
           left: `${position.x}px`,
           top: `${position.y}px`,
           zIndex: 2147483647,
-          opacity: transparencyEnabled ? ((isHovered || isFocused || isResizing || isDragging) ? 1 : 0.3) : 1,
+          opacity: (transparencyEnabled && hasInteractedSinceOpen) ? ((isHovered || isFocused || isResizing || isDragging) ? 1 : 0.3) : 1,
           transition: 'opacity 0.2s ease-in-out',
         }}
       >
@@ -350,6 +366,7 @@ export const ChatBox = ({
     <div
       ref={chatboxRef}
       class="kuma-chatbox"
+      onClick={() => !hasInteractedSinceOpen && onFirstInteraction()}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onFocus={() => setIsFocused(true)}
@@ -361,7 +378,7 @@ export const ChatBox = ({
         width: `${position.width}px`,
         height: `${position.height}px`,
         zIndex: 2147483647,
-        opacity: transparencyEnabled ? ((isHovered || isFocused || isResizing || isDragging || showClearModal) ? 1 : 0.3) : 1,
+        opacity: (transparencyEnabled && hasInteractedSinceOpen) ? ((isHovered || isFocused || isResizing || isDragging || showClearModal) ? 1 : 0.3) : 1,
         transition: 'opacity 0.2s ease-in-out',
       }}
     >
