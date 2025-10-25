@@ -194,47 +194,58 @@ async function processAndStreamResponse(
     }
 
     // Get relevant chunks with adaptive oversampling based on paper's chunk size
-    const { getAdaptiveChunkLimit, trimChunksByTokenBudget } = await import('../../utils/adaptiveRAGService.ts');
+    const { getAdaptiveChunkLimit, trimChunksWithProgressiveFallback } = await import('../../utils/adaptiveRAGService.ts');
     const adaptiveLimit = await getAdaptiveChunkLimit(storedPaper.id, 'chat');
     const relevantChunks = await getRelevantChunksSemantic(storedPaper.id, message, adaptiveLimit);
 
-    // Trim chunks to fit within token budget
-    const { chunks: trimmedChunks, budgetStatus } = await trimChunksByTokenBudget(relevantChunks, 'chat');
+    // Get conversation state for accurate token calculation
+    const chatHistory = storedPaper.chatHistory || [];
+    const conversationState = storedPaper.conversationState || {
+      summary: null,
+      recentMessages: [],
+      lastSummarizedIndex: -1,
+      summaryCount: 0,
+    };
 
-    // If minimum chunks don't fit, try to free up space by summarizing conversation history
-    if (!budgetStatus.minChunksFit) {
-      const chatHistory = storedPaper.chatHistory || [];
+    // Prepare conversation state for RAG (with recent messages)
+    const recentMessages = chatHistory.slice(-6);
+    const ragConversationState = {
+      summary: conversationState.summary,
+      recentMessages: recentMessages,
+    };
 
-      if (chatHistory.length > 0) {
-        console.log('[ChatHandlers] Insufficient space for RAG chunks, triggering proactive summarization...');
-        console.log(`[ChatHandlers] Budget: ${budgetStatus.usedTokens}/${budgetStatus.availableTokens} tokens, minChunksFit=${budgetStatus.minChunksFit}`);
+    // Trim chunks with progressive conversation fallback
+    const { chunks: trimmedChunks, budgetStatus, reducedRecentMessages } = await trimChunksWithProgressiveFallback(
+      relevantChunks,
+      'chat',
+      ragConversationState
+    );
 
-        // Perform summarization to free up context space
-        const conversationState = storedPaper.conversationState || {
-          summary: null,
-          recentMessages: [],
-          lastSummarizedIndex: -1,
-          summaryCount: 0,
-        };
+    // Log if conversation was reduced
+    if (reducedRecentMessages !== undefined) {
+      console.log(`[ChatHandlers] Conversation reduced: ${recentMessages.length} → ${reducedRecentMessages} messages to fit RAG chunks`);
+    }
 
-        const updatedConversationState = await performPreSummarization(
-          chatHistory,
-          conversationState,
-          storedPaper.title
-        );
+    // If still not enough space, try summarization as last resort
+    if (!budgetStatus.minTokensFit && chatHistory.length > 0) {
+      console.log('[ChatHandlers] Progressive fallback exhausted, triggering summarization...');
+      console.log(`[ChatHandlers] Budget: ${budgetStatus.usedTokens}/${budgetStatus.availableTokens} tokens, minTokensFit=${budgetStatus.minTokensFit}`);
 
-        // Update stored paper with new conversation state
-        await chrome.storage.local.set({
-          [`papers.${storedPaper.id}`]: {
-            ...storedPaper,
-            conversationState: updatedConversationState,
-          },
-        });
+      const updatedConversationState = await performPreSummarization(
+        chatHistory,
+        conversationState,
+        storedPaper.title
+      );
 
-        console.log('[ChatHandlers] ✓ Proactive summarization complete, proceeding with chat...');
-      } else {
-        console.warn('[ChatHandlers] Minimum chunks do not fit and no conversation history to summarize');
-      }
+      // Update stored paper with new conversation state
+      await chrome.storage.local.set({
+        [`papers.${storedPaper.id}`]: {
+          ...storedPaper,
+          conversationState: updatedConversationState,
+        },
+      });
+
+      console.log('[ChatHandlers] ✓ Summarization complete as last resort');
     }
 
     if (trimmedChunks.length === 0) {
@@ -286,14 +297,7 @@ async function processAndStreamResponse(
     // Context ID for this paper's chat session
     const contextId = `chat-${storedPaper.id}`;
 
-    // Get existing chat history and conversation state
-    const chatHistory = storedPaper.chatHistory || [];
-    const conversationState = storedPaper.conversationState || {
-      summary: null,
-      recentMessages: [],
-      lastSummarizedIndex: -1,
-      summaryCount: 0,
-    };
+    // chatHistory and conversationState already retrieved above (lines 202-208)
 
     // System prompt for the chat session (WITHOUT RAG context to save quota)
     // RAG context will be included in the actual user prompt instead
@@ -805,47 +809,58 @@ async function processAndStreamImageChatResponse(
     }
 
     // Get relevant chunks with adaptive oversampling based on paper's chunk size
-    const { getAdaptiveChunkLimit, trimChunksByTokenBudget } = await import('../../utils/adaptiveRAGService.ts');
+    const { getAdaptiveChunkLimit, trimChunksWithProgressiveFallback } = await import('../../utils/adaptiveRAGService.ts');
     const adaptiveLimit = await getAdaptiveChunkLimit(paperId, 'chat');
     const relevantChunks = await getRelevantChunksSemantic(paperId, message, adaptiveLimit);
 
-    // Trim chunks to fit within token budget
-    const { chunks: trimmedChunks, budgetStatus } = await trimChunksByTokenBudget(relevantChunks, 'chat');
+    // Get conversation state for accurate token calculation
+    const chatHistory = paper.chatHistory || [];
+    const conversationState = paper.conversationState || {
+      summary: null,
+      recentMessages: [],
+      lastSummarizedIndex: -1,
+      summaryCount: 0,
+    };
 
-    // If minimum chunks don't fit, try to free up space by summarizing conversation history
-    if (!budgetStatus.minChunksFit) {
-      const chatHistory = paper.chatHistory || [];
+    // Prepare conversation state for RAG (with recent messages)
+    const recentMessages = chatHistory.slice(-6);
+    const ragConversationState = {
+      summary: conversationState.summary,
+      recentMessages: recentMessages,
+    };
 
-      if (chatHistory.length > 0) {
-        console.log('[ImageChatHandlers] Insufficient space for RAG chunks, triggering proactive summarization...');
-        console.log(`[ImageChatHandlers] Budget: ${budgetStatus.usedTokens}/${budgetStatus.availableTokens} tokens, minChunksFit=${budgetStatus.minChunksFit}`);
+    // Trim chunks with progressive conversation fallback
+    const { chunks: trimmedChunks, budgetStatus, reducedRecentMessages } = await trimChunksWithProgressiveFallback(
+      relevantChunks,
+      'chat',
+      ragConversationState
+    );
 
-        // Perform summarization to free up context space
-        const conversationState = paper.conversationState || {
-          summary: null,
-          recentMessages: [],
-          lastSummarizedIndex: -1,
-          summaryCount: 0,
-        };
+    // Log if conversation was reduced
+    if (reducedRecentMessages !== undefined) {
+      console.log(`[ImageChatHandlers] Conversation reduced: ${recentMessages.length} → ${reducedRecentMessages} messages to fit RAG chunks`);
+    }
 
-        const updatedConversationState = await performPreSummarization(
-          chatHistory,
-          conversationState,
-          paper.title
-        );
+    // If still not enough space, try summarization as last resort
+    if (!budgetStatus.minTokensFit && chatHistory.length > 0) {
+      console.log('[ImageChatHandlers] Progressive fallback exhausted, triggering summarization...');
+      console.log(`[ImageChatHandlers] Budget: ${budgetStatus.usedTokens}/${budgetStatus.availableTokens} tokens, minTokensFit=${budgetStatus.minTokensFit}`);
 
-        // Update stored paper with new conversation state
-        await chrome.storage.local.set({
-          [`papers.${paperId}`]: {
-            ...paper,
-            conversationState: updatedConversationState,
-          },
-        });
+      const updatedConversationState = await performPreSummarization(
+        chatHistory,
+        conversationState,
+        paper.title
+      );
 
-        console.log('[ImageChatHandlers] ✓ Proactive summarization complete, proceeding with chat...');
-      } else {
-        console.warn('[ImageChatHandlers] Minimum chunks do not fit and no conversation history to summarize');
-      }
+      // Update stored paper with new conversation state
+      await chrome.storage.local.set({
+        [`papers.${paperId}`]: {
+          ...paper,
+          conversationState: updatedConversationState,
+        },
+      });
+
+      console.log('[ImageChatHandlers] ✓ Summarization complete as last resort');
     }
 
     if (trimmedChunks.length === 0) {
@@ -904,10 +919,11 @@ async function processAndStreamImageChatResponse(
     }
     const contextId = `image-chat-${paperId}-img_${Math.abs(hash)}`;
 
-    // Get existing chat history and conversation state
+    // chatHistory and conversationState already retrieved above for RAG (lines 824-830)
+    // But for imageChat, we need to get from imageChat object, not paper object
     const imageChat = await getImageChat(paperId, imageUrl);
-    const chatHistory = imageChat?.chatHistory || [];
-    const conversationState = imageChat?.conversationState || {
+    const imageChatHistory = imageChat?.chatHistory || [];
+    const imageChatConversationState = imageChat?.conversationState || {
       summary: null,
       recentMessages: [],
       lastSummarizedIndex: -1,
@@ -951,13 +967,13 @@ Paper title: ${paper.title}`;
       console.log(`[ImageChatHandlers] Existing session usage: ${currentUsage}/${quota} (${usagePercentage.toFixed(1)}%)`);
 
       // If session usage is high (>70%), summarize and recreate session
-      if (usagePercentage > 70 && chatHistory.length > 0) {
+      if (usagePercentage > 70 && imageChatHistory.length > 0) {
         console.log('[ImageChatHandlers] Session usage >70%, triggering summarization and session recreation...');
 
         // Perform summarization
         const updatedConversationState = await performPreSummarization(
-          chatHistory,
-          conversationState,
+          imageChatHistory,
+          imageChatConversationState,
           paper.title,
           paperId
         );
@@ -981,7 +997,7 @@ Paper title: ${paper.title}`;
         ];
 
         // Add recent messages (up to last 6)
-        const recentMessages = chatHistory.slice(-6);
+        const recentMessages = imageChatHistory.slice(-6);
         for (const msg of recentMessages) {
           initialPrompts.push({
             role: msg.role,
@@ -995,17 +1011,17 @@ Paper title: ${paper.title}`;
         });
         console.log('[ImageChatHandlers] ✓ Session recreated after summarization');
       }
-    } else if (chatHistory.length > 0) {
+    } else if (imageChatHistory.length > 0) {
       // No session but have history - create with pre-summarization
       const updatedConversationState = await performPreSummarization(
-        chatHistory,
-        conversationState,
+        imageChatHistory,
+        imageChatConversationState,
         paper.title,
         paperId
       );
 
       // Create new multimodal session with conversation history
-      console.log('[ImageChatHandlers] Creating new multimodal session with', chatHistory.length, 'historical messages');
+      console.log('[ImageChatHandlers] Creating new multimodal session with', imageChatHistory.length, 'historical messages');
 
       let systemPromptContent = systemPrompt;
       if (updatedConversationState.summary) {
@@ -1017,7 +1033,7 @@ Paper title: ${paper.title}`;
       ];
 
       // Add recent messages (up to last 6)
-      const recentMessages = chatHistory.slice(-6);
+      const recentMessages = imageChatHistory.slice(-6);
       for (const msg of recentMessages) {
         initialPrompts.push({
           role: msg.role,
@@ -1137,7 +1153,7 @@ User question: ${message}`;
     try {
       // Update chat history with new messages
       const newChatHistory = [
-        ...chatHistory,
+        ...imageChatHistory,
         { role: 'user' as const, content: message, timestamp: Date.now() },
         { role: 'assistant' as const, content: fullResponse, timestamp: Date.now(), sources: finalSources }
       ];
@@ -1145,7 +1161,7 @@ User question: ${message}`;
       // Save to IndexedDB
       await updateImageChat(paperId, imageUrl, {
         chatHistory: newChatHistory,
-        conversationState,
+        conversationState: imageChatConversationState,
       });
 
       // Track token usage
@@ -1156,7 +1172,7 @@ User question: ${message}`;
 
         // Summarize messages
         const messagesToSummarize = newChatHistory.slice(
-          conversationState.lastSummarizedIndex + 1,
+          imageChatConversationState.lastSummarizedIndex + 1,
           -6
         );
 
@@ -1166,18 +1182,18 @@ User question: ${message}`;
           let finalSummary: string;
           let summaryCount: number;
 
-          if (conversationState.summary && conversationState.summaryCount >= 2) {
+          if (imageChatConversationState.summary && imageChatConversationState.summaryCount >= 2) {
             // Re-summarize combined summaries
-            const combinedText = `${conversationState.summary}\n\n${newSummary}`;
+            const combinedText = `${imageChatConversationState.summary}\n\n${newSummary}`;
             const tempMessages = [
               { role: 'assistant' as const, content: combinedText, timestamp: Date.now() }
             ];
             const reSummarized = await aiService.summarizeConversation(tempMessages, paper.title);
             finalSummary = reSummarized || newSummary;
             summaryCount = 1;
-          } else if (conversationState.summary) {
-            finalSummary = `${conversationState.summary}\n\n${newSummary}`;
-            summaryCount = conversationState.summaryCount + 1;
+          } else if (imageChatConversationState.summary) {
+            finalSummary = `${imageChatConversationState.summary}\n\n${newSummary}`;
+            summaryCount = imageChatConversationState.summaryCount + 1;
           } else {
             finalSummary = newSummary;
             summaryCount = 1;

@@ -94,54 +94,104 @@ export async function getAdaptiveChunkLimit(
 }
 
 /**
+ * Calculate actual prompt tokens based on real conversation state
+ * Provides accurate token estimation instead of fixed estimates
+ */
+function calculateActualPromptTokens(
+  useCase: 'chat' | 'qa' | 'analysis' | 'definition',
+  conversationState?: {
+    summary?: string | null;
+    recentMessages?: Array<{ content: string }>;
+  }
+): { promptTokens: number; breakdown: { system: number; summary: number; messages: number; overhead: number } } {
+  // Base system prompts (measured from actual prompts)
+  const systemPromptSizes = {
+    chat: 250,
+    qa: 150,
+    analysis: 150,
+    definition: 100,
+  };
+
+  const systemTokens = systemPromptSizes[useCase];
+
+  // Calculate summary tokens (if exists)
+  const summaryText = conversationState?.summary || '';
+  const summaryTokens = summaryText ? Math.ceil(summaryText.length / 4) : 0;
+
+  // Calculate recent messages tokens (if exist)
+  const recentMessages = conversationState?.recentMessages || [];
+  const messagesText = recentMessages.map(m => m.content).join('\n');
+  const messagesTokens = messagesText ? Math.ceil(messagesText.length / 4) : 0;
+
+  // Overhead for formatting, labels, separators
+  const overheadTokens = 50;
+
+  const totalPromptTokens = systemTokens + summaryTokens + messagesTokens + overheadTokens;
+
+  return {
+    promptTokens: totalPromptTokens,
+    breakdown: {
+      system: systemTokens,
+      summary: summaryTokens,
+      messages: messagesTokens,
+      overhead: overheadTokens,
+    },
+  };
+}
+
+/**
  * Trim chunks by token budget
  * Takes oversampled chunks (sorted by relevance) and trims to fit within inputQuota
- * Accounts for chunk label overhead and includes minimum 2 chunks when possible
+ * Uses minimum token threshold (1000 tokens) instead of minimum chunk count
  *
  * @param chunks - Array of chunks sorted by relevance (most relevant first)
  * @param useCase - The type of operation (affects prompt size estimate)
+ * @param conversationState - Optional conversation state for accurate token calculation (chat only)
  * @returns Object with trimmed chunks and budget status
  */
 export async function trimChunksByTokenBudget(
   chunks: import('../types/index.ts').ContentChunk[],
-  useCase: 'chat' | 'qa' | 'analysis' | 'definition'
+  useCase: 'chat' | 'qa' | 'analysis' | 'definition',
+  conversationState?: {
+    summary?: string | null;
+    recentMessages?: Array<{ content: string }>;
+  }
 ): Promise<{
   chunks: import('../types/index.ts').ContentChunk[];
   budgetStatus: {
     availableTokens: number;
     usedTokens: number;
-    minChunksFit: boolean;
+    minTokensFit: boolean;
     needsSummarization: boolean;
+    conversationTokens?: number;
+    recentMessageCount?: number;
   };
 }> {
   const inputQuota = await inputQuotaService.getInputQuota();
 
-  // Estimated prompt sizes for different use cases (in tokens)
-  // These estimates account for system prompts, conversation history, and formatting overhead
-  const promptEstimates = {
-    chat: 800,       // System (250) + Summary (300) + Recent messages (200) + overhead (50)
-    qa: 350,         // System prompt + question
-    analysis: 300,   // Analysis-specific prompt
-    definition: 250  // Definition lookup prompt
-  };
-
-  const estimatedPromptTokens = promptEstimates[useCase];
+  // Use actual prompt token calculation instead of fixed estimates
+  const { promptTokens, breakdown } = calculateActualPromptTokens(useCase, conversationState);
   const responseBuffer = 500; // Reserve tokens for LLM response
 
   // Calculate available tokens for chunks
-  const availableTokens = inputQuota - estimatedPromptTokens - responseBuffer;
+  const availableTokens = inputQuota - promptTokens - responseBuffer;
 
-  // Apply 65% safety margin to account for token estimation inaccuracies
-  // (chars/4 is rough, actual tokens may be higher)
-  const conservativeTokens = Math.floor(availableTokens * 0.65);
+  // Apply adaptive safety margin:
+  // - Chat: 75% (less conservative, since we're measuring actual conversation)
+  // - Other use cases: 65% (more conservative, no conversation history)
+  const safetyMargin = useCase === 'chat' ? 0.75 : 0.65;
+  const conservativeTokens = Math.floor(availableTokens * safetyMargin);
 
-  console.log(`[Adaptive RAG] Available tokens: ${availableTokens}, Conservative (65%): ${conservativeTokens}`);
+  console.log(`[Adaptive RAG] InputQuota=${inputQuota}, Prompt breakdown: system=${breakdown.system}, summary=${breakdown.summary}, messages=${breakdown.messages}, overhead=${breakdown.overhead}`);
+  console.log(`[Adaptive RAG] Available tokens: ${availableTokens}, Conservative (${Math.floor(safetyMargin * 100)}%): ${conservativeTokens}`);
 
   // Add chunks in relevance order until budget exhausted
   const selectedChunks: import('../types/index.ts').ContentChunk[] = [];
   let currentTokens = 0;
 
-  const MIN_CHUNKS = 2; // Minimum chunks for meaningful context
+  // Use minimum token threshold instead of minimum chunk count
+  // 1000 tokens ≈ 4000 chars of content (substantial context)
+  const MIN_TOKENS = 1000;
 
   for (const chunk of chunks) {
     const chunkTokens = chunk.tokenCount;
@@ -153,15 +203,15 @@ export async function trimChunksByTokenBudget(
     const separatorOverhead = selectedChunks.length > 0 ? 2 : 0;
     const totalChunkCost = chunkTokens + labelOverhead + separatorOverhead;
 
-    // Try to include minimum chunks, but only if they won't catastrophically exceed budget
-    if (selectedChunks.length < MIN_CHUNKS) {
-      // Allow up to 20% overflow for minimum chunks (relative to conservative limit)
+    // Try to include minimum tokens, but only if they won't catastrophically exceed budget
+    if (currentTokens < MIN_TOKENS) {
+      // Allow up to 20% overflow for minimum token threshold (relative to conservative limit)
       if (currentTokens + totalChunkCost < conservativeTokens * 1.2) {
         selectedChunks.push(chunk);
         currentTokens += totalChunkCost;
       } else {
-        // Even minimum chunk would blow budget - stop here
-        console.warn(`[Adaptive RAG] Cannot fit minimum chunks - budget too tight (need ${currentTokens + totalChunkCost}, have ${conservativeTokens})`);
+        // Even minimum would blow budget - stop here
+        console.warn(`[Adaptive RAG] Cannot fit minimum tokens - budget too tight (need ${currentTokens + totalChunkCost}, have ${conservativeTokens})`);
         break;
       }
       continue;
@@ -176,13 +226,17 @@ export async function trimChunksByTokenBudget(
     currentTokens += totalChunkCost;
   }
 
-  const minChunksFit = selectedChunks.length >= MIN_CHUNKS;
-  const needsSummarization = currentTokens > conservativeTokens * 0.9 || !minChunksFit;
+  const minTokensFit = currentTokens >= MIN_TOKENS;
+  const needsSummarization = currentTokens > conservativeTokens * 0.9 || !minTokensFit;
 
-  console.log(`[Adaptive RAG] Trimmed ${chunks.length} → ${selectedChunks.length} chunks (${currentTokens}/${conservativeTokens} conservative, ${availableTokens} available, minFit=${minChunksFit})`);
+  const conversationTokens = breakdown.summary + breakdown.messages;
+  const recentMessageCount = conversationState?.recentMessages?.length || 0;
 
-  if (!minChunksFit) {
-    console.warn(`[Adaptive RAG] Only ${selectedChunks.length} chunks fit (need ${MIN_CHUNKS}) - summarization recommended`);
+  console.log(`[Adaptive RAG] Trimmed ${chunks.length} → ${selectedChunks.length} chunks (${currentTokens}/${conservativeTokens} conservative, ${availableTokens} available)`);
+  console.log(`[Adaptive RAG] minTokensFit=${minTokensFit} (${currentTokens} >= ${MIN_TOKENS}), conversationTokens=${conversationTokens}, recentMsgCount=${recentMessageCount}`);
+
+  if (!minTokensFit) {
+    console.warn(`[Adaptive RAG] Only ${currentTokens} tokens fit (need ${MIN_TOKENS}) - conversation reduction recommended`);
   }
 
   return {
@@ -190,10 +244,99 @@ export async function trimChunksByTokenBudget(
     budgetStatus: {
       availableTokens,
       usedTokens: currentTokens,
-      minChunksFit,
+      minTokensFit,
       needsSummarization,
+      conversationTokens,
+      recentMessageCount,
     },
   };
+}
+
+/**
+ * Progressive conversation history reduction
+ * Tries to fit chunks by progressively reducing conversation history
+ * Returns the best result with minimal conversation history needed
+ *
+ * @param chunks - Array of chunks sorted by relevance
+ * @param useCase - The type of operation
+ * @param conversationState - Current conversation state
+ * @returns Best trim result with reduced conversation if needed
+ */
+export async function trimChunksWithProgressiveFallback(
+  chunks: import('../types/index.ts').ContentChunk[],
+  useCase: 'chat' | 'qa' | 'analysis' | 'definition',
+  conversationState?: {
+    summary?: string | null;
+    recentMessages?: Array<{ content: string }>;
+  }
+): Promise<{
+  chunks: import('../types/index.ts').ContentChunk[];
+  budgetStatus: {
+    availableTokens: number;
+    usedTokens: number;
+    minTokensFit: boolean;
+    needsSummarization: boolean;
+    conversationTokens?: number;
+    recentMessageCount?: number;
+  };
+  reducedRecentMessages?: number; // How many messages we reduced to (if fallback used)
+}> {
+  // Level 1: Try with full conversation history (6 recent messages)
+  let result = await trimChunksByTokenBudget(chunks, useCase, conversationState);
+
+  if (result.budgetStatus.minTokensFit) {
+    console.log('[Adaptive RAG] Level 1: Full conversation history - chunks fit ✓');
+    return result;
+  }
+
+  // Level 2: Reduce to 3 recent messages
+  if (conversationState?.recentMessages && conversationState.recentMessages.length > 3) {
+    console.log('[Adaptive RAG] Level 2: Reducing to 3 recent messages...');
+    const reducedState = {
+      ...conversationState,
+      recentMessages: conversationState.recentMessages.slice(-3),
+    };
+    result = await trimChunksByTokenBudget(chunks, useCase, reducedState);
+
+    if (result.budgetStatus.minTokensFit) {
+      console.log('[Adaptive RAG] Level 2: Reduced to 3 messages - chunks fit ✓');
+      return { ...result, reducedRecentMessages: 3 };
+    }
+  }
+
+  // Level 3: Reduce to 1 recent message
+  if (conversationState?.recentMessages && conversationState.recentMessages.length > 1) {
+    console.log('[Adaptive RAG] Level 3: Reducing to 1 recent message...');
+    const reducedState = {
+      ...conversationState,
+      recentMessages: conversationState.recentMessages.slice(-1),
+    };
+    result = await trimChunksByTokenBudget(chunks, useCase, reducedState);
+
+    if (result.budgetStatus.minTokensFit) {
+      console.log('[Adaptive RAG] Level 3: Reduced to 1 message - chunks fit ✓');
+      return { ...result, reducedRecentMessages: 1 };
+    }
+  }
+
+  // Level 4: Summary only (no recent messages)
+  if (conversationState?.recentMessages && conversationState.recentMessages.length > 0) {
+    console.log('[Adaptive RAG] Level 4: Summary only (no recent messages)...');
+    const reducedState = {
+      ...conversationState,
+      recentMessages: [],
+    };
+    result = await trimChunksByTokenBudget(chunks, useCase, reducedState);
+
+    if (result.budgetStatus.minTokensFit) {
+      console.log('[Adaptive RAG] Level 4: Summary only - chunks fit ✓');
+      return { ...result, reducedRecentMessages: 0 };
+    }
+  }
+
+  // All fallback levels exhausted - return best effort result
+  console.warn('[Adaptive RAG] All fallback levels exhausted - returning best effort result');
+  return result;
 }
 
 /**
