@@ -31,6 +31,53 @@
   cursor: wait;
 }
 
+/* Thought bubble for loading state */
+.image-explain-thought-bubble {
+  position: absolute;
+  bottom: 100%;
+  right: -20px;
+  margin-bottom: 12px;
+  background-color: #1f2937;
+  color: white;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  white-space: nowrap;
+  z-index: 10000;
+  pointer-events: none;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  animation: fadeInBounce 0.3s ease-out;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Triangle pointer at bottom-right (points to lottie's head) */
+.image-explain-thought-bubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  right: 25px;
+  border-width: 6px;
+  border-style: solid;
+  border-color: #1f2937 transparent transparent transparent;
+}
+
+/* Fade in with slight bounce animation */
+@keyframes fadeInBounce {
+  0% {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Explanation Bubble */
 .image-explanation-bubble {
   background: white;

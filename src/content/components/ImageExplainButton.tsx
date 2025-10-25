@@ -68,6 +68,13 @@ export const ImageExplainButton = ({
           loopPurpose={LoopPurpose.QASection}
         />
       )}
+
+      {/* Loading thought bubble */}
+      {isLoading && !hasExplanation && (
+        <span class="image-explain-thought-bubble">
+          Kuma is looking at the image...
+        </span>
+      )}
     </button>
   );
 };
