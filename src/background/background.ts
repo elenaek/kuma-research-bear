@@ -21,8 +21,9 @@ import * as uiHandlers from './handlers/uiHandlers.ts';
 import * as chatHandlers from './handlers/chatHandlers.ts';
 import { executeDetectAndExplainFlow } from './orchestrators/detectAndExplainOrchestrator.ts';
 
-// Context menu ID for opening chatbox
-const CONTEXT_MENU_ID = 'open-chat';
+// Context menu IDs for opening chatbox
+const CONTEXT_MENU_ID = 'open-chat'; // Extension icon context menu
+const CONTEXT_MENU_PAGE_ID = 'chat-with-kuma-page'; // Page context menu
 
 // Handle extension installation
 chrome.runtime.onInstalled.addListener(() => {
@@ -37,15 +38,23 @@ chrome.runtime.onInstalled.addListener(() => {
     },
   });
 
-  // Create context menu for opening chatbox
+  // Create context menu for opening chatbox from extension icon
   chrome.contextMenus.create({
     id: CONTEXT_MENU_ID,
-    title: 'Open Chat',
+    title: 'Chat with Kuma',
     contexts: ['action'],
     enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
   });
 
-  console.log('Context menu created');
+  // Create context menu for opening chatbox from page right-click
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_PAGE_ID,
+    title: 'Chat with Kuma',
+    contexts: ['page'],
+    enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
+  });
+
+  console.log('Context menus created');
 });
 
 /**
@@ -261,7 +270,11 @@ async function updateContextMenuState() {
 
     const hasChunked = await hasChunkedPaper(activeTab.id);
 
+    // Update both context menus
     await chrome.contextMenus.update(CONTEXT_MENU_ID, {
+      enabled: hasChunked,
+    });
+    await chrome.contextMenus.update(CONTEXT_MENU_PAGE_ID, {
       enabled: hasChunked,
     });
   } catch (error) {
@@ -291,7 +304,7 @@ export async function updateContextMenuForPaper(paperUrl: string) {
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === CONTEXT_MENU_ID && tab?.id) {
+  if ((info.menuItemId === CONTEXT_MENU_ID || info.menuItemId === CONTEXT_MENU_PAGE_ID) && tab?.id) {
     try {
       // Send message to content script to toggle chatbox
       await chrome.tabs.sendMessage(tab.id, {
