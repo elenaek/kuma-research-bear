@@ -126,6 +126,19 @@ body {
   }
 }
 
+@keyframes pulse-progress {
+  0%, 100% {
+    width: 60%;
+    margin-left: 0%;
+    opacity: 0.8;
+  }
+  50% {
+    width: 80%;
+    margin-left: 10%;
+    opacity: 1;
+  }
+}
+
 /* ============================================
    Utility Animation Classes
    ============================================ */
@@ -147,6 +160,10 @@ body {
 
 .animate-slide-in-right {
   animation: slideInRight var(--duration-normal) var(--ease-out);
+}
+
+.animate-pulse-progress {
+  animation: pulse-progress 1.5s ease-in-out infinite;
 }
 
 /* Staggered animations for lists */

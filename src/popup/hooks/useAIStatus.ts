@@ -28,11 +28,39 @@ export function useAIStatus(): UseAIStatusReturn {
   const [statusMessage, setStatusMessage] = useState('Checking AI availability...');
   const [isInitializing, setIsInitializing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [pollInterval, setPollInterval] = useState<number | null>(null);
 
   // Check AI status on mount
   useEffect(() => {
     checkAIStatus();
   }, []);
+
+  // Continuous polling when in downloading state
+  useEffect(() => {
+    // Start polling if we're in downloading state and not already polling
+    if (aiStatus === 'downloading' && !pollInterval) {
+      console.log('[useAIStatus] Starting download progress polling...');
+      const interval = window.setInterval(async () => {
+        await checkAIStatus();
+      }, 2000); // Poll every 2 seconds
+
+      setPollInterval(interval);
+    }
+
+    // Stop polling if no longer downloading
+    if (aiStatus !== 'downloading' && pollInterval) {
+      console.log('[useAIStatus] Stopping download progress polling');
+      clearInterval(pollInterval);
+      setPollInterval(null);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [aiStatus, pollInterval]);
 
   async function checkAIStatus() {
     try {
@@ -65,25 +93,43 @@ export function useAIStatus(): UseAIStatusReturn {
   }
 
   async function handleInitializeAI() {
+    let localPollInterval: number | null = null;
+
     try {
       setIsInitializing(true);
-      setStatusMessage('Kuma is waking up...');
+      setStatusMessage('Preparing to wake Kuma...');
 
+      // Start aggressive polling during initialization to detect download state
+      console.log('[useAIStatus] Starting aggressive polling during initialization');
+      localPollInterval = window.setInterval(async () => {
+        await checkAIStatus();
+      }, 1000); // Poll every 1 second during active initialization
+
+      // Trigger initialization (this blocks until complete)
       const response = await ChromeService.initializeAI();
 
+      // Clear local polling (global polling will continue if still downloading)
+      if (localPollInterval) {
+        clearInterval(localPollInterval);
+        localPollInterval = null;
+      }
+
+      // Final status check
+      await checkAIStatus();
+
       if (response.success) {
-        setAiStatus('ready');
-        setStatusMessage('Kuma is ready to help you with your research!');
         alert('Kuma is here! You can now use all features.');
       } else {
         alert(`Kuma didn't come. (Failed to initialize AI: ${response.error})`);
-        setStatusMessage(response.error || 'Initialization failed');
       }
     } catch (error) {
       console.error('[useAIStatus] Initialization failed:', error);
       alert(`Kuma didn't come. (Failed to initialize AI. Please try again.)`);
       setStatusMessage('Kuma didn\'t come. (Initialization failed)');
     } finally {
+      if (localPollInterval) {
+        clearInterval(localPollInterval);
+      }
       setIsInitializing(false);
     }
   }

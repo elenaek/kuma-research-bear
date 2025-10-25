@@ -98,18 +98,34 @@ export function AIStatusCard({
         </button>
       )}
 
-      {/* Downloading Status */}
+      {/* Downloading Status - Shows whether user initiated or reopened during download */}
       {aiStatus === 'downloading' && (
-        <div class="mt-3 flex items-center gap-2 text-sm text-gray-600">
-          <Loader size={16} class="animate-spin" />
-          <span>Please wait while Kuma wakes up (AI model downloads)...</span>
+        <div class="mt-3">
+          <div class="flex items-center gap-2 text-sm text-gray-700 mb-2">
+            <Loader size={16} class="animate-spin" />
+            <span class="font-medium">Downloading Gemini Nano model...</span>
+          </div>
+
+          {/* Animated Progress Bar */}
+          <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-blue-500 to-purple-500 animate-pulse-progress"></div>
+          </div>
+
+          <p class="text-xs text-gray-500 mt-2">
+            This may take a few minutes (~1.5-2GB download)
+          </p>
+
+          {/* Info about closing popup */}
+          <p class="text-xs text-gray-400 mt-1 italic">
+            You can close this popup - download continues in background
+          </p>
         </div>
       )}
 
       {/* Error/Crashed Status */}
       {aiStatus === 'error' && aiAvailability === 'unavailable' && (
         <div class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs">
-          <p class="font-semibold text-yellow-800 mb-2">Kuma full asleep again. (AI Model Crashed)</p>
+          <p class="font-semibold text-yellow-800 mb-2">Kuma fell asleep again. (AI Model Crashed)</p>
 
           {/* Try Reset First */}
           <button
