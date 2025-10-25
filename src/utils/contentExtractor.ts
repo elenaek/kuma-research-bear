@@ -351,3 +351,70 @@ export function truncateToTokens(text: string, maxTokens: number): string {
 
   return truncated + '...';
 }
+
+/**
+ * Extract and chunk research paper with intelligent semantic splitting
+ * Uses paper detection, section extraction, and adaptive chunking
+ * Returns null if page is not detected as a research paper
+ */
+export async function extractResearchPaper(paperId: string): Promise<{
+  success: boolean;
+  isResearchPaper: boolean;
+  reason?: string;
+  chunks?: import('../types/index.ts').ContentChunk[];
+}> {
+  try {
+    console.log('[ContentExtractor] Starting research paper extraction...');
+
+    // Step 1: Detect if this is a research paper
+    const { detectResearchPaper } = await import('./paperDetection.ts');
+    const detectionResult = await detectResearchPaper();
+
+    console.log(`[ContentExtractor] Detection result:`, detectionResult);
+
+    // If not a research paper, return early
+    if (!detectionResult.isResearchPaper) {
+      return {
+        success: false,
+        isResearchPaper: false,
+        reason: detectionResult.reason,
+      };
+    }
+
+    // Step 2: Extract HTML sections using LangChain
+    const { extractHTMLSections } = await import('./researchPaperSplitter.ts');
+    const sections = await extractHTMLSections();
+
+    if (sections.length === 0) {
+      console.warn('[ContentExtractor] No sections extracted, falling back to basic extraction');
+      return {
+        success: false,
+        isResearchPaper: true,
+        reason: 'No sections found - page structure not suitable for semantic splitting',
+      };
+    }
+
+    console.log(`[ContentExtractor] Extracted ${sections.length} sections`);
+
+    // Step 3: Chunk sections adaptively based on inputQuota
+    const { chunkSections } = await import('./adaptiveChunker.ts');
+    const { chunks, stats } = await chunkSections(sections, paperId);
+
+    console.log(`[ContentExtractor] ✓ Created ${chunks.length} adaptive chunks`);
+
+    return {
+      success: true,
+      isResearchPaper: true,
+      reason: `Successfully extracted and chunked research paper (${sections.length} sections, ${chunks.length} chunks)`,
+      chunks,
+      averageChunkSize: stats.averageChunkSize, // Include for storing in paper metadata
+    };
+  } catch (error) {
+    console.error('[ContentExtractor] Error extracting research paper:', error);
+    return {
+      success: false,
+      isResearchPaper: false,
+      reason: `Extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    };
+  }
+}

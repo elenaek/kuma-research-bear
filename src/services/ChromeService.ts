@@ -126,15 +126,22 @@ export interface StorePaperResponse {
 }
 
 /**
- * Store a paper in IndexedDB with full text
+ * Store a paper in IndexedDB with full text or pre-chunked data
  */
-export async function storePaperInDB(paper: any, fullText?: string): Promise<StorePaperResponse> {
+export async function storePaperInDB(
+  paper: any,
+  fullText?: string,
+  preChunkedData?: {
+    chunks: import('../types/index.ts').ContentChunk[];
+    metadata: { averageChunkSize?: number };
+  }
+): Promise<StorePaperResponse> {
   console.log('[ChromeService] Storing paper in IndexedDB:', paper.title);
 
   try {
     const response = await chrome.runtime.sendMessage({
       type: MessageType.STORE_PAPER_IN_DB,
-      payload: { paper, fullText },
+      payload: { paper, fullText, preChunkedData },
     });
 
     if (response.success) {

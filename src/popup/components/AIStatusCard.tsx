@@ -153,7 +153,6 @@ export function AIStatusCard({
             <li>Restart Chrome completely</li>
             <li>Reload this extension</li>
           </ol>
-          <p class="mt-2 text-yellow-600">Note: Kuma still works using basic detection (arXiv, PubMed, etc.)</p>
         </div>
       )}
     </div>

@@ -23,6 +23,7 @@ import {
 import { JSONSchema } from '../utils/typeToSchema.ts';
 import { getSchemaForLanguage } from '../schemas/analysisSchemas.multilang.ts';
 import { getOutputLanguage } from './settingsService.ts';
+import { getOptimalRAGChunkCount } from './adaptiveRAGService.ts';
 
 /**
  * Utility: Sleep for a specified duration
@@ -542,6 +543,62 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
     } catch (error) {
       console.error('Error creating AI session:', error);
       return false;
+    }
+  }
+
+  /**
+   * Validate prompt size using Chrome AI's measureInputUsage() API
+   * Returns actual token usage for a prompt before sending
+   *
+   * @param session - AI session to measure against
+   * @param prompt - The prompt string to measure
+   * @returns Object with validation result: { fits: boolean, actualUsage: number, quota: number, available: number }
+   */
+  async validatePromptSize(
+    session: AILanguageModelSession,
+    prompt: string
+  ): Promise<{
+    fits: boolean;
+    actualUsage: number;
+    quota: number;
+    available: number;
+    error?: string;
+  }> {
+    try {
+      // Use Chrome AI's measureInputUsage() to get actual token count
+      const actualUsage = await session.measureInputUsage(prompt);
+      const quota = session.inputQuota ?? 0;
+
+      // Calculate available space (quota - what's already in session)
+      const currentUsage = session.inputUsage ?? 0;
+      const available = quota - currentUsage;
+
+      const fits = actualUsage <= available;
+
+      console.log(`[Prompt Validation] Actual usage: ${actualUsage}, Available: ${available}/${quota}, Fits: ${fits}`);
+
+      return {
+        fits,
+        actualUsage,
+        quota,
+        available
+      };
+    } catch (error) {
+      console.error('[Prompt Validation] Error measuring input usage:', error);
+
+      // Fallback: estimate if measureInputUsage() fails
+      const estimatedUsage = Math.ceil(prompt.length / 4);
+      const quota = session.inputQuota ?? 0;
+      const currentUsage = session.inputUsage ?? 0;
+      const available = quota - currentUsage;
+
+      return {
+        fits: estimatedUsage <= available,
+        actualUsage: estimatedUsage,
+        quota,
+        available,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
     }
   }
 
@@ -1242,9 +1299,10 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
       // Import RAG function (semantic search with keyword fallback)
       const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
 
-      // Find relevant chunks for methodology using semantic search
+      // Find relevant chunks for methodology using semantic search (adaptive limit)
       const topics = ['methodology', 'methods', 'design', 'procedure', 'participants', 'sample', 'statistical'];
-      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, 3);
+      const chunkLimit = await getOptimalRAGChunkCount('analysis');
+      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, chunkLimit);
 
       // Combine hierarchical summary + relevant chunks
       const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
@@ -1323,9 +1381,10 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
       // Import RAG function (semantic search with keyword fallback)
       const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
 
-      // Find relevant chunks for confounders/biases using semantic search
+      // Find relevant chunks for confounders/biases using semantic search (adaptive limit)
       const topics = ['bias', 'confound', 'limitation', 'control', 'random', 'blinding', 'selection'];
-      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, 3);
+      const chunkLimit = await getOptimalRAGChunkCount('analysis');
+      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, chunkLimit);
 
       // Combine hierarchical summary + relevant chunks
       const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
@@ -1400,9 +1459,10 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
       // Import RAG function (semantic search with keyword fallback)
       const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
 
-      // Find relevant chunks for implications using semantic search
+      // Find relevant chunks for implications using semantic search (adaptive limit)
       const topics = ['implication', 'application', 'significance', 'discussion', 'conclusion', 'impact', 'future'];
-      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, 3);
+      const chunkLimit = await getOptimalRAGChunkCount('analysis');
+      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, chunkLimit);
 
       // Combine hierarchical summary + relevant chunks
       const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
@@ -1477,9 +1537,10 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
       // Import RAG function (semantic search with keyword fallback)
       const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
 
-      // Find relevant chunks for limitations using semantic search
+      // Find relevant chunks for limitations using semantic search (adaptive limit)
       const topics = ['limitation', 'constraint', 'weakness', 'generalizability', 'caveat', 'shortcoming'];
-      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, 3);
+      const chunkLimit = await getOptimalRAGChunkCount('analysis');
+      const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, chunkLimit);
 
       // Combine hierarchical summary + relevant chunks
       const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
@@ -1559,7 +1620,14 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
    */
   async answerQuestion(
     question: string,
-    contextChunks: Array<{ content: string; section?: string }>,
+    contextChunks: Array<{
+      content: string;
+      section?: string;
+      index: number;
+      parentSection?: string;
+      paragraphIndex?: number;
+      sentenceGroupIndex?: number;
+    }>,
     contextId: string = 'qa'
   ): Promise<QuestionAnswer> {
     console.log('Answering question using RAG...');
@@ -1575,13 +1643,32 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
     };
     const languageName = languageNames[outputLanguage] || 'English';
 
-    // Combine chunks into context with section markers
-    const context = contextChunks
-      .map((chunk, idx) => {
-        const sectionLabel = chunk.section ? `[${chunk.section}]` : `[Section ${idx + 1}]`;
-        return `${sectionLabel}\n${chunk.content}`;
-      })
-      .join('\n\n---\n\n');
+    // Validate and trim chunks if needed (with retry logic)
+    let finalContextChunks = contextChunks;
+    const MAX_RETRIES = 3;
+
+    const buildContext = (chunks: typeof contextChunks) => {
+      return chunks
+        .map((chunk) => {
+          // Build hierarchical citation path
+          const hierarchy = chunk.parentSection
+            ? `${chunk.parentSection} > ${chunk.section || 'Unknown'}`
+            : (chunk.section || 'Unknown section');
+
+          // Add paragraph/sentence info if available (natural boundaries)
+          let citation = `[${hierarchy}`;
+          if (chunk.paragraphIndex !== undefined) {
+            citation += ` > Para ${chunk.paragraphIndex + 1}`;
+            if (chunk.sentenceGroupIndex !== undefined) {
+              citation += ` > Sentences`;
+            }
+          }
+          citation += `]`;
+
+          return `${citation}\n${chunk.content}`;
+        })
+        .join('\n\n---\n\n');
+    };
 
     const systemPrompt = `You are Kuma, a helpful research assistant. Answer questions about research papers based ONLY on the provided context.
 Be accurate, cite which sections you used, and if the context doesn't contain enough information to answer, say so clearly.
@@ -1593,6 +1680,61 @@ When mathematical expressions, equations, or formulas are needed:
 - Ensure proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)
 IMPORTANT: Respond in ${languageName}. Your entire answer must be in ${languageName}.`;
 
+    // Include language in context ID to ensure separate sessions per language
+    const languageContextId = `${contextId}-${outputLanguage}`;
+
+    // Create session first for validation
+    const session = await this.getOrCreateSession(languageContextId, {
+      systemPrompt,
+      expectedInputs: [{ type: "text", languages: ["en"] }],
+      expectedOutputs: [{ type: "text", languages: [outputLanguage] }]
+    });
+
+    // Validate prompt size with retry logic
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const context = buildContext(finalContextChunks);
+      const input = `Based on the following excerpts from a research paper, answer this question:
+
+Question: ${question}
+
+Paper Context:
+${context}
+
+Provide a clear, accurate answer based on the information above.
+Use markdown formatting for better readability:
+- Use **bold** for key findings or important concepts
+- Use bullet points or numbered lists for multiple items
+- Use *italic* for emphasis
+- Mention which sections you used in your answer`;
+
+      // Validate prompt size using Chrome AI's measureInputUsage()
+      const validation = await this.validatePromptSize(session, input);
+
+      if (validation.fits) {
+        console.log(`[Q&A] ✓ Prompt validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
+        break;
+      }
+
+      // Prompt too large - try trimming more chunks
+      console.warn(`[Q&A] Prompt too large (${validation.actualUsage} > ${validation.available}), trimming chunks... (attempt ${attempt}/${MAX_RETRIES})`);
+
+      if (attempt >= MAX_RETRIES) {
+        // Last attempt - use minimal chunks (just 1-2 most relevant)
+        console.error(`[Q&A] Max retries reached, using minimal chunks`);
+        finalContextChunks = contextChunks.slice(0, Math.min(2, contextChunks.length));
+      } else {
+        // Remove last 2 chunks and retry (but keep at least 1 chunk)
+        const newLength = Math.max(1, finalContextChunks.length - 2);
+        finalContextChunks = finalContextChunks.slice(0, newLength);
+      }
+
+      if (finalContextChunks.length === 0) {
+        throw new Error('Context too large even after aggressive trimming. Try a shorter question or use a model with larger context.');
+      }
+    }
+
+    // Build final context and input with validated chunks
+    const context = buildContext(finalContextChunks);
     const input = `Based on the following excerpts from a research paper, answer this question:
 
 Question: ${question}
@@ -1608,8 +1750,6 @@ Use markdown formatting for better readability:
 - Mention which sections you used in your answer`;
 
     try {
-      // Include language in context ID to ensure separate sessions per language
-      const languageContextId = `${contextId}-${outputLanguage}`;
       const answer = await this.prompt(
         input,
         systemPrompt,
@@ -1757,12 +1897,16 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
 
       let relevantChunks = [];
 
+      // Get adaptive chunk limit based on paper's chunk size
+      const { getAdaptiveChunkLimit, trimChunksByTokenBudget } = await import('./adaptiveRAGService.ts');
+      const adaptiveLimit = await getAdaptiveChunkLimit(paperId, 'definition');
+
       // If useKeywordOnly is true, skip semantic search and go straight to keyword search
       // This is faster for exact term matching (e.g., when we already know the exact terms)
       if (useKeywordOnly) {
         console.log('[Definition] Using keyword-only search for:', keyword);
         const { getRelevantChunks } = await import('./dbService.ts');
-        relevantChunks = await getRelevantChunks(paperId, keyword, 5);
+        relevantChunks = await getRelevantChunks(paperId, keyword, adaptiveLimit);
       } else {
         // Try semantic search via offscreen document if embeddings are available
         const hasEmbeddings = allChunks.some(chunk => chunk.embedding !== undefined);
@@ -1773,7 +1917,7 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
 
             // Use offscreen service for semantic search (isolates embedding code from background)
             const { searchSemanticOffscreen } = await import('../background/services/offscreenService.ts');
-            const searchResult = await searchSemanticOffscreen(paperId, keyword, 5);
+            const searchResult = await searchSemanticOffscreen(paperId, keyword, adaptiveLimit);
 
             if (searchResult.success && searchResult.chunkIds && searchResult.chunkIds.length > 0) {
               // Map chunk IDs back to chunks
@@ -1794,18 +1938,52 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
         if (relevantChunks.length === 0) {
           console.log('[Definition] Using keyword search for:', keyword);
           const { getRelevantChunks } = await import('./dbService.ts');
-          relevantChunks = await getRelevantChunks(paperId, keyword, 5);
+          relevantChunks = await getRelevantChunks(paperId, keyword, adaptiveLimit);
         }
       }
 
-      if (relevantChunks.length === 0) {
+      // Trim chunks to fit within token budget
+      const trimmedChunks = await trimChunksByTokenBudget(relevantChunks, 'definition');
+
+      if (trimmedChunks.length === 0) {
         console.warn('[Definition] No relevant chunks found for keyword:', keyword);
         return null;
       }
 
-      // Step 2: Prepare context from relevant chunks
-      const contextText = relevantChunks
-        .map((chunk, i) => `[Section ${i + 1}]\n${chunk.content}`)
+      // Step 2: Prepare context from relevant chunks with position and hierarchy
+      // Format context from chunks with position and hierarchy
+      const contextChunks = trimmedChunks.map(chunk => ({
+        content: chunk.content,
+        section: chunk.section || 'Unknown section',
+        index: chunk.index,
+        parentSection: chunk.parentSection,
+        paragraphIndex: chunk.paragraphIndex,
+        sentenceGroupIndex: chunk.sentenceGroupIndex,
+      }));
+
+      // Sort chunks by document order (index) for better context
+      contextChunks.sort((a, b) => a.index - b.index);
+
+      // Build context string with position and natural boundary hierarchy
+      const contextText = contextChunks
+        .map((chunk) => {
+          // Build hierarchical citation path
+          const hierarchy = chunk.parentSection
+            ? `${chunk.parentSection} > ${chunk.section}`
+            : chunk.section;
+
+          // Add paragraph/sentence info if available (natural boundaries)
+          let citation = `[${hierarchy}`;
+          if (chunk.paragraphIndex !== undefined) {
+            citation += ` > Para ${chunk.paragraphIndex + 1}`;
+            if (chunk.sentenceGroupIndex !== undefined) {
+              citation += ` > Sentences`;
+            }
+          }
+          citation += `]`;
+
+          return `${citation}\n${chunk.content}`;
+        })
         .join('\n\n');
 
       // Get user's preferred output language
@@ -1928,6 +2106,10 @@ For mathematical expressions in definitions, contexts, or analogies:
 
       console.log('[DefinitionBatch] Gathering RAG context for all keywords...');
 
+      // Get adaptive chunk limit (shared across all keywords in this batch)
+      const { getAdaptiveChunkLimit, trimChunksByTokenBudget } = await import('./adaptiveRAGService.ts');
+      const adaptiveLimit = await getAdaptiveChunkLimit(paperId, 'definition');
+
       const keywordContexts = await Promise.all(
         keywords.map(async (keyword) => {
           let relevantChunks = [];
@@ -1935,7 +2117,7 @@ For mathematical expressions in definitions, contexts, or analogies:
           // Use keyword-only search if specified
           if (useKeywordOnly) {
             const { getRelevantChunks } = await import('./dbService.ts');
-            relevantChunks = await getRelevantChunks(paperId, keyword, 2); // Reduced to 2 chunks per term to fit in context
+            relevantChunks = await getRelevantChunks(paperId, keyword, adaptiveLimit);
           } else {
             // Try semantic search
             const hasEmbeddings = allChunks.some(chunk => chunk.embedding !== undefined);
@@ -1943,7 +2125,7 @@ For mathematical expressions in definitions, contexts, or analogies:
             if (hasEmbeddings) {
               try {
                 const { searchSemanticOffscreen } = await import('../background/services/offscreenService.ts');
-                const searchResult = await searchSemanticOffscreen(paperId, keyword, 2);
+                const searchResult = await searchSemanticOffscreen(paperId, keyword, adaptiveLimit);
 
                 if (searchResult.success && searchResult.chunkIds && searchResult.chunkIds.length > 0) {
                   relevantChunks = searchResult.chunkIds
@@ -1958,12 +2140,15 @@ For mathematical expressions in definitions, contexts, or analogies:
             // Fallback to keyword search
             if (relevantChunks.length === 0) {
               const { getRelevantChunks } = await import('./dbService.ts');
-              relevantChunks = await getRelevantChunks(paperId, keyword, 2);
+              relevantChunks = await getRelevantChunks(paperId, keyword, adaptiveLimit);
             }
           }
 
+          // Trim chunks to fit within token budget
+          const trimmedChunks = await trimChunksByTokenBudget(relevantChunks, 'definition');
+
           // Truncate context to avoid token limits (max ~500 chars per term)
-          const contextText = relevantChunks
+          const contextText = trimmedChunks
             .map((chunk, i) => {
               const content = chunk.content;
               // Truncate each chunk to max 250 chars to keep batch size manageable

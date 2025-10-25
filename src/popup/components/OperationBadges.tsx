@@ -1,4 +1,4 @@
-import { CheckCircle, Clock, Loader } from 'lucide-preact';
+import { CheckCircle, Clock, Loader, AlertCircle } from 'lucide-preact';
 
 interface OperationBadgesProps {
   isDetecting: boolean;
@@ -7,22 +7,26 @@ interface OperationBadgesProps {
   hasChunked: boolean;
   currentChunk: number;
   totalChunks: number;
+  detectionFailed?: boolean;  // NEW: Indicates detection failure
 }
 
 interface OperationBadgeProps {
   name: string;
   completed: boolean;
   active?: boolean;
+  failed?: boolean;  // NEW: Indicates operation failure
 }
 
-function OperationBadge({ name, completed, active }: OperationBadgeProps) {
+function OperationBadge({ name, completed, active, failed }: OperationBadgeProps) {
   const getBadgeStyle = () => {
+    if (failed) return 'bg-amber-50 text-amber-700 border border-amber-200';
     if (completed) return 'bg-green-50 text-green-700 border border-green-200';
     if (active) return 'bg-yellow-50 text-yellow-700 border border-yellow-200';
     return 'bg-gray-50 text-gray-500 border border-gray-200';
   };
 
   const getIcon = () => {
+    if (failed) return <AlertCircle size={12} class="text-amber-600" />;
     if (completed) return <CheckCircle size={12} class="text-green-600" />;
     if (active) return <Loader size={12} class="text-yellow-600 animate-spin" />;
     return <Clock size={12} class="text-gray-400" />;
@@ -47,6 +51,7 @@ export function OperationBadges({
   hasChunked,
   currentChunk,
   totalChunks,
+  detectionFailed = false,
 }: OperationBadgesProps) {
   // Determine chunking badge name with progress
   const getChunkingBadgeName = () => {
@@ -58,8 +63,17 @@ export function OperationBadges({
 
   return (
     <div class="grid grid-cols-2 gap-2 mt-3">
-      <OperationBadge name="Detection" completed={hasDetected} active={isDetecting} />
-      <OperationBadge name={getChunkingBadgeName()} completed={hasChunked} active={isChunking} />
+      <OperationBadge
+        name="Detection"
+        completed={hasDetected && !detectionFailed}
+        active={isDetecting}
+        failed={detectionFailed}
+      />
+      <OperationBadge
+        name={getChunkingBadgeName()}
+        completed={hasChunked}
+        active={isChunking}
+      />
     </div>
   );
 }

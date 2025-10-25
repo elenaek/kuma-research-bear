@@ -113,6 +113,9 @@ export interface PaperMetadata {
   extractionMethod?: 'manual' | 'schema.org' | 'site-specific' | 'ai';
   extractionTimestamp?: number;
   confidence?: number; // 0-1 confidence score for AI extractions
+
+  // Chunk statistics (for adaptive RAG)
+  averageChunkSize?: number; // Average chunk size in characters
 }
 
 export interface PaperSection {
@@ -295,6 +298,9 @@ export interface StoredPaper extends ResearchPaper {
   summary?: SummaryResult; // Stored summary for this paper
   analysis?: PaperAnalysisResult; // Stored analysis for this paper
   glossary?: GlossaryResult; // Stored glossary for this paper
+  metadata?: {
+    averageChunkSize?: number; // Average chunk size in chars (for adaptive RAG)
+  };
 }
 
 export interface ContentChunk {
@@ -302,7 +308,14 @@ export interface ContentChunk {
   paperId: string;
   content: string;
   index: number; // Position in paper
-  section?: string; // Section heading if available
+  section?: string; // Section heading if available (exact original text for citations)
+  sectionLevel?: number; // Heading level (1=h1, 2=h2, 3=h3) for hierarchy
+  parentSection?: string; // Parent section heading if nested (exact original text)
+  sectionIndex?: number; // Chunk position within this section (0, 1, 2...)
+  totalSectionChunks?: number; // Total number of chunks for this section
+  paragraphIndex?: number; // Paragraph number within section (0, 1, 2...) for natural boundary tracking
+  sentenceGroupIndex?: number; // Sentence group number within paragraph (if paragraph was split)
+  isResearchPaper?: boolean; // True if source was detected as research paper
   startChar: number;
   endChar: number;
   tokenCount: number;

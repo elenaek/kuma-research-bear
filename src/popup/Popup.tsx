@@ -186,7 +186,18 @@ export function Popup() {
       const response = await ChromeService.startDetectAndExplain(tab.id);
 
       if (!response.success) {
-        operationState.setDetectionStatus(`❌ ${response.error || 'Detection failed'}`);
+        // Check if failure was due to paper detection
+        const isDetectionFailure = response.error?.includes('research paper') ||
+                                    response.error?.includes('Not a research paper') ||
+                                    response.error?.includes('detection failed');
+
+        if (isDetectionFailure) {
+          operationState.setDetectionFailed(true);
+          operationState.setDetectionStatus(`⚠ ${response.error || 'Not a research paper'}`);
+        } else {
+          operationState.setDetectionStatus(`❌ ${response.error || 'Detection failed'}`);
+        }
+
         setTimeout(() => operationState.setDetectionStatus(null), 5000);
         operationState.setIsDetecting(false);
       }
@@ -297,7 +308,7 @@ export function Popup() {
         />
 
         {/* Show operation badges early when operations are active but no paper yet */}
-        {!paperStatus.paper && (operationState.isDetecting || operationState.isChunking || operationState.hasDetected || operationState.hasChunked) && (
+        {!paperStatus.paper && (operationState.isDetecting || operationState.isChunking || operationState.hasDetected || operationState.hasChunked || operationState.detectionFailed) && (
           <div class="card mb-4 bg-blue-50 border-blue-200">
             <h3 class="text-sm font-semibold text-gray-700 mb-1">Operation Progress</h3>
             <OperationBadges
@@ -307,7 +318,14 @@ export function Popup() {
               hasChunked={operationState.hasChunked}
               currentChunk={operationState.currentChunk}
               totalChunks={operationState.totalChunks}
+              detectionFailed={operationState.detectionFailed}
             />
+            {/* Show detection failure message */}
+            {operationState.detectionFailed && (
+              <div class="mt-2 text-xs text-amber-700">
+                ⚠ No research paper detected on this page. This extension only works with research papers.
+              </div>
+            )}
           </div>
         )}
 

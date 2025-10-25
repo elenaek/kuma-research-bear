@@ -4,6 +4,7 @@ import { getPaperByUrl, getPaperChunks, getRelevantChunks, getRelevantChunksSema
 import * as operationStateService from '../services/operationStateService.ts';
 import * as requestDeduplicationService from '../services/requestDeduplicationService.ts';
 import * as paperStatusService from '../services/paperStatusService.ts';
+import { getOptimalRAGChunkCount } from '../../utils/adaptiveRAGService.ts';
 
 /**
  * AI Message Handlers
@@ -764,24 +765,42 @@ export async function handleAskQuestion(payload: any, tabId?: number): Promise<a
       };
     }
 
-    // Get relevant chunks based on the question (top 5 chunks)
-    // Uses semantic search with automatic fallback to keyword search
-    const relevantChunks = await getRelevantChunksSemantic(storedPaper.id, question, 5);
+    // Get relevant chunks based on the question (adaptive limit based on inputQuota)
+    // Get relevant chunks with adaptive oversampling based on paper's chunk size
+    const { getAdaptiveChunkLimit, trimChunksByTokenBudget } = await import('../../utils/adaptiveRAGService.ts');
+    const adaptiveLimit = await getAdaptiveChunkLimit(storedPaper.id, 'qa');
+    const relevantChunks = await getRelevantChunksSemantic(storedPaper.id, question, adaptiveLimit);
 
-    if (relevantChunks.length === 0) {
+    // Trim chunks to fit within token budget
+    const { chunks: trimmedChunks, budgetStatus } = await trimChunksByTokenBudget(relevantChunks, 'qa');
+
+    // Log warning if minimum chunks don't fit (Q&A doesn't have conversation history to summarize)
+    if (!budgetStatus.minChunksFit) {
+      console.warn(`[AIHandlers] Insufficient space for minimum RAG chunks - budget: ${budgetStatus.usedTokens}/${budgetStatus.availableTokens} tokens`);
+      console.warn('[AIHandlers] Consider using a model with larger context window for better results');
+    }
+
+    if (trimmedChunks.length === 0) {
       return {
         success: false,
         error: 'No relevant content found to answer this question.'
       };
     }
 
-    console.log(`[AIHandlers] Found ${relevantChunks.length} relevant chunks for question`);
+    console.log(`[AIHandlers] Found ${trimmedChunks.length} relevant chunks for question (retrieved ${relevantChunks.length}, trimmed by token budget)`);
 
-    // Format chunks for AI
-    const contextChunks = relevantChunks.map(chunk => ({
+    // Format chunks for AI with position and hierarchy
+    const contextChunks = trimmedChunks.map(chunk => ({
       content: chunk.content,
       section: chunk.section,
+      index: chunk.index,
+      parentSection: chunk.parentSection,
+      paragraphIndex: chunk.paragraphIndex,
+      sentenceGroupIndex: chunk.sentenceGroupIndex,
     }));
+
+    // Sort chunks by document order (index) for better context
+    contextChunks.sort((a, b) => a.index - b.index);
 
     // Use AI to answer the question with context ID
     const qaResult: QuestionAnswer = await aiService.answerQuestion(question, contextChunks, qaContextId);

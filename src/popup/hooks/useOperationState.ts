@@ -26,6 +26,7 @@ interface OperationState {
   hasGlossary?: boolean;
   hasDetected?: boolean;
   hasChunked?: boolean;
+  detectionFailed?: boolean;  // NEW: Indicates if paper detection failed
   completionPercentage?: number;
 }
 
@@ -43,6 +44,7 @@ interface UseOperationStateReturn {
   hasGlossary: boolean;
   hasDetected: boolean;
   hasChunked: boolean;
+  detectionFailed: boolean;  // NEW: Indicates if paper detection failed
   completionPercentage: number;
   currentChunk: number;
   totalChunks: number;
@@ -51,6 +53,7 @@ interface UseOperationStateReturn {
   checkOperationState: (tabId: number, expectedUrl?: string) => Promise<void>;
   setDetectionStatus: (status: string | null) => void;
   setIsDetecting: (value: boolean) => void;
+  setDetectionFailed: (value: boolean) => void;  // NEW: Setter for detectionFailed
   setCompletionStatus: (status: {
     hasDetected: boolean;
     hasChunked: boolean;
@@ -86,6 +89,7 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
   const [hasGlossary, setHasGlossary] = useState(false);
   const [hasDetected, setHasDetected] = useState(false);
   const [hasChunked, setHasChunked] = useState(false);
+  const [detectionFailed, setDetectionFailed] = useState(false);  // NEW: Track detection failure
   const [completionPercentage, setCompletionPercentage] = useState(0);
   const [currentChunk, setCurrentChunk] = useState(0);
   const [totalChunks, setTotalChunks] = useState(0);
@@ -261,6 +265,7 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
     setHasGlossary(false);
     setHasDetected(false);
     setHasChunked(false);
+    setDetectionFailed(false);  // NEW: Reset detection failure
     setCompletionPercentage(0);
     setCurrentChunk(0);
     setTotalChunks(0);
@@ -279,12 +284,14 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
     hasGlossary,
     hasDetected,
     hasChunked,
+    detectionFailed,  // NEW: Detection failure flag
     completionPercentage,
     currentChunk,
     totalChunks,
     checkOperationState,
     setDetectionStatus,
     setIsDetecting,
+    setDetectionFailed,  // NEW: Setter for detection failure
     setCompletionStatus,
     clearState,
   };

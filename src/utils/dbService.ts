@@ -108,7 +108,7 @@ function initDB(): Promise<IDBDatabase> {
 /**
  * Generate unique ID for a paper (using URL hash)
  */
-function generatePaperId(url: string): string {
+export function generatePaperId(url: string): string {
   // Normalize URL before hashing to ensure consistent IDs
   const normalizedUrl = normalizeUrl(url);
 
@@ -129,12 +129,17 @@ export async function storePaper(
   paper: ResearchPaper,
   fullText?: string,
   qaHistory?: any[],
-  onChunkProgress?: (current: number, total: number) => void
+  onChunkProgress?: (current: number, total: number) => void,
+  preChunkedData?: {
+    chunks: ContentChunk[];
+    metadata?: { averageChunkSize?: number };
+  }
 ): Promise<StoredPaper> {
   console.log('[IndexedDB] storePaper called:', {
     title: paper.title,
     url: paper.url,
-    source: paper.source
+    source: paper.source,
+    hasPreChunkedData: !!preChunkedData,
   });
 
   const db = await initDB();
@@ -143,34 +148,51 @@ export async function storePaper(
     const paperId = generatePaperId(paper.url);
     console.log('[IndexedDB] Generated paper ID:', paperId, 'for URL:', paper.url);
 
-    // Extract full text if not provided (only works in content script context)
     let extractedText: string;
-    if (fullText) {
-      extractedText = fullText;
-    } else if (typeof document !== 'undefined') {
-      // We're in a content script context, can extract text
-      const { extractPageText } = await import('./contentExtractor.ts');
-      extractedText = extractPageText().text;
+    let contentChunks: ContentChunk[];
+
+    // If pre-chunked data provided, use it directly
+    if (preChunkedData && preChunkedData.chunks && preChunkedData.chunks.length > 0) {
+      console.log('[IndexedDB] Using pre-chunked data from research paper extraction');
+      contentChunks = preChunkedData.chunks;
+
+      // Reconstruct full text from chunks for hierarchical summary
+      extractedText = contentChunks.map(c => c.content).join('\n\n');
+
+      console.log(`[IndexedDB] Pre-chunked: ${contentChunks.length} chunks, avgSize: ${preChunkedData.metadata?.averageChunkSize || 'unknown'} chars`);
     } else {
-      // We're in a background script context without fullText provided
-      throw new Error('fullText must be provided when storing paper from background script context');
+      console.log('[IndexedDB] No pre-chunked data, falling back to simple chunking');
+
+      // Extract full text if not provided (only works in content script context)
+      if (fullText) {
+        extractedText = fullText;
+      } else if (typeof document !== 'undefined') {
+        // We're in a content script context, can extract text
+        const { extractPageText } = await import('./contentExtractor.ts');
+        extractedText = extractPageText().text;
+      } else {
+        // We're in a background script context without fullText provided
+        throw new Error('fullText must be provided when storing paper from background script context');
+      }
+
+      // Create chunks with metadata using contentExtractor (5000 chars with 1000 overlap for speed and context)
+      const { chunkContent } = await import('./contentExtractor.ts');
+      const extractorChunks = chunkContent(extractedText, 5000, 1000);
+
+      // Transform to storage format with richer metadata
+      contentChunks = extractorChunks.map((chunk, index) => ({
+        id: `chunk_${paperId}_${index}`,
+        paperId,
+        content: chunk.content,
+        index,
+        section: chunk.heading,
+        startChar: chunk.startIndex,
+        endChar: chunk.endIndex,
+        tokenCount: Math.ceil(chunk.content.length / 4),
+      }));
+
+      console.log(`[IndexedDB] Simple chunking: ${contentChunks.length} chunks created`);
     }
-
-    // Create chunks with metadata using contentExtractor (5000 chars with 1000 overlap for speed and context)
-    const { chunkContent } = await import('./contentExtractor.ts');
-    const extractorChunks = chunkContent(extractedText, 5000, 1000);
-
-    // Transform to storage format with richer metadata
-    const contentChunks: ContentChunk[] = extractorChunks.map((chunk, index) => ({
-      id: `chunk_${paperId}_${index}`,
-      paperId,
-      content: chunk.content,
-      index,
-      section: chunk.heading,
-      startChar: chunk.startIndex,
-      endChar: chunk.endIndex,
-      tokenCount: Math.ceil(chunk.content.length / 4),
-    }));
 
     // Create stored paper object (hierarchical summary will be added after chunk storage)
     const storedPaper: StoredPaper = {
@@ -183,6 +205,9 @@ export async function storePaper(
       lastAccessedAt: Date.now(),
       hierarchicalSummary: undefined,  // Will be generated after chunks are stored
       qaHistory: qaHistory || [],
+      metadata: preChunkedData?.metadata ? {
+        averageChunkSize: preChunkedData.metadata.averageChunkSize,
+      } : undefined,
     };
 
     // Store paper

@@ -1,6 +1,7 @@
 import { MessageType, ChatMessage, ConversationState } from '../../types/index.ts';
 import { getPaperByUrl, getRelevantChunksSemantic, updatePaper } from '../../utils/dbService.ts';
 import { aiService } from '../../utils/aiService.ts';
+import { getOptimalRAGChunkCount } from '../../utils/adaptiveRAGService.ts';
 
 /**
  * Chat Message Handlers
@@ -192,29 +193,94 @@ async function processAndStreamResponse(
       };
     }
 
-    // Get relevant chunks based on the message (top 4 chunks)
-    const relevantChunks = await getRelevantChunksSemantic(storedPaper.id, message, 4);
+    // Get relevant chunks with adaptive oversampling based on paper's chunk size
+    const { getAdaptiveChunkLimit, trimChunksByTokenBudget } = await import('../../utils/adaptiveRAGService.ts');
+    const adaptiveLimit = await getAdaptiveChunkLimit(storedPaper.id, 'chat');
+    const relevantChunks = await getRelevantChunksSemantic(storedPaper.id, message, adaptiveLimit);
 
-    if (relevantChunks.length === 0) {
+    // Trim chunks to fit within token budget
+    const { chunks: trimmedChunks, budgetStatus } = await trimChunksByTokenBudget(relevantChunks, 'chat');
+
+    // If minimum chunks don't fit, try to free up space by summarizing conversation history
+    if (!budgetStatus.minChunksFit) {
+      const chatHistory = storedPaper.chatHistory || [];
+
+      if (chatHistory.length > 0) {
+        console.log('[ChatHandlers] Insufficient space for RAG chunks, triggering proactive summarization...');
+        console.log(`[ChatHandlers] Budget: ${budgetStatus.usedTokens}/${budgetStatus.availableTokens} tokens, minChunksFit=${budgetStatus.minChunksFit}`);
+
+        // Perform summarization to free up context space
+        const conversationState = storedPaper.conversationState || {
+          summary: null,
+          recentMessages: [],
+          lastSummarizedIndex: -1,
+          summaryCount: 0,
+        };
+
+        const updatedConversationState = await performPreSummarization(
+          chatHistory,
+          conversationState,
+          storedPaper.title
+        );
+
+        // Update stored paper with new conversation state
+        await chrome.storage.local.set({
+          [`papers.${storedPaper.id}`]: {
+            ...storedPaper,
+            conversationState: updatedConversationState,
+          },
+        });
+
+        console.log('[ChatHandlers] ✓ Proactive summarization complete, proceeding with chat...');
+      } else {
+        console.warn('[ChatHandlers] Minimum chunks do not fit and no conversation history to summarize');
+      }
+    }
+
+    if (trimmedChunks.length === 0) {
       return {
         success: false,
         error: 'No relevant content found to answer this question.',
       };
     }
 
-    console.log(`[ChatHandlers] Found ${relevantChunks.length} relevant chunks for chat message`);
+    console.log(`[ChatHandlers] Found ${trimmedChunks.length} relevant chunks for chat message (retrieved ${relevantChunks.length}, trimmed by token budget)`);
 
-    // Format context from chunks
-    const contextChunks = relevantChunks.map(chunk => ({
+    // Format context from chunks with position and hierarchy
+    const contextChunks = trimmedChunks.map(chunk => ({
       content: chunk.content,
       section: chunk.section || 'Unknown section',
+      index: chunk.index,
+      parentSection: chunk.parentSection,
+      paragraphIndex: chunk.paragraphIndex,
+      sentenceGroupIndex: chunk.sentenceGroupIndex,
     }));
+
+    // Sort chunks by document order (index) for better context
+    contextChunks.sort((a, b) => a.index - b.index);
 
     const sources = Array.from(new Set(contextChunks.map(c => c.section)));
 
-    // Build context string
+    // Build context string with position and natural boundary hierarchy
     const contextString = contextChunks
-      .map((chunk, idx) => `[Section: ${chunk.section}]\n${chunk.content}`)
+      .map((chunk) => {
+        // Build hierarchical citation path
+        const hierarchy = chunk.parentSection
+          ? `${chunk.parentSection} > ${chunk.section}`
+          : chunk.section;
+
+        // Add paragraph/sentence info if available (natural boundaries)
+        let citation = `[${hierarchy}`;
+        if (chunk.paragraphIndex !== undefined) {
+          citation += ` > Para ${chunk.paragraphIndex + 1}`;
+          if (chunk.sentenceGroupIndex !== undefined) {
+            citation += ` > Sentences`;
+          }
+        }
+        citation += `]`;
+
+        return `${citation}\n${chunk.content}`;
+      })
       .join('\n\n---\n\n');
 
     // Context ID for this paper's chat session
@@ -258,8 +324,61 @@ Paper title: ${storedPaper.title}`;
     // Check if we need to create a new session with conversation history
     let session = aiService['sessions'].get(contextId);
 
-    if (!session && chatHistory.length > 0) {
-      // Perform pre-summarization check to avoid quota errors
+    // If session exists, check if it needs summarization based on actual usage
+    if (session) {
+      const currentUsage = session.inputUsage ?? 0;
+      const quota = session.inputQuota ?? 0;
+      const usagePercentage = quota > 0 ? (currentUsage / quota) * 100 : 0;
+
+      console.log(`[ChatHandlers] Existing session usage: ${currentUsage}/${quota} (${usagePercentage.toFixed(1)}%)`);
+
+      // If session usage is high (>70%), summarize and recreate session
+      if (usagePercentage > 70 && chatHistory.length > 0) {
+        console.log('[ChatHandlers] Session usage >70%, triggering summarization and session recreation...');
+
+        // Perform summarization
+        const updatedConversationState = await performPreSummarization(
+          chatHistory,
+          conversationState,
+          storedPaper.title,
+          storedPaper.id
+        );
+
+        // Update stored paper with new conversation state
+        await chrome.storage.local.set({
+          [`papers.${storedPaper.id}`]: {
+            ...storedPaper,
+            conversationState: updatedConversationState,
+          },
+        });
+
+        // Destroy old session
+        aiService.destroySessionForContext(contextId);
+
+        // Create new session with summarized history
+        let systemPromptContent = systemPrompt;
+        if (updatedConversationState.summary) {
+          systemPromptContent += `\n\nPrevious conversation summary: ${updatedConversationState.summary}`;
+        }
+
+        const initialPrompts: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+          { role: 'system', content: systemPromptContent }
+        ];
+
+        // Add recent messages (up to last 6 messages)
+        const recentMessages = chatHistory.slice(-6);
+        for (const msg of recentMessages) {
+          initialPrompts.push({
+            role: msg.role,
+            content: msg.content
+          });
+        }
+
+        session = await aiService.getOrCreateSession(contextId, { initialPrompts });
+        console.log('[ChatHandlers] ✓ Session recreated after summarization');
+      }
+    } else if (chatHistory.length > 0) {
+      // No session but have history - create with pre-summarization
       const updatedConversationState = await performPreSummarization(
         chatHistory,
         conversationState,
@@ -291,7 +410,7 @@ Paper title: ${storedPaper.title}`;
       }
 
       session = await aiService.getOrCreateSession(contextId, { initialPrompts });
-    } else if (!session) {
+    } else {
       // First message - create fresh session
       console.log('[ChatHandlers] Creating fresh session (first message)');
       session = await aiService.getOrCreateSession(contextId, {
@@ -299,10 +418,74 @@ Paper title: ${storedPaper.title}`;
       });
     }
 
+    // Validate prompt size before sending (with retry logic)
+    let finalContextChunks = contextChunks;
+    let finalContextString = contextString;
+    const MAX_RETRIES = 3;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const promptWithContext = `Context from the paper:
+${finalContextString}
+
+User question: ${message}`;
+
+      // Validate prompt size using Chrome AI's measureInputUsage()
+      const validation = await aiService.validatePromptSize(session, promptWithContext);
+
+      if (validation.fits) {
+        console.log(`[ChatHandlers] ✓ Prompt validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
+        break;
+      }
+
+      // Prompt too large - try trimming more chunks
+      console.warn(`[ChatHandlers] Prompt too large (${validation.actualUsage} > ${validation.available}), trimming chunks... (attempt ${attempt}/${MAX_RETRIES})`);
+
+      if (attempt >= MAX_RETRIES) {
+        // Last attempt - use minimal chunks (just 1-2 most relevant)
+        console.error(`[ChatHandlers] Max retries reached, using minimal chunks`);
+        finalContextChunks = contextChunks.slice(0, Math.min(2, contextChunks.length));
+      } else {
+        // Remove last 2 chunks and retry (but keep at least 1 chunk)
+        const newLength = Math.max(1, finalContextChunks.length - 2);
+        finalContextChunks = finalContextChunks.slice(0, newLength);
+      }
+
+      if (finalContextChunks.length === 0) {
+        console.error('[ChatHandlers] No chunks remaining after trimming');
+        return {
+          success: false,
+          error: 'Context too large even after aggressive trimming. Try a shorter question or use a model with larger context.'
+        };
+      }
+
+      // Rebuild context string with fewer chunks
+      finalContextString = finalContextChunks
+        .map((chunk) => {
+          const hierarchy = chunk.parentSection
+            ? `${chunk.parentSection} > ${chunk.section}`
+            : chunk.section;
+
+          let citation = `[${hierarchy}`;
+          if (chunk.paragraphIndex !== undefined) {
+            citation += ` > Para ${chunk.paragraphIndex + 1}`;
+            if (chunk.sentenceGroupIndex !== undefined) {
+              citation += ` > Sentences`;
+            }
+          }
+          citation += `]`;
+
+          return `${citation}\n${chunk.content}`;
+        })
+        .join('\n\n---\n\n');
+    }
+
+    // Update sources based on final context chunks used
+    const finalSources = Array.from(new Set(finalContextChunks.map(c => c.section)));
+
     // Stream the response
     // Include RAG context in the actual prompt (not in initialPrompts) to save quota
     const promptWithContext = `Context from the paper:
-${contextString}
+${finalContextString}
 
 User question: ${message}`;
 
@@ -319,7 +502,7 @@ User question: ${message}`;
 
     // Send end signal immediately after streaming completes
     // This ensures user gets their response even if post-processing fails
-    await sendChatEnd(tabId, fullResponse, sources);
+    await sendChatEnd(tabId, fullResponse, finalSources);
 
     // Post-stream processing: token tracking and summarization
     // Wrapped in try-catch to prevent failures from affecting the successful stream
@@ -338,7 +521,7 @@ User question: ${message}`;
           const newChatHistory: ChatMessage[] = [
             ...chatHistory,
             { role: 'user', content: message, timestamp: Date.now() },
-            { role: 'assistant', content: fullResponse, timestamp: Date.now(), sources }
+            { role: 'assistant', content: fullResponse, timestamp: Date.now(), sources: finalSources }
           ];
 
           // Determine which messages to summarize (all except last 6)
@@ -621,27 +804,92 @@ async function processAndStreamImageChatResponse(
       return;
     }
 
-    // Get relevant chunks (REDUCED: 2 instead of 4 to make room for image in context)
-    const relevantChunks = await getRelevantChunksSemantic(paperId, message, 2);
+    // Get relevant chunks with adaptive oversampling based on paper's chunk size
+    const { getAdaptiveChunkLimit, trimChunksByTokenBudget } = await import('../../utils/adaptiveRAGService.ts');
+    const adaptiveLimit = await getAdaptiveChunkLimit(paperId, 'chat');
+    const relevantChunks = await getRelevantChunksSemantic(paperId, message, adaptiveLimit);
 
-    if (relevantChunks.length === 0) {
+    // Trim chunks to fit within token budget
+    const { chunks: trimmedChunks, budgetStatus } = await trimChunksByTokenBudget(relevantChunks, 'chat');
+
+    // If minimum chunks don't fit, try to free up space by summarizing conversation history
+    if (!budgetStatus.minChunksFit) {
+      const chatHistory = paper.chatHistory || [];
+
+      if (chatHistory.length > 0) {
+        console.log('[ImageChatHandlers] Insufficient space for RAG chunks, triggering proactive summarization...');
+        console.log(`[ImageChatHandlers] Budget: ${budgetStatus.usedTokens}/${budgetStatus.availableTokens} tokens, minChunksFit=${budgetStatus.minChunksFit}`);
+
+        // Perform summarization to free up context space
+        const conversationState = paper.conversationState || {
+          summary: null,
+          recentMessages: [],
+          lastSummarizedIndex: -1,
+          summaryCount: 0,
+        };
+
+        const updatedConversationState = await performPreSummarization(
+          chatHistory,
+          conversationState,
+          paper.title
+        );
+
+        // Update stored paper with new conversation state
+        await chrome.storage.local.set({
+          [`papers.${paperId}`]: {
+            ...paper,
+            conversationState: updatedConversationState,
+          },
+        });
+
+        console.log('[ImageChatHandlers] ✓ Proactive summarization complete, proceeding with chat...');
+      } else {
+        console.warn('[ImageChatHandlers] Minimum chunks do not fit and no conversation history to summarize');
+      }
+    }
+
+    if (trimmedChunks.length === 0) {
       await sendImageChatEnd(tabId, 'No relevant content found to answer this question.', []);
       return;
     }
 
-    console.log(`[ImageChatHandlers] Found ${relevantChunks.length} relevant chunks`);
+    console.log(`[ImageChatHandlers] Found ${trimmedChunks.length} relevant chunks (retrieved ${relevantChunks.length}, trimmed by token budget)`);
 
-    // Format context from chunks
-    const contextChunks = relevantChunks.map(chunk => ({
+    // Format context from chunks with position and hierarchy
+    const contextChunks = trimmedChunks.map(chunk => ({
       content: chunk.content,
       section: chunk.section || 'Unknown section',
+      index: chunk.index,
+      parentSection: chunk.parentSection,
+      paragraphIndex: chunk.paragraphIndex,
+      sentenceGroupIndex: chunk.sentenceGroupIndex,
     }));
+
+    // Sort chunks by document order (index) for better context
+    contextChunks.sort((a, b) => a.index - b.index);
 
     const sources = Array.from(new Set(contextChunks.map(c => c.section)));
 
-    // Build context string
+    // Build context string with position and natural boundary hierarchy
     const contextString = contextChunks
-      .map((chunk, idx) => `[Section: ${chunk.section}]\n${chunk.content}`)
+      .map((chunk) => {
+        // Build hierarchical citation path
+        const hierarchy = chunk.parentSection
+          ? `${chunk.parentSection} > ${chunk.section}`
+          : chunk.section;
+
+        // Add paragraph/sentence info if available (natural boundaries)
+        let citation = `[${hierarchy}`;
+        if (chunk.paragraphIndex !== undefined) {
+          citation += ` > Para ${chunk.paragraphIndex + 1}`;
+          if (chunk.sentenceGroupIndex !== undefined) {
+            citation += ` > Sentences`;
+          }
+        }
+        citation += `]`;
+
+        return `${citation}\n${chunk.content}`;
+      })
       .join('\n\n---\n\n');
 
     // Context ID for this image's chat session
@@ -694,8 +942,61 @@ Paper title: ${paper.title}`;
     // Check if we need to create a new session with conversation history
     let session = aiService['sessions'].get(contextId);
 
-    if (!session && chatHistory.length > 0) {
-      // Perform pre-summarization check
+    // If session exists, check if it needs summarization based on actual usage
+    if (session) {
+      const currentUsage = session.inputUsage ?? 0;
+      const quota = session.inputQuota ?? 0;
+      const usagePercentage = quota > 0 ? (currentUsage / quota) * 100 : 0;
+
+      console.log(`[ImageChatHandlers] Existing session usage: ${currentUsage}/${quota} (${usagePercentage.toFixed(1)}%)`);
+
+      // If session usage is high (>70%), summarize and recreate session
+      if (usagePercentage > 70 && chatHistory.length > 0) {
+        console.log('[ImageChatHandlers] Session usage >70%, triggering summarization and session recreation...');
+
+        // Perform summarization
+        const updatedConversationState = await performPreSummarization(
+          chatHistory,
+          conversationState,
+          paper.title,
+          paperId
+        );
+
+        // Update stored image chat with new conversation state
+        await updateImageChat(paperId, imageUrl, {
+          conversationState: updatedConversationState,
+        });
+
+        // Destroy old session
+        aiService.destroySessionForContext(contextId);
+
+        // Create new session with summarized history
+        let systemPromptContent = systemPrompt;
+        if (updatedConversationState.summary) {
+          systemPromptContent += `\n\nPrevious conversation summary: ${updatedConversationState.summary}`;
+        }
+
+        const initialPrompts: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+          { role: 'system', content: systemPromptContent }
+        ];
+
+        // Add recent messages (up to last 6)
+        const recentMessages = chatHistory.slice(-6);
+        for (const msg of recentMessages) {
+          initialPrompts.push({
+            role: msg.role,
+            content: msg.content
+          });
+        }
+
+        session = await aiService.getOrCreateSession(contextId, {
+          initialPrompts,
+          expectedInputs: [{ type: 'image', languages: ['en'] }]
+        });
+        console.log('[ImageChatHandlers] ✓ Session recreated after summarization');
+      }
+    } else if (chatHistory.length > 0) {
+      // No session but have history - create with pre-summarization
       const updatedConversationState = await performPreSummarization(
         chatHistory,
         conversationState,
@@ -728,7 +1029,7 @@ Paper title: ${paper.title}`;
         initialPrompts,
         expectedInputs: [{ type: 'image', languages: ['en'] }] // Enable multimodal
       });
-    } else if (!session) {
+    } else {
       // First message - create fresh multimodal session
       console.log('[ImageChatHandlers] Creating fresh multimodal session (first message)');
       session = await aiService.getOrCreateSession(contextId, {
@@ -737,9 +1038,72 @@ Paper title: ${paper.title}`;
       });
     }
 
+    // Validate prompt size before sending (with retry logic)
+    let finalContextChunks = contextChunks;
+    let finalContextString = contextString;
+    const MAX_RETRIES = 3;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const promptWithContext = `Context from the paper:
+${finalContextString}
+
+User question: ${message}`;
+
+      // Validate prompt size using Chrome AI's measureInputUsage()
+      // Note: For multimodal, we validate the text part (image tokens are fixed)
+      const validation = await aiService.validatePromptSize(session, promptWithContext);
+
+      if (validation.fits) {
+        console.log(`[ImageChatHandlers] ✓ Prompt validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
+        break;
+      }
+
+      // Prompt too large - try trimming more chunks
+      console.warn(`[ImageChatHandlers] Prompt too large (${validation.actualUsage} > ${validation.available}), trimming chunks... (attempt ${attempt}/${MAX_RETRIES})`);
+
+      if (attempt >= MAX_RETRIES) {
+        // Last attempt - use minimal chunks (just 1-2 most relevant)
+        console.error(`[ImageChatHandlers] Max retries reached, using minimal chunks`);
+        finalContextChunks = contextChunks.slice(0, Math.min(2, contextChunks.length));
+      } else {
+        // Remove last 2 chunks and retry (but keep at least 1 chunk)
+        const newLength = Math.max(1, finalContextChunks.length - 2);
+        finalContextChunks = finalContextChunks.slice(0, newLength);
+      }
+
+      if (finalContextChunks.length === 0) {
+        console.error('[ImageChatHandlers] No chunks remaining after trimming');
+        await sendImageChatEnd(tabId, 'Context too large even after aggressive trimming. Try a shorter question or use a model with larger context.', []);
+        return;
+      }
+
+      // Rebuild context string with fewer chunks
+      finalContextString = finalContextChunks
+        .map((chunk) => {
+          const hierarchy = chunk.parentSection
+            ? `${chunk.parentSection} > ${chunk.section}`
+            : chunk.section;
+
+          let citation = `[${hierarchy}`;
+          if (chunk.paragraphIndex !== undefined) {
+            citation += ` > Para ${chunk.paragraphIndex + 1}`;
+            if (chunk.sentenceGroupIndex !== undefined) {
+              citation += ` > Sentences`;
+            }
+          }
+          citation += `]`;
+
+          return `${citation}\n${chunk.content}`;
+        })
+        .join('\n\n---\n\n');
+    }
+
+    // Update sources based on final context chunks used
+    const finalSources = Array.from(new Set(finalContextChunks.map(c => c.section)));
+
     // Prepare multimodal message with image and text
     const promptWithContext = `Context from the paper:
-${contextString}
+${finalContextString}
 
 User question: ${message}`;
 
@@ -767,7 +1131,7 @@ User question: ${message}`;
     console.log('[ImageChatHandlers] ✓ Image chat response streamed successfully');
 
     // Send end signal
-    await sendImageChatEnd(tabId, fullResponse, sources);
+    await sendImageChatEnd(tabId, fullResponse, finalSources);
 
     // Post-stream processing: save history and check for summarization
     try {
@@ -775,7 +1139,7 @@ User question: ${message}`;
       const newChatHistory = [
         ...chatHistory,
         { role: 'user' as const, content: message, timestamp: Date.now() },
-        { role: 'assistant' as const, content: fullResponse, timestamp: Date.now(), sources }
+        { role: 'assistant' as const, content: fullResponse, timestamp: Date.now(), sources: finalSources }
       ];
 
       // Save to IndexedDB

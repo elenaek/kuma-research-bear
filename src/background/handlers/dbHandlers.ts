@@ -60,7 +60,7 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
       }
     };
 
-    const storedPaper = await storePaper(payload.paper, payload.fullText, undefined, onChunkProgress);
+    const storedPaper = await storePaper(payload.paper, payload.fullText, undefined, onChunkProgress, payload.preChunkedData);
 
     // Update operation state to show paper is stored and chunking is complete
     if (tabId) {

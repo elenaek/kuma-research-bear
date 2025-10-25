@@ -20,13 +20,14 @@ import * as stateHandlers from './handlers/stateHandlers.ts';
 import * as uiHandlers from './handlers/uiHandlers.ts';
 import * as chatHandlers from './handlers/chatHandlers.ts';
 import { executeDetectAndExplainFlow } from './orchestrators/detectAndExplainOrchestrator.ts';
+import { inputQuotaService } from '../utils/inputQuotaService.ts';
 
 // Context menu IDs for opening chatbox
 const CONTEXT_MENU_ID = 'open-chat'; // Extension icon context menu
 const CONTEXT_MENU_PAGE_ID = 'chat-with-kuma-page'; // Page context menu
 
 // Handle extension installation
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   console.log('Research Bear extension installed');
 
   // Set default settings
@@ -37,6 +38,16 @@ chrome.runtime.onInstalled.addListener(() => {
       theme: 'auto',
     },
   });
+
+  // Initialize inputQuota service for adaptive chunking
+  try {
+    console.log('[Background] Initializing inputQuota service...');
+    await inputQuotaService.initialize();
+    const quotaInfo = await inputQuotaService.getQuotaInfo();
+    console.log('[Background] ✓ InputQuota initialized:', quotaInfo);
+  } catch (error) {
+    console.error('[Background] Failed to initialize inputQuota:', error);
+  }
 
   // Create context menu for opening chatbox from extension icon
   chrome.contextMenus.create({
