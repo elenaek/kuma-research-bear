@@ -2,6 +2,7 @@ import { ResearchPaper, PaperSection } from '../types/index.ts';
 import { extractPageText, isPDFPage } from './contentExtractor.ts';
 import { aiService } from './aiService.ts';
 import { getPDFUrl, extractPDFText, extractPDFPages, isScannedPDF } from './pdfExtractor.ts';
+import { normalizeUrl } from './urlUtils.ts';
 
 // Detector for arXiv papers
 export function detectArXivPaper(): ResearchPaper | null {
@@ -26,7 +27,7 @@ export function detectArXivPaper(): ResearchPaper | null {
       title,
       authors,
       abstract,
-      url,
+      url: normalizeUrl(url),
       source: 'arxiv',
       metadata: {
         arxivId,
@@ -70,7 +71,7 @@ export function detectPubMedPaper(): ResearchPaper | null {
       title,
       authors,
       abstract,
-      url,
+      url: normalizeUrl(url),
       source: 'pubmed',
       metadata: {
         doi,
@@ -109,7 +110,7 @@ export function detectBioRxivPaper(): ResearchPaper | null {
       title,
       authors,
       abstract,
-      url,
+      url: normalizeUrl(url),
       source: 'biorxiv',
       metadata: {
         doi,
@@ -188,7 +189,7 @@ export async function detectPDFPaper(): Promise<ResearchPaper | null> {
       // Enhance with PDF-specific metadata
       return {
         ...aiPaper,
-        url: window.location.href, // Use the current page URL
+        url: normalizeUrl(window.location.href), // Use the current page URL
         source: arxivId ? 'arxiv' : 'pdf',
         metadata: {
           ...aiPaper.metadata,
@@ -255,7 +256,7 @@ export async function detectPDFPaper(): Promise<ResearchPaper | null> {
         title: potentialTitle,
         authors: authors.slice(0, 10), // Limit to 10 authors max
         abstract,
-        url: window.location.href,
+        url: normalizeUrl(window.location.href),
         source: 'pdf',
         metadata: {
           arxivId,
@@ -292,7 +293,7 @@ export function detectSchemaOrgPaper(): ResearchPaper | null {
           title: data.headline || data.name || '',
           authors: authors.filter(Boolean),
           abstract: data.description || '',
-          url: window.location.href,
+          url: normalizeUrl(window.location.href),
           source: 'other',
           metadata: {
             doi: data.doi || undefined,

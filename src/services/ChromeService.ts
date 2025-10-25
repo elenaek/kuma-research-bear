@@ -1,4 +1,5 @@
 import { MessageType, StoredPaper, QuestionAnswer, PaperAnalysisResult, GlossaryResult, ChatMessage, ImageExplanation } from '../types/index.ts';
+import { normalizeUrl } from '../utils/urlUtils.ts';
 
 /**
  * ChromeService - Centralized service for all Chrome runtime messaging operations
@@ -21,12 +22,13 @@ export interface ChromeMessageResponse<T = any> {
  * Get a paper from IndexedDB by its URL
  */
 export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
-  console.log('[ChromeService] Requesting paper from background worker:', url);
+  const normalizedUrl = normalizeUrl(url);
+  console.log('[ChromeService] Requesting paper from background worker:', url, '(normalized:', normalizedUrl, ')');
 
   try {
     const response = await chrome.runtime.sendMessage({
       type: MessageType.GET_PAPER_FROM_DB_BY_URL,
-      payload: { url },
+      payload: { url: normalizedUrl },
     });
 
     if (response.success) {
@@ -377,12 +379,13 @@ export async function startDetectAndExplain(tabId: number): Promise<DetectAndExp
  * Check if a paper is stored in the database
  */
 export async function isPaperStoredInDB(url: string): Promise<boolean> {
-  console.log('[ChromeService] Checking if paper is stored:', url);
+  const normalizedUrl = normalizeUrl(url);
+  console.log('[ChromeService] Checking if paper is stored:', url, '(normalized:', normalizedUrl, ')');
 
   try {
     const response = await chrome.runtime.sendMessage({
       type: MessageType.IS_PAPER_STORED_IN_DB,
-      payload: { url },
+      payload: { url: normalizedUrl },
     });
 
     if (response.success) {
@@ -414,10 +417,11 @@ export interface PaperStatusInfo {
  * Useful for quick checks on tab activation
  */
 export async function getPaperStatus(url: string): Promise<PaperStatusInfo> {
-  console.log('[ChromeService] Getting paper status for:', url);
+  const normalizedUrl = normalizeUrl(url);
+  console.log('[ChromeService] Getting paper status for:', url, '(normalized:', normalizedUrl, ')');
 
   try {
-    const paper = await getPaperByUrl(url);
+    const paper = await getPaperByUrl(normalizedUrl);
 
     if (!paper) {
       return {

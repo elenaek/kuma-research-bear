@@ -1,4 +1,5 @@
 import { ResearchPaper, StoredPaper, ContentChunk, ImageExplanation, ChatMessage, ConversationState } from '../types/index.ts';
+import { normalizeUrl } from './urlUtils.ts';
 
 /**
  * IndexedDB Service for storing research papers locally
@@ -108,10 +109,13 @@ function initDB(): Promise<IDBDatabase> {
  * Generate unique ID for a paper (using URL hash)
  */
 function generatePaperId(url: string): string {
+  // Normalize URL before hashing to ensure consistent IDs
+  const normalizedUrl = normalizeUrl(url);
+
   // Simple hash function for URL
   let hash = 0;
-  for (let i = 0; i < url.length; i++) {
-    const char = url.charCodeAt(i);
+  for (let i = 0; i < normalizedUrl.length; i++) {
+    const char = normalizedUrl.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
@@ -171,6 +175,7 @@ export async function storePaper(
     // Create stored paper object (hierarchical summary will be added after chunk storage)
     const storedPaper: StoredPaper = {
       ...paper,
+      url: normalizeUrl(paper.url), // Ensure URL is normalized before storage
       id: paperId,
       fullText: extractedText,
       chunkCount: contentChunks.length,
@@ -269,7 +274,9 @@ export async function storePaper(
  * Get a paper by URL
  */
 export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
-  console.log('[IndexedDB] getPaperByUrl called with URL:', url);
+  // Normalize URL for consistent lookups
+  const normalizedUrl = normalizeUrl(url);
+  console.log('[IndexedDB] getPaperByUrl called with URL:', url, '(normalized:', normalizedUrl, ')');
 
   const db = await initDB();
 
@@ -279,7 +286,7 @@ export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
     const index = store.index('url');
 
     const paper = await new Promise<StoredPaper | null>((resolve) => {
-      const request = index.get(url);
+      const request = index.get(normalizedUrl);
       request.onsuccess = () => {
         const result = request.result || null;
         console.log('[IndexedDB] Query result:', result ? {

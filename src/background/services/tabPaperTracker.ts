@@ -7,6 +7,7 @@
  */
 
 import { StoredPaper } from '../../types/paper';
+import { normalizeUrl } from '../../utils/urlUtils.ts';
 
 class TabPaperTracker {
   // Map: tabId -> paper URL
@@ -25,17 +26,20 @@ class TabPaperTracker {
     // Remove old paper association for this tab if it exists
     this.unregisterTab(tabId);
 
+    // Normalize URL for consistent tracking
+    const normalizedUrl = normalizeUrl(paper.url);
+
     // Register new associations
-    this.tabToPaper.set(tabId, paper.url);
-    this.paperIdToUrl.set(paper.id, paper.url);
+    this.tabToPaper.set(tabId, normalizedUrl);
+    this.paperIdToUrl.set(paper.id, normalizedUrl);
 
-    if (!this.paperToTabs.has(paper.url)) {
-      this.paperToTabs.set(paper.url, new Set());
+    if (!this.paperToTabs.has(normalizedUrl)) {
+      this.paperToTabs.set(normalizedUrl, new Set());
     }
-    this.paperToTabs.get(paper.url)!.add(tabId);
+    this.paperToTabs.get(normalizedUrl)!.add(tabId);
 
-    console.log(`[TabPaperTracker] Registered tab ${tabId} -> paper ${paper.url}`);
-    console.log(`[TabPaperTracker] Paper ${paper.url} now in tabs:`, Array.from(this.paperToTabs.get(paper.url)!));
+    console.log(`[TabPaperTracker] Registered tab ${tabId} -> paper ${normalizedUrl}`);
+    console.log(`[TabPaperTracker] Paper ${normalizedUrl} now in tabs:`, Array.from(this.paperToTabs.get(normalizedUrl)!));
   }
 
   /**
@@ -65,7 +69,8 @@ class TabPaperTracker {
    * Get all tabs currently viewing a specific paper URL
    */
   getTabsForPaperUrl(paperUrl: string): number[] {
-    const tabSet = this.paperToTabs.get(paperUrl);
+    const normalizedUrl = normalizeUrl(paperUrl);
+    const tabSet = this.paperToTabs.get(normalizedUrl);
     return tabSet ? Array.from(tabSet) : [];
   }
 
@@ -88,21 +93,24 @@ class TabPaperTracker {
    * Check if a tab is currently viewing a specific paper
    */
   isTabViewingPaper(tabId: number, paperUrl: string): boolean {
-    return this.tabToPaper.get(tabId) === paperUrl;
+    const normalizedUrl = normalizeUrl(paperUrl);
+    return this.tabToPaper.get(tabId) === normalizedUrl;
   }
 
   /**
    * Get count of tabs viewing a specific paper
    */
   getTabCountForPaper(paperUrl: string): number {
-    return this.paperToTabs.get(paperUrl)?.size || 0;
+    const normalizedUrl = normalizeUrl(paperUrl);
+    return this.paperToTabs.get(normalizedUrl)?.size || 0;
   }
 
   /**
    * Check if any tabs are viewing a specific paper
    */
   hasPaper(paperUrl: string): boolean {
-    return this.getTabCountForPaper(paperUrl) > 0;
+    const normalizedUrl = normalizeUrl(paperUrl);
+    return this.getTabCountForPaper(normalizedUrl) > 0;
   }
 
   /**

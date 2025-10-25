@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
-import { 
-  Copy, 
-  RefreshCw, 
-  FileText, 
+import {
+  Copy,
+  RefreshCw,
+  FileText,
 } from 'lucide-preact';
 import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, GlossaryResult, MessageType } from '../types/index.ts';
 import { useDebounce } from './hooks/useDebounce.ts';
@@ -23,6 +23,7 @@ import { LottiePlayer, LoopPurpose } from '../shared/components/LottiePlayer.tsx
 import { DebugPanel } from './components/DebugPanel.tsx';
 import { PaperInfoCard } from './components/PaperInfoCard.tsx';
 import { SummaryTab } from './components/tabs/SummaryTab.tsx';
+import { normalizeUrl } from '../utils/urlUtils.ts';
 import { ExplanationTab } from './components/tabs/ExplanationTab.tsx';
 import * as ChromeService from '../services/ChromeService.ts';
 import * as StorageService from '../services/StorageService.ts';
@@ -212,7 +213,8 @@ export function Sidepanel() {
         const papers = await ChromeService.getAllPapers();
         console.log('[Sidepanel] Fetched', papers.length, 'papers for navigation');
 
-        const paperIndex = papers.findIndex(p => p.url === targetUrl);
+        const normalizedTargetUrl = normalizeUrl(targetUrl);
+        const paperIndex = papers.findIndex(p => normalizeUrl(p.url) === normalizedTargetUrl);
 
         if (paperIndex !== -1) {
           console.log('[Sidepanel] Navigating to paper at index:', paperIndex);

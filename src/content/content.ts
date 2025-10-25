@@ -5,6 +5,7 @@ import { createMutationObserver, startObserving } from './handlers/mutationHandl
 import { chatboxInjector } from './services/chatboxInjector.ts';
 import { textSelectionHandler } from './services/textSelectionHandler.ts';
 import { imageExplanationHandler } from './services/imageExplanationHandler.ts';
+import { normalizeUrl } from '../utils/urlUtils.ts';
 
 /**
  * Content Script
@@ -58,7 +59,9 @@ function setupMessageListener() {
       console.log('[Content] Paper deleted:', message.payload);
 
       // If deleted paper URL matches current page, destroy image buttons
-      if (message.payload.paperUrl === window.location.href) {
+      const currentPageUrl = normalizeUrl(window.location.href);
+      const deletedPaperUrl = normalizeUrl(message.payload.paperUrl);
+      if (deletedPaperUrl === currentPageUrl) {
         console.log('[Content] Current page paper was deleted, removing image buttons');
         imageExplanationHandler.destroy();
       }
@@ -69,12 +72,14 @@ function setupMessageListener() {
       const state = message.payload;
 
       // If chunking just completed for current page
-      if (state.hasChunked && state.currentPaper?.url === window.location.href) {
+      const currentPageUrl = normalizeUrl(window.location.href);
+      const statePaperUrl = state.currentPaper?.url ? normalizeUrl(state.currentPaper.url) : null;
+      if (state.hasChunked && statePaperUrl === currentPageUrl) {
         console.log('[Content] Chunking completed for current page, initializing image buttons');
 
         // Get fresh paper data from DB
         const { getPaperFromDBByUrl } = await import('../services/ChromeService.ts');
-        const storedPaper = await getPaperFromDBByUrl(window.location.href);
+        const storedPaper = await getPaperFromDBByUrl(currentPageUrl);
 
         if (storedPaper && storedPaper.id) {
           await imageExplanationHandler.reinitialize(storedPaper);

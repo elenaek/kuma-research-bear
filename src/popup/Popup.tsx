@@ -10,6 +10,7 @@ import { OperationBadges } from './components/OperationBadges.tsx';
 import { ActionButtons } from './components/ActionButtons.tsx';
 import { LottiePlayerHandle } from '../shared/components/LottiePlayer.tsx';
 import { LanguageDropdown } from './components/LanguageDropdown.tsx';
+import { normalizeUrl } from '../utils/urlUtils.ts';
 
 export function Popup() {
   // Ref for Lottie animation control
@@ -61,9 +62,13 @@ export function Popup() {
         const deletedPaperUrl = message.payload?.paperUrl;
 
         // Clear state if the deleted paper matches the current paper
-        if (deletedPaperUrl && paperStatus.paper?.url === deletedPaperUrl) {
-          operationState.clearState();
-          paperStatus.clearPaper();
+        if (deletedPaperUrl && paperStatus.paper?.url) {
+          const normalizedDeletedUrl = normalizeUrl(deletedPaperUrl);
+          const normalizedCurrentUrl = normalizeUrl(paperStatus.paper.url);
+          if (normalizedDeletedUrl === normalizedCurrentUrl) {
+            operationState.clearState();
+            paperStatus.clearPaper();
+          }
         }
       }
     };

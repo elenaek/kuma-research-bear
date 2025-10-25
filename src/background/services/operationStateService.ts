@@ -1,6 +1,7 @@
 import { OperationState, MessageType } from '../../types/index.ts';
 import { tabPaperTracker } from './tabPaperTracker.ts';
 import { updateContextMenuForPaper } from '../background.ts';
+import { normalizeUrl } from '../../utils/urlUtils.ts';
 
 /**
  * Operation State Service
@@ -64,15 +65,20 @@ export function updateState(tabId: number, updates: Partial<OperationState>): Op
   const state = getState(tabId);
 
   // Remove old paper URL mapping if paper is changing
-  if (updates.currentPaper && state.currentPaper && state.currentPaper.url !== updates.currentPaper.url) {
-    paperToState.delete(state.currentPaper.url);
+  if (updates.currentPaper && state.currentPaper) {
+    const oldUrl = normalizeUrl(state.currentPaper.url);
+    const newUrl = normalizeUrl(updates.currentPaper.url);
+    if (oldUrl !== newUrl) {
+      paperToState.delete(oldUrl);
+    }
   }
 
   Object.assign(state, updates, { lastUpdated: Date.now() });
 
   // Update paper-to-state index if we have a current paper
   if (state.currentPaper?.url) {
-    paperToState.set(state.currentPaper.url, state);
+    const normalizedUrl = normalizeUrl(state.currentPaper.url);
+    paperToState.set(normalizedUrl, state);
   }
 
   return state;
@@ -85,7 +91,8 @@ export function updateState(tabId: number, updates: Partial<OperationState>): Op
 export function deleteState(tabId: number): void {
   const state = operationStates.get(tabId);
   if (state?.currentPaper?.url) {
-    paperToState.delete(state.currentPaper.url);
+    const normalizedUrl = normalizeUrl(state.currentPaper.url);
+    paperToState.delete(normalizedUrl);
   }
   operationStates.delete(tabId);
 }
@@ -119,7 +126,8 @@ export function getRawState(tabId: number): OperationState | undefined {
  * @returns The state if found, undefined otherwise
  */
 export function getStateByPaperUrl(paperUrl: string): OperationState | undefined {
-  return paperToState.get(paperUrl);
+  const normalizedUrl = normalizeUrl(paperUrl);
+  return paperToState.get(normalizedUrl);
 }
 
 /**

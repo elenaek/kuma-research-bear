@@ -4,6 +4,7 @@ import * as paperCleanupService from '../services/paperCleanupService.ts';
 import * as iconService from '../services/iconService.ts';
 import { tabPaperTracker } from '../services/tabPaperTracker.ts';
 import { MessageType } from '../../types/index.ts';
+import { normalizeUrl } from '../../utils/urlUtils.ts';
 
 /**
  * Database Message Handlers
@@ -195,7 +196,8 @@ export async function handleDeletePaper(payload: any): Promise<any> {
     if (deleted) {
       try {
         const tabs = await chrome.tabs.query({});
-        const matchingTabs = tabs.filter(tab => tab.url === deletedPaperUrl);
+        const normalizedDeletedUrl = normalizeUrl(deletedPaperUrl);
+        const matchingTabs = tabs.filter(tab => tab.url && normalizeUrl(tab.url) === normalizedDeletedUrl);
 
         for (const tab of matchingTabs) {
           if (tab.id !== undefined) {
