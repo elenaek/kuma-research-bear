@@ -58,6 +58,14 @@ export enum MessageType {
   GET_IMAGE_EXPLANATION = 'GET_IMAGE_EXPLANATION',
   STORE_IMAGE_EXPLANATION = 'STORE_IMAGE_EXPLANATION',
   GET_IMAGE_EXPLANATIONS_BY_PAPER = 'GET_IMAGE_EXPLANATIONS_BY_PAPER',
+
+  // Image chat operations (multi-tabbed chatbox)
+  IMAGE_CHAT_MESSAGE = 'IMAGE_CHAT_MESSAGE',
+  IMAGE_CHAT_STREAM_CHUNK = 'IMAGE_CHAT_STREAM_CHUNK',
+  IMAGE_CHAT_STREAM_END = 'IMAGE_CHAT_STREAM_END',
+  GET_IMAGE_CHAT_HISTORY = 'GET_IMAGE_CHAT_HISTORY',
+  UPDATE_IMAGE_CHAT_HISTORY = 'UPDATE_IMAGE_CHAT_HISTORY',
+  CLEAR_IMAGE_CHAT_HISTORY = 'CLEAR_IMAGE_CHAT_HISTORY',
 }
 
 export interface Message {
@@ -396,6 +404,21 @@ export interface ChatMessage {
   sources?: string[]; // Sources for assistant messages
 }
 
+// Image chat message (extends ChatMessage with optional image blob)
+export interface ImageChatMessage extends ChatMessage {
+  imageBlob?: Blob; // Optional image blob attached to message (for multimodal context)
+}
+
+// Chat tab definition for multi-tabbed chatbox
+export interface ChatTab {
+  id: string; // Unique tab ID (e.g., 'paper' or 'image-{hash}')
+  type: 'paper' | 'image'; // Tab type
+  title: string; // Display title in tab bar
+  imageUrl?: string; // For image tabs only - source image URL
+  imageBlob?: Blob; // For image tabs only - image blob for multimodal API (in-memory)
+  imageButtonElement?: HTMLElement; // For image tabs only - reference to button for compass arrow
+}
+
 // Conversation history management
 export interface ConversationState {
   summary: string | null; // Summarized older messages
@@ -425,6 +448,8 @@ export interface ChatboxSettings {
   visible: boolean;
   minimized: boolean;
   transparencyEnabled: boolean;
+  activeTabs?: ChatTab[]; // Active tabs in chatbox (multi-tab support)
+  activeTabId?: string; // Currently active tab ID
 }
 
 // Background operation state (per-tab tracking)

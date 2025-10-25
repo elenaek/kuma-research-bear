@@ -131,5 +131,9 @@ async function setupImageExplanations() {
   // Initialize image explanation handler (depends on paper detection)
   await setupImageExplanations();
 
+  // Restore chatbox tabs AFTER image buttons are created
+  await chatboxInjector.restoreTabs();
+  console.log('[Content] ✓ Tabs restored');
+
   console.log('[Content] ✓ Content script initialized successfully');
 })();

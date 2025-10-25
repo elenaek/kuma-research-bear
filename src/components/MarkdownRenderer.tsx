@@ -121,11 +121,14 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
     gfm: true, // GitHub Flavored Markdown
   });
 
+  // Defensive check: ensure content is always a string
+  const safeContent = typeof content === 'string' ? content : String(content || '');
+
   useEffect(() => {
     // Process content asynchronously
     const processContent = async () => {
       // Step 1: Extract LaTeX and replace with placeholders (protects from markdown escaping)
-      const { content: contentWithPlaceholders, expressions } = extractLatexWithPlaceholders(content);
+      const { content: contentWithPlaceholders, expressions } = extractLatexWithPlaceholders(safeContent);
 
       // Step 2: Parse markdown to HTML (placeholders are safe from escaping)
       const rawHTML = marked.parse(contentWithPlaceholders) as string;
@@ -168,7 +171,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
     };
 
     processContent();
-  }, [content]);
+  }, [safeContent]);
 
   return (
     <div

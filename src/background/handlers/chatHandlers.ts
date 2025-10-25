@@ -590,3 +590,446 @@ export async function handleClearChatHistory(payload: any): Promise<any> {
     };
   }
 }
+
+/**
+ * IMAGE CHAT HANDLERS (Multi-tabbed Chatbox)
+ * Handle multimodal chat about specific images with reduced RAG context
+ */
+
+/**
+ * Process and stream image chat response asynchronously
+ * Similar to processAndStreamResponse but with multimodal support and reduced RAG
+ */
+async function processAndStreamImageChatResponse(
+  paperId: string,
+  imageUrl: string,
+  imageBlob: Blob,
+  message: string,
+  tabId: number
+): Promise<void> {
+  try {
+    console.log(`[ImageChatHandlers] Processing image chat message for paper: ${paperId}, image: ${imageUrl}`);
+
+    // Retrieve paper from IndexedDB
+    const storedPaper = await getPaperByUrl(imageUrl); // Will fail, need to get by ID
+    // Actually, we need to get paper by ID, not URL
+    const { getPaperById } = await import('../../utils/dbService.ts');
+    const paper = await getPaperById(paperId);
+
+    if (!paper) {
+      await sendImageChatEnd(tabId, 'Paper not found in storage. Please store the paper first.', []);
+      return;
+    }
+
+    // Get relevant chunks (REDUCED: 2 instead of 4 to make room for image in context)
+    const relevantChunks = await getRelevantChunksSemantic(paperId, message, 2);
+
+    if (relevantChunks.length === 0) {
+      await sendImageChatEnd(tabId, 'No relevant content found to answer this question.', []);
+      return;
+    }
+
+    console.log(`[ImageChatHandlers] Found ${relevantChunks.length} relevant chunks`);
+
+    // Format context from chunks
+    const contextChunks = relevantChunks.map(chunk => ({
+      content: chunk.content,
+      section: chunk.section || 'Unknown section',
+    }));
+
+    const sources = Array.from(new Set(contextChunks.map(c => c.section)));
+
+    // Build context string
+    const contextString = contextChunks
+      .map((chunk, idx) => `[Section: ${chunk.section}]\n${chunk.content}`)
+      .join('\n\n---\n\n');
+
+    // Context ID for this image's chat session
+    const { getImageChat, updateImageChat } = await import('../../utils/dbService.ts');
+
+    // Generate hash for image URL (same logic as in dbService)
+    let hash = 0;
+    for (let i = 0; i < imageUrl.length; i++) {
+      const char = imageUrl.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    const contextId = `image-chat-${paperId}-img_${Math.abs(hash)}`;
+
+    // Get existing chat history and conversation state
+    const imageChat = await getImageChat(paperId, imageUrl);
+    const chatHistory = imageChat?.chatHistory || [];
+    const conversationState = imageChat?.conversationState || {
+      summary: null,
+      recentMessages: [],
+      lastSummarizedIndex: -1,
+      summaryCount: 0,
+    };
+
+    // System prompt for image chat (multimodal)
+    const systemPrompt = `You are Kuma, a friendly research bear assistant helping users understand images from research papers.
+
+Your role:
+- Answer questions about the image and how it relates to the paper
+- Be conversational and friendly, like a helpful colleague
+- Explain complex concepts in simple terms
+- Reference specific sections of the paper when relevant
+- If the context doesn't contain enough information, say so honestly
+- Remember previous conversation context to provide coherent follow-up answers
+
+Important:
+- Keep responses concise and conversational (2-4 sentences for simple questions, more for complex ones)
+- Use everyday language, avoid unnecessary jargon
+- Be encouraging and supportive
+- If you cite information from the paper, mention which section it's from
+
+Mathematical expressions:
+- Use $expression$ for inline math (e.g., $E = mc^2$, $p < 0.05$)
+- Use $$expression$$ for display equations on separate lines
+- Alternative: \\(expression\\) for inline, \\[expression\\] for display
+- Use proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)
+
+Paper title: ${paper.title}`;
+
+    // Check if we need to create a new session with conversation history
+    let session = aiService['sessions'].get(contextId);
+
+    if (!session && chatHistory.length > 0) {
+      // Perform pre-summarization check
+      const updatedConversationState = await performPreSummarization(
+        chatHistory,
+        conversationState,
+        paper.title,
+        paperId
+      );
+
+      // Create new multimodal session with conversation history
+      console.log('[ImageChatHandlers] Creating new multimodal session with', chatHistory.length, 'historical messages');
+
+      let systemPromptContent = systemPrompt;
+      if (updatedConversationState.summary) {
+        systemPromptContent += `\n\nPrevious conversation summary: ${updatedConversationState.summary}`;
+      }
+
+      const initialPrompts: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        { role: 'system', content: systemPromptContent }
+      ];
+
+      // Add recent messages (up to last 6)
+      const recentMessages = chatHistory.slice(-6);
+      for (const msg of recentMessages) {
+        initialPrompts.push({
+          role: msg.role,
+          content: msg.content
+        });
+      }
+
+      session = await aiService.getOrCreateSession(contextId, {
+        initialPrompts,
+        expectedInputs: [{ type: 'image', languages: ['en'] }] // Enable multimodal
+      });
+    } else if (!session) {
+      // First message - create fresh multimodal session
+      console.log('[ImageChatHandlers] Creating fresh multimodal session (first message)');
+      session = await aiService.getOrCreateSession(contextId, {
+        initialPrompts: [{ role: 'system', content: systemPrompt }],
+        expectedInputs: [{ type: 'image', languages: ['en'] }] // Enable multimodal
+      });
+    }
+
+    // Prepare multimodal message with image and text
+    const promptWithContext = `Context from the paper:
+${contextString}
+
+User question: ${message}`;
+
+    // Use append() for multimodal input (image + text)
+    await session.append([
+      {
+        role: 'user',
+        content: [
+          { type: 'image', value: imageBlob },
+          { type: 'text', value: promptWithContext }
+        ]
+      }
+    ]);
+
+    // Get streaming response
+    let fullResponse = '';
+    const stream = session.promptStreaming('');  // Empty prompt since we already appended the message
+
+    // Process the stream
+    for await (const chunk of stream) {
+      fullResponse += chunk;
+      await sendImageChatChunk(tabId, chunk);
+    }
+
+    console.log('[ImageChatHandlers] ✓ Image chat response streamed successfully');
+
+    // Send end signal
+    await sendImageChatEnd(tabId, fullResponse, sources);
+
+    // Post-stream processing: save history and check for summarization
+    try {
+      // Update chat history with new messages
+      const newChatHistory = [
+        ...chatHistory,
+        { role: 'user' as const, content: message, timestamp: Date.now() },
+        { role: 'assistant' as const, content: fullResponse, timestamp: Date.now(), sources }
+      ];
+
+      // Save to IndexedDB
+      await updateImageChat(paperId, imageUrl, {
+        chatHistory: newChatHistory,
+        conversationState,
+      });
+
+      // Track token usage
+      const metadata = aiService.getSessionMetadata(contextId);
+
+      if (metadata && metadata.needsSummarization) {
+        console.log('[ImageChatHandlers] Token threshold reached, triggering summarization...');
+
+        // Summarize messages
+        const messagesToSummarize = newChatHistory.slice(
+          conversationState.lastSummarizedIndex + 1,
+          -6
+        );
+
+        if (messagesToSummarize.length > 0) {
+          const newSummary = await aiService.summarizeConversation(messagesToSummarize, paper.title);
+
+          let finalSummary: string;
+          let summaryCount: number;
+
+          if (conversationState.summary && conversationState.summaryCount >= 2) {
+            // Re-summarize combined summaries
+            const combinedText = `${conversationState.summary}\n\n${newSummary}`;
+            const tempMessages = [
+              { role: 'assistant' as const, content: combinedText, timestamp: Date.now() }
+            ];
+            const reSummarized = await aiService.summarizeConversation(tempMessages, paper.title);
+            finalSummary = reSummarized || newSummary;
+            summaryCount = 1;
+          } else if (conversationState.summary) {
+            finalSummary = `${conversationState.summary}\n\n${newSummary}`;
+            summaryCount = conversationState.summaryCount + 1;
+          } else {
+            finalSummary = newSummary;
+            summaryCount = 1;
+          }
+
+          const newConversationState = {
+            summary: finalSummary,
+            recentMessages: newChatHistory.slice(-6),
+            lastSummarizedIndex: newChatHistory.length - 7,
+            summaryCount
+          };
+
+          // Clone session with updated history (preserve multimodal image support)
+          await aiService.cloneSessionWithHistory(
+            contextId,
+            newConversationState,
+            systemPrompt,
+            {
+              expectedInputs: [{ type: 'image', languages: ['en'] }]
+            }
+          );
+
+          // Save updated state
+          await updateImageChat(paperId, imageUrl, {
+            chatHistory: newChatHistory,
+            conversationState: newConversationState,
+          });
+
+          console.log('[ImageChatHandlers] ✓ Session cloned with summarized history');
+        }
+      }
+    } catch (postProcessError) {
+      console.error('[ImageChatHandlers] Post-stream processing error:', postProcessError);
+    }
+
+  } catch (error) {
+    console.error('[ImageChatHandlers] Error processing image chat message:', error);
+    await sendImageChatEnd(tabId, 'Sorry, I encountered an error processing your message. Please try again.', []);
+  }
+}
+
+/**
+ * Send image chat stream chunk to content script
+ */
+async function sendImageChatChunk(tabId: number, chunk: string): Promise<void> {
+  try {
+    if (!await isTabValid(tabId)) {
+      console.warn('[ImageChatHandlers] Tab', tabId, 'no longer exists, skipping chunk');
+      return;
+    }
+
+    await chrome.tabs.sendMessage(tabId, {
+      type: MessageType.IMAGE_CHAT_STREAM_CHUNK,
+      payload: chunk,
+    });
+  } catch (error) {
+    console.error('[ImageChatHandlers] Error sending image chat chunk:', error);
+  }
+}
+
+/**
+ * Send image chat stream end to content script
+ */
+async function sendImageChatEnd(tabId: number, fullMessage: string, sources?: string[]): Promise<void> {
+  try {
+    if (!await isTabValid(tabId)) {
+      console.warn('[ImageChatHandlers] Tab', tabId, 'no longer exists, skipping stream end');
+      return;
+    }
+
+    await chrome.tabs.sendMessage(tabId, {
+      type: MessageType.IMAGE_CHAT_STREAM_END,
+      payload: { fullMessage, sources },
+    });
+  } catch (error) {
+    console.error('[ImageChatHandlers] Error sending image chat end:', error);
+  }
+}
+
+/**
+ * Handle sending an image chat message with streaming response
+ */
+export async function handleSendImageChatMessage(payload: any, sender: chrome.runtime.MessageSender): Promise<any> {
+  const { paperId, imageUrl, imageDataBase64, imageMimeType, message } = payload;
+  const tabId = sender.tab?.id;
+
+  if (!paperId || !imageUrl || !imageDataBase64 || !imageMimeType || !message) {
+    return {
+      success: false,
+      error: 'Paper ID, image URL, image data (Base64), image MIME type, and message are required',
+    };
+  }
+
+  if (!tabId) {
+    return {
+      success: false,
+      error: 'Tab ID is required for streaming responses',
+    };
+  }
+
+  // Reconstruct Blob from Base64 string (Chrome messaging uses JSON serialization)
+  const binaryString = atob(imageDataBase64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  const imageBlob = new Blob([bytes], { type: imageMimeType });
+  console.log('[ImageChatHandlers] Reconstructed blob from Base64:', imageBlob.size, 'bytes, type:', imageBlob.type);
+
+  // Start streaming in background
+  processAndStreamImageChatResponse(paperId, imageUrl, imageBlob, message, tabId).catch(error => {
+    console.error('[ImageChatHandlers] Unhandled streaming error:', error);
+  });
+
+  // Return success immediately
+  return { success: true };
+}
+
+/**
+ * Get image chat history
+ */
+export async function handleGetImageChatHistory(payload: any): Promise<any> {
+  const { paperId, imageUrl } = payload;
+
+  if (!paperId || !imageUrl) {
+    return {
+      success: false,
+      error: 'Paper ID and image URL are required',
+    };
+  }
+
+  try {
+    console.log(`[ImageChatHandlers] Getting image chat history for image: ${imageUrl}`);
+
+    const { getImageChat } = await import('../../utils/dbService.ts');
+    const imageChat = await getImageChat(paperId, imageUrl);
+
+    const chatHistory = imageChat?.chatHistory || [];
+    console.log(`[ImageChatHandlers] ✓ Retrieved ${chatHistory.length} image chat messages`);
+
+    return { success: true, chatHistory };
+  } catch (error) {
+    console.error('[ImageChatHandlers] Error getting image chat history:', error);
+    return {
+      success: false,
+      error: `Failed to get image chat history: ${String(error)}`,
+    };
+  }
+}
+
+/**
+ * Update image chat history
+ */
+export async function handleUpdateImageChatHistory(payload: any): Promise<any> {
+  const { paperId, imageUrl, chatHistory } = payload;
+
+  if (!paperId || !imageUrl || !chatHistory) {
+    return {
+      success: false,
+      error: 'Paper ID, image URL, and chat history are required',
+    };
+  }
+
+  try {
+    console.log(`[ImageChatHandlers] Updating image chat history for image: ${imageUrl}`);
+
+    const { updateImageChat } = await import('../../utils/dbService.ts');
+    await updateImageChat(paperId, imageUrl, { chatHistory });
+
+    console.log('[ImageChatHandlers] ✓ Image chat history updated successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('[ImageChatHandlers] Error updating image chat history:', error);
+    return {
+      success: false,
+      error: `Failed to update image chat history: ${String(error)}`,
+    };
+  }
+}
+
+/**
+ * Clear image chat history
+ */
+export async function handleClearImageChatHistory(payload: any): Promise<any> {
+  const { paperId, imageUrl } = payload;
+
+  if (!paperId || !imageUrl) {
+    return {
+      success: false,
+      error: 'Paper ID and image URL are required',
+    };
+  }
+
+  try {
+    console.log(`[ImageChatHandlers] Clearing image chat history for image: ${imageUrl}`);
+
+    const { deleteImageChat } = await import('../../utils/dbService.ts');
+    await deleteImageChat(paperId, imageUrl);
+
+    // Destroy the session
+    let hash = 0;
+    for (let i = 0; i < imageUrl.length; i++) {
+      const char = imageUrl.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    const contextId = `image-chat-${paperId}-img_${Math.abs(hash)}`;
+    aiService.destroySessionForContext(contextId);
+
+    console.log('[ImageChatHandlers] ✓ Image chat history cleared and session destroyed');
+    return { success: true };
+  } catch (error) {
+    console.error('[ImageChatHandlers] Error clearing image chat history:', error);
+    return {
+      success: false,
+      error: `Failed to clear image chat history: ${String(error)}`,
+    };
+  }
+}

@@ -242,6 +242,56 @@
   user-select: text; /* Allow text selection in sources */
 }
 
+.chatbox-regenerate-btn {
+  margin: 8px 14px 0;
+  padding: 6px 12px;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  color: #374151;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.chatbox-regenerate-btn:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+.chatbox-regenerate-btn:active {
+  background: #d1d5db;
+  transform: scale(0.98);
+}
+
+.chatbox-regenerate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chatbox-regenerate-btn:disabled:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.chatbox-regenerate-btn svg {
+  flex-shrink: 0;
+}
+
+.chatbox-regenerate-spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .chatbox-cursor {
   display: inline-block;
   animation: blink 1s step-end infinite;
@@ -635,4 +685,124 @@
     opacity: 1;
     transform: scale(1) translateY(0);
   }
+}
+
+/* Multi-Tab Support Styles (NEW) */
+
+/* Tab Bar */
+.chatbox-tab-bar {
+  background: linear-gradient(135deg, oklch(42% 0.17 265) 0%, oklch(46% 0.22 265) 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 8px 0 8px;
+  flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
+}
+
+.chatbox-tab-bar:active {
+  cursor: grabbing;
+}
+
+.chatbox-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.chatbox-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.chatbox-tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chatbox-tabs::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.chatbox-tabs::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Individual Tab */
+.chatbox-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px 6px 0 0;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  font-size: 13px;
+  min-width: 80px;
+  max-width: 180px;
+}
+
+.chatbox-tab:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.chatbox-tab-active {
+  background: white;
+  color: oklch(40% 0.17 265);
+  font-weight: 500;
+}
+
+.chatbox-tab-active:hover {
+  background: white;
+  color: oklch(40% 0.17 265);
+}
+
+.chatbox-tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatbox-tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.1);
+  border: none;
+  border-radius: 3px;
+  color: currentColor;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.chatbox-tab-close:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.chatbox-tab-active .chatbox-tab-close {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.chatbox-tab-active .chatbox-tab-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* Compass Arrow */
+.chatbox-compass-arrow {
+  transition: transform 0.15s ease;
+  color: white;
+  opacity: 0.9;
 }

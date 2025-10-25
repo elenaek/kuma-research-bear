@@ -726,6 +726,164 @@ export async function clearChatHistory(paperUrl: string): Promise<UpdateChatHist
 }
 
 /**
+ * Image Chat Operations (Multi-tabbed Chatbox)
+ */
+
+export interface SendImageChatMessageResponse {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Send an image chat message (multimodal chat about a specific image)
+ * Returns immediately - streaming responses are sent via IMAGE_CHAT_STREAM_CHUNK messages
+ */
+export async function sendImageChatMessage(
+  paperId: string,
+  imageUrl: string,
+  imageBlob: Blob,
+  message: string
+): Promise<SendImageChatMessageResponse> {
+  console.log('[ChromeService] Sending image chat message:', message);
+
+  try {
+    // Convert Blob to Base64 for Chrome messaging (Chrome uses JSON serialization, not structured cloning)
+    const arrayBuffer = await imageBlob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const imageMimeType = imageBlob.type;
+
+    // Convert Uint8Array to Base64 string (chunk to avoid call stack overflow on large images)
+    const chunkSize = 0x8000; // 32KB chunks
+    let binaryString = '';
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+      binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    const imageDataBase64 = btoa(binaryString);
+
+    console.log('[ChromeService] Converted blob to Base64:', imageDataBase64.length, 'chars, type:', imageMimeType);
+
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.IMAGE_CHAT_MESSAGE,
+      payload: {
+        paperId,
+        imageUrl,
+        imageDataBase64,
+        imageMimeType,
+        message: message.trim(),
+      },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Image chat message sent successfully');
+      return { success: true };
+    } else {
+      console.error('[ChromeService] Image chat message failed:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error sending image chat message:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export interface GetImageChatHistoryResponse {
+  success: boolean;
+  error?: string;
+  chatHistory?: ChatMessage[];
+}
+
+/**
+ * Get image chat history from IndexedDB
+ */
+export async function getImageChatHistory(
+  paperId: string,
+  imageUrl: string
+): Promise<GetImageChatHistoryResponse> {
+  console.log('[ChromeService] Getting image chat history for image:', imageUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.GET_IMAGE_CHAT_HISTORY,
+      payload: { paperId, imageUrl },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Image chat history retrieved successfully');
+      return { success: true, chatHistory: response.chatHistory || [] };
+    } else {
+      console.error('[ChromeService] Failed to get image chat history:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error getting image chat history:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export interface UpdateImageChatHistoryResponse {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Update image chat history in IndexedDB
+ */
+export async function updateImageChatHistory(
+  paperId: string,
+  imageUrl: string,
+  chatHistory: ChatMessage[]
+): Promise<UpdateImageChatHistoryResponse> {
+  console.log('[ChromeService] Updating image chat history for image:', imageUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.UPDATE_IMAGE_CHAT_HISTORY,
+      payload: { paperId, imageUrl, chatHistory },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Image chat history updated successfully');
+      return { success: true };
+    } else {
+      console.error('[ChromeService] Failed to update image chat history:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error updating image chat history:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Clear image chat history from IndexedDB
+ */
+export async function clearImageChatHistory(
+  paperId: string,
+  imageUrl: string
+): Promise<UpdateImageChatHistoryResponse> {
+  console.log('[ChromeService] Clearing image chat history for image:', imageUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.CLEAR_IMAGE_CHAT_HISTORY,
+      payload: { paperId, imageUrl },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Image chat history cleared successfully');
+      return { success: true };
+    } else {
+      console.error('[ChromeService] Failed to clear image chat history:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error clearing image chat history:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
  * Toggle the chatbox visibility (content script)
  */
 export async function toggleChatbox(tabId?: number): Promise<void> {

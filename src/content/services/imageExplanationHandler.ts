@@ -1,9 +1,10 @@
 import { h, render } from 'preact';
 import { ImageExplainButton } from '../components/ImageExplainButton.tsx';
-import { ImageExplanationBubble } from '../components/ImageExplanationBubble.tsx';
+// import { ImageExplanationBubble } from '../components/ImageExplanationBubble.tsx'; // DEPRECATED: Now using multi-tab chatbox
 import { detectImages, imageElementToBlob, watchForNewImages, DetectedImage } from './imageDetectionService.ts';
 import * as ChromeService from '../../services/ChromeService.ts';
 import { aiService } from '../../utils/aiService.ts';
+import { chatboxInjector } from './chatboxInjector.ts'; // NEW: Multi-tab chatbox integration
 
 interface ImageState {
   element: HTMLImageElement;
@@ -30,6 +31,13 @@ class ImageExplanationHandler {
   private isInitialized = false;
   private multimodalAvailable = false;
   private currentPaper: any = null;
+
+  /**
+   * Get image state by URL (used for tab restoration)
+   */
+  getImageStateByUrl(imageUrl: string): ImageState | undefined {
+    return this.imageStates.get(imageUrl);
+  }
 
   async initialize(currentPaper: any) {
     if (this.isInitialized) {
@@ -190,8 +198,8 @@ class ImageExplanationHandler {
 
   private positionButton(img: HTMLImageElement, buttonContainer: HTMLDivElement) {
     const rect = img.getBoundingClientRect();
-    buttonContainer.style.left = `${rect.left + 5}px`;
-    buttonContainer.style.top = `${rect.top + 5}px`;
+    buttonContainer.style.left = `${rect.left - 56}px`; // 48px button + 8px gap
+    buttonContainer.style.top = `${rect.top}px`; // Align with top edge
   }
 
   private positionBubble(imageState: ImageState) {
@@ -240,21 +248,25 @@ class ImageExplanationHandler {
 
     console.log('[ImageExplain] Button clicked for:', imageUrl);
 
-    // If explanation already exists, toggle bubble visibility
-    if (imageState.explanation) {
-      imageState.bubbleVisible = !imageState.bubbleVisible;
-
-      // Reset interaction state when reopening
-      if (imageState.bubbleVisible) {
-        imageState.hasInteractedSinceOpen = false;
-      }
-
-      this.renderBubble(imageUrl);
-      return;
+    // NEW: Open in multi-tab chatbox instead of bubble
+    // If explanation doesn't exist yet, generate it first
+    if (!imageState.explanation) {
+      await this.generateExplanation(imageUrl);
     }
 
-    // Generate new explanation
-    await this.generateExplanation(imageUrl);
+    // Open image chat in chatbox (or switch to existing tab)
+    try {
+      const blob = await imageElementToBlob(imageState.element);
+      const title = imageState.title || 'Image Explanation';
+      const buttonElement = imageState.buttonContainer;
+
+      if (buttonElement) {
+        await chatboxInjector.openImageTab(imageUrl, blob, buttonElement, title);
+        console.log('[ImageExplain] ✓ Opened image tab in chatbox');
+      }
+    } catch (error) {
+      console.error('[ImageExplain] Error opening image tab:', error);
+    }
   }
 
   private async generateExplanation(imageUrl: string) {
@@ -304,9 +316,9 @@ class ImageExplanationHandler {
       imageState.explanation = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
     } finally {
       imageState.isLoading = false;
-      imageState.bubbleVisible = true;  // Show bubble after loading complete
+      // NOTE: No longer showing bubble here - using multi-tab chatbox instead
       this.renderButton(imageUrl, imageState.buttonRoot!);
-      this.renderBubble(imageUrl);
+      // this.renderBubble(imageUrl); // DEPRECATED: Bubble no longer used
     }
   }
 
@@ -408,17 +420,19 @@ class ImageExplanationHandler {
     this.renderBubble(imageUrl);
   }
 
-  private async handleRegenerate(imageUrl: string) {
+  /**
+   * Regenerate explanation for an image (public method for chatbox integration)
+   */
+  async regenerateExplanation(imageUrl: string): Promise<{ title: string; explanation: string } | null> {
     const imageState = this.imageStates.get(imageUrl);
     if (!imageState || !this.currentPaper) {
-      return;
+      return null;
     }
 
     console.log('[ImageExplain] Regenerating explanation for:', imageUrl);
 
-    // Set loading state (don't close bubble)
+    // Set loading state
     imageState.isLoading = true;
-    this.renderBubble(imageUrl);
 
     try {
       // Convert image to blob
@@ -445,17 +459,23 @@ class ImageExplanationHandler {
 
         console.log('[ImageExplain] ✓ Regenerated and stored explanation');
         console.log('[ImageExplain] New title:', result.title);
+
+        return result;
       } else {
         console.warn('[ImageExplain] Failed to regenerate explanation');
-        // Keep existing explanation
+        return null;
       }
     } catch (error) {
       console.error('[ImageExplain] Error regenerating explanation:', error);
-      // Keep existing explanation on error
+      return null;
     } finally {
       imageState.isLoading = false;
-      this.renderBubble(imageUrl);
     }
+  }
+
+  private async handleRegenerate(imageUrl: string) {
+    await this.regenerateExplanation(imageUrl);
+    // Deprecated: bubbles no longer used, kept for backwards compatibility
   }
 
   private calculateBubblePosition(imageState: ImageState): { x: number; y: number; width: number; height: number } {

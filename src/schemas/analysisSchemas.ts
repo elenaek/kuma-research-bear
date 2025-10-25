@@ -325,7 +325,7 @@ export const imageExplanationSchema: JSONSchema = {
     },
     explanation: {
       type: 'string',
-      description: 'Detailed explanation of what the image shows in the context of the research paper, including key findings, trends, and relevance',
+      description: 'Detailed explanation of what the image shows in the context of the research paper. IMPORTANT: Markdown and LaTeX are SAFE and REQUIRED inside JSON strings. Example valid JSON string: "This figure shows **bold text** and $x^2$ equation.\\n\\n- Key finding 1\\n- Key finding 2". Use markdown formatting (bold, italic, lists, headers) for structure and LaTeX notation for math ($inline$ or $$display$$). Include: what the image depicts, key findings, trends, patterns, and relevance.',
     },
   },
   required: ['title', 'explanation'],

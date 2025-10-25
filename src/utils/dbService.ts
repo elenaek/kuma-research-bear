@@ -1,4 +1,4 @@
-import { ResearchPaper, StoredPaper, ContentChunk, ImageExplanation } from '../types/index.ts';
+import { ResearchPaper, StoredPaper, ContentChunk, ImageExplanation, ChatMessage, ConversationState } from '../types/index.ts';
 
 /**
  * IndexedDB Service for storing research papers locally
@@ -6,10 +6,24 @@ import { ResearchPaper, StoredPaper, ContentChunk, ImageExplanation } from '../t
  */
 
 const DB_NAME = 'KumaResearchBearDB';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const PAPERS_STORE = 'papers';
 const CHUNKS_STORE = 'chunks';
 const IMAGE_EXPLANATIONS_STORE = 'imageExplanations';
+const IMAGE_CHATS_STORE = 'imageChats';
+
+/**
+ * Image chat entry stored in IndexedDB
+ * Keyed by composite ID: `${paperId}-${hashCode(imageUrl)}`
+ */
+export interface ImageChatEntry {
+  id: string; // Composite ID: `${paperId}-${hashCode(imageUrl)}`
+  paperId: string;
+  imageUrl: string;
+  chatHistory: ChatMessage[];
+  conversationState: ConversationState;
+  lastUpdated: number;
+}
 
 /**
  * Initialize IndexedDB
@@ -76,7 +90,16 @@ function initDB(): Promise<IDBDatabase> {
         console.log('✓ Migrated image explanations to DB_VERSION 3 (added title field)');
       }
 
-      console.log('✓ IndexedDB initialized with stores:', PAPERS_STORE, CHUNKS_STORE, IMAGE_EXPLANATIONS_STORE);
+      // Create image chats store (DB_VERSION 4)
+      if (!db.objectStoreNames.contains(IMAGE_CHATS_STORE)) {
+        const imageChatsStore = db.createObjectStore(IMAGE_CHATS_STORE, { keyPath: 'id' });
+        imageChatsStore.createIndex('paperId', 'paperId', { unique: false });
+        imageChatsStore.createIndex('imageUrl', 'imageUrl', { unique: false });
+        imageChatsStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
+        console.log('✓ Created image chats store (DB_VERSION 4)');
+      }
+
+      console.log('✓ IndexedDB initialized with stores:', PAPERS_STORE, CHUNKS_STORE, IMAGE_EXPLANATIONS_STORE, IMAGE_CHATS_STORE);
     };
   });
 }
@@ -1119,6 +1142,188 @@ export async function deleteImageExplanationsByPaper(paperId: string): Promise<n
   } catch (error) {
     db.close();
     console.error('Error deleting image explanations for paper:', error);
+    return 0;
+  }
+}
+
+/**
+ * Generate unique ID for an image chat
+ * Composite ID: `${paperId}-${hashCode(imageUrl)}`
+ */
+function generateImageChatId(paperId: string, imageUrl: string): string {
+  let hash = 0;
+  for (let i = 0; i < imageUrl.length; i++) {
+    const char = imageUrl.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return `${paperId}-img_${Math.abs(hash)}`;
+}
+
+/**
+ * Get image chat history by paper ID and image URL
+ */
+export async function getImageChat(
+  paperId: string,
+  imageUrl: string
+): Promise<ImageChatEntry | null> {
+  const db = await initDB();
+
+  try {
+    const id = generateImageChatId(paperId, imageUrl);
+    const transaction = db.transaction([IMAGE_CHATS_STORE], 'readonly');
+    const store = transaction.objectStore(IMAGE_CHATS_STORE);
+
+    const chat = await new Promise<ImageChatEntry | null>((resolve) => {
+      const request = store.get(id);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+
+    db.close();
+    return chat;
+  } catch (error) {
+    db.close();
+    console.error('Error getting image chat:', error);
+    return null;
+  }
+}
+
+/**
+ * Update or create image chat entry
+ */
+export async function updateImageChat(
+  paperId: string,
+  imageUrl: string,
+  data: Partial<ImageChatEntry>
+): Promise<void> {
+  const db = await initDB();
+
+  try {
+    const id = generateImageChatId(paperId, imageUrl);
+    const transaction = db.transaction([IMAGE_CHATS_STORE], 'readwrite');
+    const store = transaction.objectStore(IMAGE_CHATS_STORE);
+
+    // Get existing chat or create new one
+    const existing = await new Promise<ImageChatEntry | null>((resolve) => {
+      const request = store.get(id);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+
+    const chatEntry: ImageChatEntry = existing
+      ? { ...existing, ...data, lastUpdated: Date.now() }
+      : {
+          id,
+          paperId,
+          imageUrl,
+          chatHistory: [],
+          conversationState: {
+            summary: null,
+            recentMessages: [],
+            lastSummarizedIndex: -1,
+            summaryCount: 0,
+          },
+          lastUpdated: Date.now(),
+          ...data,
+        };
+
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put(chatEntry);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to update image chat'));
+    });
+
+    console.log('✓ Updated image chat for:', imageUrl);
+    db.close();
+  } catch (error) {
+    db.close();
+    console.error('Error updating image chat:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete image chat by paper ID and image URL
+ */
+export async function deleteImageChat(
+  paperId: string,
+  imageUrl: string
+): Promise<boolean> {
+  const db = await initDB();
+
+  try {
+    const id = generateImageChatId(paperId, imageUrl);
+    const transaction = db.transaction([IMAGE_CHATS_STORE], 'readwrite');
+    const store = transaction.objectStore(IMAGE_CHATS_STORE);
+
+    await new Promise<void>((resolve, reject) => {
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to delete image chat'));
+    });
+
+    console.log('✓ Deleted image chat for:', imageUrl);
+    db.close();
+    return true;
+  } catch (error) {
+    db.close();
+    console.error('Error deleting image chat:', error);
+    return false;
+  }
+}
+
+/**
+ * Get all image chats for a paper
+ */
+export async function getAllImageChatsForPaper(paperId: string): Promise<ImageChatEntry[]> {
+  const db = await initDB();
+
+  try {
+    const transaction = db.transaction([IMAGE_CHATS_STORE], 'readonly');
+    const store = transaction.objectStore(IMAGE_CHATS_STORE);
+    const index = store.index('paperId');
+
+    const chats = await new Promise<ImageChatEntry[]>((resolve, reject) => {
+      const request = index.getAll(paperId);
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(new Error('Failed to get image chats'));
+    });
+
+    db.close();
+    return chats.sort((a, b) => b.lastUpdated - a.lastUpdated);
+  } catch (error) {
+    db.close();
+    console.error('Error getting image chats for paper:', error);
+    return [];
+  }
+}
+
+/**
+ * Delete all image chats for a paper
+ */
+export async function deleteImageChatsByPaper(paperId: string): Promise<number> {
+  const db = await initDB();
+
+  try {
+    const chats = await getAllImageChatsForPaper(paperId);
+    const transaction = db.transaction([IMAGE_CHATS_STORE], 'readwrite');
+    const store = transaction.objectStore(IMAGE_CHATS_STORE);
+
+    for (const chat of chats) {
+      await new Promise<void>((resolve, reject) => {
+        const request = store.delete(chat.id);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(new Error('Failed to delete image chat'));
+      });
+    }
+
+    console.log(`✓ Deleted ${chats.length} image chats for paper:`, paperId);
+    db.close();
+    return chats.length;
+  } catch (error) {
+    db.close();
+    console.error('Error deleting image chats for paper:', error);
     return 0;
   }
 }

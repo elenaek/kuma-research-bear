@@ -1,7 +1,8 @@
 import { h, render } from 'preact';
 import { ChatBox } from '../components/ChatBox.tsx';
-import { ChatMessage, ChatboxSettings, ChatboxPosition, StoredPaper } from '../../types/index.ts';
+import { ChatMessage, ChatboxSettings, ChatboxPosition, StoredPaper, ChatTab, ConversationState } from '../../types/index.ts';
 import * as ChromeService from '../../services/ChromeService.ts';
+import { imageExplanationHandler } from './imageExplanationHandler.ts';
 
 // Default position and size
 const DEFAULT_POSITION: ChatboxPosition = {
@@ -16,19 +17,78 @@ const DEFAULT_SETTINGS: ChatboxSettings = {
   visible: false,
   minimized: false,
   transparencyEnabled: true,
+  activeTabs: [],
+  activeTabId: 'paper', // Default to paper tab
 };
+
+/**
+ * Internal tab state (richer than ChatTab with streaming state)
+ */
+interface TabState {
+  id: string;
+  type: 'paper' | 'image';
+  title: string;
+  messages: ChatMessage[];
+  isStreaming: boolean;
+  streamingMessage: string;
+  conversationState: ConversationState;
+  // For image tabs only:
+  imageUrl?: string;
+  imageBlob?: Blob;
+  imageButtonElement?: HTMLElement;
+}
 
 class ChatboxInjector {
   private container: HTMLDivElement | null = null;
   private shadowRoot: ShadowRoot | null = null;
   private settings: ChatboxSettings = DEFAULT_SETTINGS;
-  private messages: ChatMessage[] = [];
-  private isStreaming = false;
-  private streamingMessage = '';
+  private tabs: TabState[] = []; // Multi-tab state
+  private activeTabId: string = 'paper'; // Currently active tab
   private currentPaper: StoredPaper | null = null;
   private isInitialized = false;
   private hasInteractedSinceOpen = false;
+  private scrollListener: (() => void) | null = null;
+  private documentScrollListener: (() => void) | null = null;
+  private resizeListener: (() => void) | null = null;
+  private previousCompassAngle: number | null = null; // Track previous angle to prevent 360° spins
   private initialInputValue = '';
+  private isRegeneratingExplanation = false;
+
+  /**
+   * Wait for page to be fully loaded
+   */
+  private async waitForPageReady(): Promise<void> {
+    // If document already loaded, resolve immediately
+    if (document.readyState === 'complete') {
+      return;
+    }
+
+    // Otherwise wait for load event
+    return new Promise((resolve) => {
+      window.addEventListener('load', () => resolve(), { once: true });
+    });
+  }
+
+  /**
+   * Wait for URL to stabilize (important for SPAs that change URL dynamically)
+   */
+  private async waitForStableUrl(): Promise<string> {
+    let currentUrl = window.location.href;
+    let stableCount = 0;
+
+    // Check URL every 100ms, need 3 consecutive matches to consider it stable
+    while (stableCount < 3) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (window.location.href === currentUrl) {
+        stableCount++;
+      } else {
+        currentUrl = window.location.href;
+        stableCount = 0;
+      }
+    }
+
+    return currentUrl;
+  }
 
   async initialize() {
     if (this.isInitialized) {
@@ -39,9 +99,18 @@ class ChatboxInjector {
     console.log('[Kuma Chat] Starting initialization...');
 
     try {
+      // Wait for page to be fully loaded
+      await this.waitForPageReady();
+
+      // Wait for URL to stabilize (important for SPAs)
+      const stableUrl = await this.waitForStableUrl();
+
+      // Fetch current paper from database
+      const { getPaperFromDBByUrl } = await import('../../services/ChromeService.ts');
+      this.currentPaper = await getPaperFromDBByUrl(stableUrl);
+
       // Load saved settings from Chrome storage
       await this.loadSettings();
-      console.log('[Kuma Chat] Settings loaded:', this.settings);
 
       // Create container
       this.container = document.createElement('div');
@@ -50,12 +119,10 @@ class ChatboxInjector {
 
       // Create shadow DOM for style isolation
       this.shadowRoot = this.container.attachShadow({ mode: 'open' });
-      console.log('[Kuma Chat] Shadow DOM created');
 
       // Add styles to shadow DOM
       const styleSheet = document.createElement('style');
       const styles = await this.loadStyles();
-      console.log('[Kuma Chat] Styles loaded, length:', styles.length);
       styleSheet.textContent = styles;
       this.shadowRoot.appendChild(styleSheet);
 
@@ -65,9 +132,14 @@ class ChatboxInjector {
 
       // Append to body
       document.body.appendChild(this.container);
-      console.log('[Kuma Chat] Container appended to body');
 
       this.isInitialized = true;
+
+      // Initialize with default paper tab
+      await this.initializePaperTab();
+
+      // Note: restoreTabs() will be called later, after image buttons are created
+      // (See content.ts - called after setupImageExplanations)
 
       // Render initial state
       this.render();
@@ -82,15 +154,42 @@ class ChatboxInjector {
     }
   }
 
+  /**
+   * Initialize the default paper tab
+   */
+  private async initializePaperTab() {
+    // Always create a paper tab
+    const paperTab: TabState = {
+      id: 'paper',
+      type: 'paper',
+      title: this.currentPaper?.title || 'Paper Chat',
+      messages: [],
+      isStreaming: false,
+      streamingMessage: '',
+      conversationState: {
+        summary: null,
+        recentMessages: [],
+        lastSummarizedIndex: -1,
+        summaryCount: 0,
+      },
+    };
+
+    this.tabs = [paperTab];
+    this.activeTabId = 'paper';
+
+    // Load paper chat history if paper is available
+    if (this.currentPaper) {
+      await this.loadPaperChatHistory();
+    }
+  }
+
   private async loadStyles(): Promise<string> {
     // Try to load CSS file from build output
     try {
       const cssUrl = chrome.runtime.getURL('src/content/components/chatbox.css');
-      console.log('[Kuma Chat] Attempting to load CSS from:', cssUrl);
       const response = await fetch(cssUrl);
       if (response.ok) {
         const css = await response.text();
-        console.log('[Kuma Chat] CSS loaded successfully from file');
         return css;
       }
       throw new Error(`Failed to fetch CSS: ${response.status}`);
@@ -669,69 +768,290 @@ class ChatboxInjector {
 
   private async saveSettings() {
     try {
+      // Convert tabs to serializable format (strip out blobs, elements, messages)
+      const serializableTabs = this.tabs
+        .filter(tab => tab.type === 'image') // Only save image tabs (paper tab is auto-created)
+        .map(tab => ({
+          id: tab.id,
+          type: tab.type,
+          title: tab.title,
+          imageUrl: tab.imageUrl,
+        }));
+
+      this.settings.activeTabs = serializableTabs as ChatTab[];
+      this.settings.activeTabId = this.activeTabId;
+
       await chrome.storage.local.set({ chatboxSettings: this.settings });
+      console.log('[Kuma Chat] Settings saved successfully');
     } catch (error) {
       console.error('[Kuma Chat] Failed to save settings:', error);
     }
   }
 
-  private async loadChatHistory() {
+  /**
+   * Find image button element on page by image URL
+   * Uses imageExplanationHandler since buttons are in shadow DOM
+   */
+  private findImageButtonByUrl(imageUrl: string): HTMLElement | null {
+    try {
+      // Get image state from image explanation handler (buttons are in shadow DOM)
+      const imageState = imageExplanationHandler.getImageStateByUrl(imageUrl);
+
+      if (imageState && imageState.buttonContainer) {
+        return imageState.buttonContainer;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('[Kuma Chat] Error finding image button:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Restore saved tabs from settings (call after image buttons are created)
+   */
+  async restoreTabs() {
+    if (!this.settings.activeTabs || this.settings.activeTabs.length === 0) {
+      return;
+    }
+
+    for (const savedTab of this.settings.activeTabs) {
+      if (savedTab.type !== 'image' || !savedTab.imageUrl) {
+        continue;
+      }
+
+      try {
+        // Get image state from image explanation handler
+        const imageState = imageExplanationHandler.getImageStateByUrl(savedTab.imageUrl);
+
+        if (!imageState || !imageState.buttonContainer) {
+          console.warn('[Kuma Chat] Could not find image state for saved tab:', savedTab.title);
+          continue;
+        }
+
+        // Get the image element to fetch blob
+        const img = imageState.element;
+
+        if (!img) {
+          continue;
+        }
+
+        // Fetch image blob
+        const response = await fetch(savedTab.imageUrl);
+        const blob = await response.blob();
+
+        // Recreate the tab
+        const imageTab: TabState = {
+          id: savedTab.id,
+          type: 'image',
+          title: savedTab.title,
+          messages: [],
+          isStreaming: false,
+          streamingMessage: '',
+          conversationState: {
+            summary: null,
+            recentMessages: [],
+            lastSummarizedIndex: -1,
+            summaryCount: 0,
+          },
+          imageUrl: savedTab.imageUrl,
+          imageBlob: blob,
+          imageButtonElement: imageState.buttonContainer,
+        };
+
+        // Add to tabs
+        this.tabs.push(imageTab);
+
+        // Load chat history
+        if (this.currentPaper) {
+          await this.loadImageChatHistory(imageTab.id, this.currentPaper.id, savedTab.imageUrl);
+        }
+
+        // If no chat history exists, check for a stored explanation and seed it as the first message
+        if (imageTab.messages.length === 0) {
+          try {
+            const response = await ChromeService.getImageExplanation(this.currentPaper.id, savedTab.imageUrl);
+            if (response.success && response.explanation) {
+              // Ensure content is a string (defensive check for structured output issues)
+              let content: string;
+              if (typeof response.explanation.explanation === 'string') {
+                content = response.explanation.explanation;
+              } else {
+                console.warn('[Kuma Chat] explanation is not a string, stringifying:', typeof response.explanation.explanation);
+                content = JSON.stringify(response.explanation.explanation);
+              }
+
+              // Add the explanation as the first assistant message
+              imageTab.messages.push({
+                role: 'assistant',
+                content,
+                timestamp: Date.now(),
+              });
+            }
+          } catch (error) {
+            console.error('[Kuma Chat] Error loading initial explanation for restored tab:', error);
+          }
+        }
+
+        console.log('[Kuma Chat] ✓ Restored tab:', savedTab.title, 'with', imageTab.messages.length, 'messages');
+      } catch (error) {
+        console.error('[Kuma Chat] Error restoring tab:', savedTab.title, error);
+      }
+    }
+
+    // Restore active tab if it still exists
+    if (this.settings.activeTabId) {
+      const tabExists = this.tabs.find(t => t.id === this.settings.activeTabId);
+      if (tabExists) {
+        this.activeTabId = this.settings.activeTabId;
+      }
+    }
+
+    // Set up compass tracking if active tab is an image tab
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (activeTab && activeTab.type === 'image') {
+      this.setupCompassTracking();
+    }
+
+    // Render to show restored tabs
+    this.render();
+    console.log('[Kuma Chat] ✓ Tabs restored and rendered');
+  }
+
+  /**
+   * Load paper chat history into the paper tab
+   */
+  private async loadPaperChatHistory() {
     if (!this.currentPaper) {
-      this.messages = [];
       return;
     }
 
     try {
       const paper = await ChromeService.getPaperFromDBByUrl(this.currentPaper.url);
-      if (paper && paper.chatHistory) {
-        this.messages = paper.chatHistory;
-      } else {
-        this.messages = [];
+      const paperTab = this.tabs.find(t => t.id === 'paper');
+
+      if (paperTab) {
+        if (paper && paper.chatHistory) {
+          paperTab.messages = paper.chatHistory;
+          paperTab.conversationState = paper.conversationState || {
+            summary: null,
+            recentMessages: [],
+            lastSummarizedIndex: -1,
+            summaryCount: 0,
+          };
+        } else {
+          paperTab.messages = [];
+        }
+
+        // Update title if paper changed
+        paperTab.title = paper?.title || 'Paper Chat';
       }
     } catch (error) {
-      console.error('[Kuma Chat] Failed to load chat history:', error);
-      this.messages = [];
+      console.error('[Kuma Chat] Failed to load paper chat history:', error);
     }
   }
 
-  private async saveChatHistory() {
+  /**
+   * Load image chat history into an image tab
+   */
+  private async loadImageChatHistory(tabId: string, paperId: string, imageUrl: string) {
+    try {
+      const response = await ChromeService.getImageChatHistory(paperId, imageUrl);
+      const imageTab = this.tabs.find(t => t.id === tabId);
+
+      if (imageTab && response.success && response.chatHistory) {
+        imageTab.messages = response.chatHistory;
+      }
+    } catch (error) {
+      console.error('[Kuma Chat] Failed to load image chat history:', error);
+    }
+  }
+
+  /**
+   * Save paper chat history
+   */
+  private async savePaperChatHistory() {
     if (!this.currentPaper) {
       return;
     }
 
     try {
-      await ChromeService.updateChatHistory(this.currentPaper.url, this.messages);
+      const paperTab = this.tabs.find(t => t.id === 'paper');
+      if (paperTab) {
+        await ChromeService.updateChatHistory(this.currentPaper.url, paperTab.messages);
+      }
     } catch (error) {
-      console.error('[Kuma Chat] Failed to save chat history:', error);
+      console.error('[Kuma Chat] Failed to save paper chat history:', error);
+    }
+  }
+
+  /**
+   * Save image chat history
+   */
+  private async saveImageChatHistory(tabId: string, paperId: string, imageUrl: string) {
+    try {
+      const imageTab = this.tabs.find(t => t.id === tabId);
+      if (imageTab) {
+        await ChromeService.updateImageChatHistory(paperId, imageUrl, imageTab.messages);
+      }
+    } catch (error) {
+      console.error('[Kuma Chat] Failed to save image chat history:', error);
     }
   }
 
   private setupContextListener() {
-    // Listen for paper changes (when user navigates to different paper)
+    // Listen for paper changes and streaming messages
     chrome.runtime.onMessage.addListener((message) => {
       if (message.type === 'PAPER_CONTEXT_CHANGED') {
         this.handlePaperContextChange(message.payload);
       } else if (message.type === 'CHAT_STREAM_CHUNK') {
-        this.handleStreamChunk(message.payload);
+        this.handlePaperStreamChunk(message.payload);
       } else if (message.type === 'CHAT_STREAM_END') {
-        this.handleStreamEnd(message.payload);
+        this.handlePaperStreamEnd(message.payload);
+      } else if (message.type === 'IMAGE_CHAT_STREAM_CHUNK') {
+        this.handleImageStreamChunk(message.payload);
+      } else if (message.type === 'IMAGE_CHAT_STREAM_END') {
+        this.handleImageStreamEnd(message.payload);
       }
     });
   }
 
   private async handlePaperContextChange(paper: StoredPaper | null) {
     this.currentPaper = paper;
-    await this.loadChatHistory();
+    await this.loadPaperChatHistory();
+
+    // Reload image tab histories if they were restored without paper context
+    if (this.currentPaper) {
+      for (const tab of this.tabs) {
+        if (tab.type === 'image' && tab.imageUrl && tab.messages.length === 0) {
+          await this.loadImageChatHistory(tab.id, this.currentPaper.id, tab.imageUrl);
+        }
+      }
+    }
+
     this.render();
   }
 
-  private handleStreamChunk(chunk: string) {
-    this.streamingMessage += chunk;
-    this.render();
+  /**
+   * Handle paper chat stream chunk
+   */
+  private handlePaperStreamChunk(chunk: string) {
+    const paperTab = this.tabs.find(t => t.id === 'paper');
+    if (paperTab) {
+      paperTab.streamingMessage += chunk;
+      this.render();
+    }
   }
 
-  private handleStreamEnd(data: { fullMessage: string; sources?: string[] }) {
-    this.isStreaming = false;
+  /**
+   * Handle paper chat stream end
+   */
+  private handlePaperStreamEnd(data: { fullMessage: string; sources?: string[] }) {
+    const paperTab = this.tabs.find(t => t.id === 'paper');
+    if (!paperTab) return;
+
+    paperTab.isStreaming = false;
 
     // Add assistant message to history
     const assistantMessage: ChatMessage = {
@@ -741,38 +1061,72 @@ class ChatboxInjector {
       sources: data.sources,
     };
 
-    this.messages.push(assistantMessage);
-    this.streamingMessage = '';
+    paperTab.messages.push(assistantMessage);
+    paperTab.streamingMessage = '';
 
     // Save to database
-    this.saveChatHistory();
+    this.savePaperChatHistory();
+
+    this.render();
+  }
+
+  /**
+   * Handle image chat stream chunk (route to correct tab)
+   */
+  private handleImageStreamChunk(chunk: string) {
+    // Image stream chunks need to be routed to the correct image tab
+    // For now, assume it's for the active tab if it's an image tab
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (activeTab && activeTab.type === 'image') {
+      activeTab.streamingMessage += chunk;
+      this.render();
+    }
+  }
+
+  /**
+   * Handle image chat stream end (route to correct tab)
+   */
+  private handleImageStreamEnd(data: { fullMessage: string; sources?: string[] }) {
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab || activeTab.type !== 'image') return;
+
+    activeTab.isStreaming = false;
+
+    // Add assistant message to history
+    const assistantMessage: ChatMessage = {
+      role: 'assistant',
+      content: data.fullMessage,
+      timestamp: Date.now(),
+      sources: data.sources,
+    };
+
+    activeTab.messages.push(assistantMessage);
+    activeTab.streamingMessage = '';
+
+    // Save to database (need paperId and imageUrl)
+    if (this.currentPaper && activeTab.imageUrl) {
+      this.saveImageChatHistory(activeTab.id, this.currentPaper.id, activeTab.imageUrl);
+    }
 
     this.render();
   }
 
   async toggle() {
-    console.log('[Kuma Chat] Toggle called, current visible:', this.settings.visible);
     this.settings.visible = !this.settings.visible;
-    console.log('[Kuma Chat] New visible state:', this.settings.visible);
 
     if (this.settings.visible) {
       // Force expanded mode when opening
       this.settings.minimized = false;
-      console.log('[Kuma Chat] Forcing expanded mode (minimized: false)');
 
       // Reset interaction state (transparency won't activate until user clicks)
       this.hasInteractedSinceOpen = false;
 
       // Load current paper context when opening
-      console.log('[Kuma Chat] Loading paper context...');
       await this.updateCurrentPaper();
-      await this.loadChatHistory();
-      console.log('[Kuma Chat] Current paper:', this.currentPaper?.title);
-      console.log('[Kuma Chat] Messages loaded:', this.messages.length);
+      await this.loadPaperChatHistory();
     }
 
     await this.saveSettings();
-    console.log('[Kuma Chat] Calling render...');
     this.render();
   }
 
@@ -784,6 +1138,7 @@ class ChatboxInjector {
 
   async hide() {
     if (this.settings.visible) {
+      this.cleanupCompassTracking();
       this.settings.visible = false;
       await this.saveSettings();
       this.render();
@@ -791,8 +1146,6 @@ class ChatboxInjector {
   }
 
   async openWithQuery(query: string) {
-    console.log('[Kuma Chat] Opening with query:', query);
-
     // Set the initial input value
     this.initialInputValue = query;
 
@@ -805,7 +1158,10 @@ class ChatboxInjector {
 
     // Load current paper context if not already loaded
     await this.updateCurrentPaper();
-    await this.loadChatHistory();
+    await this.loadPaperChatHistory();
+
+    // Switch to paper tab
+    this.activeTabId = 'paper';
 
     await this.saveSettings();
     this.render();
@@ -814,6 +1170,169 @@ class ChatboxInjector {
     setTimeout(() => {
       this.initialInputValue = '';
     }, 100);
+  }
+
+  /**
+   * Open a new image chat tab
+   */
+  async openImageTab(
+    imageUrl: string,
+    imageBlob: Blob,
+    imageButtonElement: HTMLElement,
+    title: string
+  ): Promise<void> {
+    if (!this.currentPaper) {
+      console.error('[Kuma Chat] No paper loaded, cannot open image tab');
+      return;
+    }
+
+    // Generate tab ID using same hash logic as backend
+    let hash = 0;
+    for (let i = 0; i < imageUrl.length; i++) {
+      const char = imageUrl.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    const tabId = `image-img_${Math.abs(hash)}`;
+
+    // Check if tab already exists
+    const existingTab = this.tabs.find(t => t.id === tabId);
+    if (existingTab) {
+      // Just switch to it
+      this.activeTabId = tabId;
+      this.settings.visible = true;
+      this.settings.minimized = false;
+      await this.saveSettings();
+      this.render();
+      return;
+    }
+
+    // Create new image tab
+    const imageTab: TabState = {
+      id: tabId,
+      type: 'image',
+      title,
+      messages: [],
+      isStreaming: false,
+      streamingMessage: '',
+      conversationState: {
+        summary: null,
+        recentMessages: [],
+        lastSummarizedIndex: -1,
+        summaryCount: 0,
+      },
+      imageUrl,
+      imageBlob,
+      imageButtonElement,
+    };
+
+    // Add to tabs first
+    this.tabs.push(imageTab);
+
+    // Load existing chat history if available
+    await this.loadImageChatHistory(tabId, this.currentPaper.id, imageUrl);
+
+    // If no chat history exists, check for a stored explanation and seed it as the first message
+    if (imageTab.messages.length === 0) {
+      try {
+        const response = await ChromeService.getImageExplanation(this.currentPaper.id, imageUrl);
+        if (response.success && response.explanation) {
+          // Ensure content is a string (defensive check for structured output issues)
+          let content: string;
+          if (typeof response.explanation.explanation === 'string') {
+            content = response.explanation.explanation;
+          } else {
+            console.warn('[Kuma Chat] explanation is not a string, stringifying:', typeof response.explanation.explanation);
+            content = JSON.stringify(response.explanation.explanation);
+          }
+
+          // Add the explanation as the first assistant message
+          imageTab.messages.push({
+            role: 'assistant',
+            content,
+            timestamp: Date.now(),
+          });
+          console.log('[Kuma Chat] Seeded initial explanation from cache');
+        }
+      } catch (error) {
+        console.error('[Kuma Chat] Error loading initial explanation:', error);
+      }
+    }
+
+    // Switch to this tab and show chatbox
+    this.activeTabId = tabId;
+    this.settings.visible = true;
+    this.settings.minimized = false;
+    this.hasInteractedSinceOpen = false;
+
+    await this.saveSettings();
+
+    // Set up compass tracking for this image tab
+    this.setupCompassTracking();
+
+    this.render();
+
+    console.log('[Kuma Chat] ✓ Image tab opened:', tabId);
+  }
+
+  /**
+   * Close a tab
+   */
+  async closeTab(tabId: string): Promise<void> {
+    // Cannot close paper tab
+    if (tabId === 'paper') {
+      console.warn('[Kuma Chat] Cannot close paper tab');
+      return;
+    }
+
+    const tabIndex = this.tabs.findIndex(t => t.id === tabId);
+    if (tabIndex === -1) {
+      console.warn('[Kuma Chat] Tab not found:', tabId);
+      return;
+    }
+
+    const tab = this.tabs[tabIndex];
+
+    // Delete from IndexedDB if it's an image tab
+    if (tab.type === 'image' && tab.imageUrl && this.currentPaper) {
+      await ChromeService.clearImageChatHistory(this.currentPaper.id, tab.imageUrl);
+    }
+
+    // Remove from tabs
+    this.tabs.splice(tabIndex, 1);
+
+    // If we closed the active tab, switch to paper tab
+    if (this.activeTabId === tabId) {
+      this.activeTabId = 'paper';
+      // Clean up compass tracking when switching to paper tab
+      this.setupCompassTracking();
+    }
+
+    await this.saveSettings();
+    this.render();
+
+    console.log('[Kuma Chat] ✓ Tab closed:', tabId);
+  }
+
+  /**
+   * Switch to a different tab
+   */
+  async switchTab(tabId: string): Promise<void> {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) {
+      console.warn('[Kuma Chat] Tab not found:', tabId);
+      return;
+    }
+
+    this.activeTabId = tabId;
+    await this.saveSettings();
+
+    // Set up compass tracking for image tabs
+    this.setupCompassTracking();
+
+    this.render();
+
+    console.log('[Kuma Chat] ✓ Switched to tab:', tabId);
   }
 
   minimize() {
@@ -846,6 +1365,12 @@ class ChatboxInjector {
       return;
     }
 
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) {
+      console.error('[Kuma Chat] Active tab not found');
+      return;
+    }
+
     // Add user message to history
     const userMessage: ChatMessage = {
       role: 'user',
@@ -853,21 +1378,34 @@ class ChatboxInjector {
       timestamp: Date.now(),
     };
 
-    this.messages.push(userMessage);
-    this.isStreaming = true;
-    this.streamingMessage = '';
+    activeTab.messages.push(userMessage);
+    activeTab.isStreaming = true;
+    activeTab.streamingMessage = '';
 
     // Save user message immediately
-    await this.saveChatHistory();
+    if (activeTab.type === 'paper') {
+      await this.savePaperChatHistory();
+    } else if (activeTab.type === 'image' && activeTab.imageUrl) {
+      await this.saveImageChatHistory(activeTab.id, this.currentPaper.id, activeTab.imageUrl);
+    }
 
     this.render();
 
     // Send to background for processing
     try {
-      await ChromeService.sendChatMessage(this.currentPaper.url, message);
+      if (activeTab.type === 'paper') {
+        await ChromeService.sendChatMessage(this.currentPaper.url, message);
+      } else if (activeTab.type === 'image' && activeTab.imageUrl && activeTab.imageBlob) {
+        await ChromeService.sendImageChatMessage(
+          this.currentPaper.id,
+          activeTab.imageUrl,
+          activeTab.imageBlob,
+          message
+        );
+      }
     } catch (error) {
       console.error('[Kuma Chat] Failed to send message:', error);
-      this.isStreaming = false;
+      activeTab.isStreaming = false;
 
       // Add error message
       const errorMessage: ChatMessage = {
@@ -876,8 +1414,14 @@ class ChatboxInjector {
         timestamp: Date.now(),
       };
 
-      this.messages.push(errorMessage);
-      await this.saveChatHistory();
+      activeTab.messages.push(errorMessage);
+
+      if (activeTab.type === 'paper') {
+        await this.savePaperChatHistory();
+      } else if (activeTab.type === 'image' && activeTab.imageUrl) {
+        await this.saveImageChatHistory(activeTab.id, this.currentPaper.id, activeTab.imageUrl);
+      }
+
       this.render();
     }
   }
@@ -888,14 +1432,38 @@ class ChatboxInjector {
       return;
     }
 
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) {
+      console.error('[Kuma Chat] Active tab not found');
+      return;
+    }
+
     try {
-      // Clear from database
-      await ChromeService.clearChatHistory(this.currentPaper.url);
+      if (activeTab.type === 'paper') {
+        // Paper tab: clear everything
+        await ChromeService.clearChatHistory(this.currentPaper.url);
+        activeTab.messages = [];
+      } else if (activeTab.type === 'image' && activeTab.imageUrl) {
+        // Image tab: preserve the first message (explanation) if it exists
+        const hasExplanation = activeTab.messages.length > 0 && activeTab.messages[0].role === 'assistant';
 
-      // Clear local state
-      this.messages = [];
+        if (hasExplanation) {
+          // Keep only the explanation message
+          const explanationMessage = activeTab.messages[0];
+          activeTab.messages = [explanationMessage];
 
-      console.log('[Kuma Chat] ✓ Chat history cleared');
+          // Update database to store only the explanation
+          await ChromeService.updateImageChatHistory(this.currentPaper.id, activeTab.imageUrl, [explanationMessage]);
+        } else {
+          // No explanation to preserve, clear everything
+          activeTab.messages = [];
+        }
+
+        // Destroy AI session to start fresh conversation (but keep explanation visible)
+        await ChromeService.clearImageChatHistory(this.currentPaper.id, activeTab.imageUrl);
+      }
+
+      console.log('[Kuma Chat] ✓ Chat history cleared for tab:', activeTab.id);
 
       // Re-render
       this.render();
@@ -904,9 +1472,96 @@ class ChatboxInjector {
     }
   }
 
+  private async handleRegenerateExplanation() {
+    if (!this.currentPaper) {
+      console.error('[Kuma Chat] No paper loaded');
+      return;
+    }
+
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab || activeTab.type !== 'image' || !activeTab.imageUrl) {
+      console.error('[Kuma Chat] Active tab is not an image tab');
+      return;
+    }
+
+    // Set loading state
+    this.isRegeneratingExplanation = true;
+    this.render(); // Show loading immediately
+
+    try {
+      // Regenerate explanation
+      const result = await imageExplanationHandler.regenerateExplanation(activeTab.imageUrl);
+
+      if (result) {
+        // Update first message with new explanation
+        activeTab.messages[0] = {
+          role: 'assistant',
+          content: result.explanation,
+          timestamp: Date.now(),
+        };
+
+        // Clear conversation history (keep only the new explanation)
+        activeTab.messages = [activeTab.messages[0]];
+
+        // Update database with only the explanation
+        await ChromeService.updateImageChatHistory(this.currentPaper.id, activeTab.imageUrl, [activeTab.messages[0]]);
+
+        // Destroy AI session for fresh conversation context
+        await ChromeService.clearImageChatHistory(this.currentPaper.id, activeTab.imageUrl);
+
+        console.log('[Kuma Chat] ✓ Explanation regenerated and conversation cleared');
+      } else {
+        console.error('[Kuma Chat] Failed to regenerate explanation');
+      }
+    } catch (error) {
+      console.error('[Kuma Chat] Error regenerating explanation:', error);
+    } finally {
+      // Clear loading state
+      this.isRegeneratingExplanation = false;
+      this.render(); // Update UI
+    }
+  }
+
+  private handleScrollToImage() {
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab || activeTab.type !== 'image' || !activeTab.imageUrl) {
+      console.error('[Kuma Chat] Cannot scroll - not an image tab');
+      return;
+    }
+
+    // Get image state from image explanation handler
+    const imageState = imageExplanationHandler.getImageStateByUrl(activeTab.imageUrl);
+    if (!imageState || !imageState.element) {
+      console.error('[Kuma Chat] Image element not found for URL:', activeTab.imageUrl);
+      return;
+    }
+
+    // Scroll to the image
+    imageState.element.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+      inline: 'center'
+    });
+
+    // Add temporary highlight effect
+    const originalOutline = imageState.element.style.outline;
+    const originalOutlineOffset = imageState.element.style.outlineOffset;
+
+    imageState.element.style.outline = '3px solid #60a5fa';
+    imageState.element.style.outlineOffset = '2px';
+
+    setTimeout(() => {
+      imageState.element.style.outline = originalOutline;
+      imageState.element.style.outlineOffset = originalOutlineOffset;
+    }, 2000);
+
+    console.log('[Kuma Chat] ✓ Scrolled to image:', activeTab.imageUrl);
+  }
+
   private handlePositionChange(position: ChatboxPosition) {
     this.settings.position = position;
     this.saveSettings();
+    this.render(); // Update compass arrow on position change
   }
 
   private handleFirstInteraction() {
@@ -914,17 +1569,130 @@ class ChatboxInjector {
     this.render();
   }
 
+  /**
+   * Calculate compass arrow angle for image tabs
+   */
+  private getCompassArrowAngle(tabId: string): number {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab || tab.type !== 'image' || !tab.imageButtonElement) {
+      return 0;
+    }
+
+    // Get compass arrow position from actual element in shadow DOM
+    const arrowElement = this.shadowRoot?.querySelector('.chatbox-compass-arrow') as SVGElement;
+    let chatboxCenterX: number;
+    let chatboxCenterY: number;
+
+    if (arrowElement) {
+      // Use actual arrow element position for precise tracking
+      const arrowRect = arrowElement.getBoundingClientRect();
+      chatboxCenterX = arrowRect.left + arrowRect.width / 2;
+      chatboxCenterY = arrowRect.top + arrowRect.height / 2;
+    } else {
+      // Fallback to approximation if arrow not found
+      chatboxCenterX = this.settings.position.x + this.settings.position.width / 2;
+      chatboxCenterY = this.settings.position.y + 60;
+    }
+
+    // Get button position
+    const buttonRect = tab.imageButtonElement.getBoundingClientRect();
+    const buttonCenterX = buttonRect.left + buttonRect.width / 2;
+    const buttonCenterY = buttonRect.top + buttonRect.height / 2;
+
+    // Calculate raw angle
+    const deltaX = buttonCenterX - chatboxCenterX;
+    const deltaY = buttonCenterY - chatboxCenterY;
+    let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+
+    // Normalize angle to prevent 360° spins during CSS transitions
+    // Keep the new angle within ±180° of the previous angle
+    if (this.previousCompassAngle !== null) {
+      let diff = angle - this.previousCompassAngle;
+
+      // If difference is greater than 180°, we crossed the boundary
+      if (diff > 180) {
+        angle -= 360;
+      } else if (diff < -180) {
+        angle += 360;
+      }
+    }
+
+    // Store normalized angle for next comparison
+    this.previousCompassAngle = angle;
+
+    return angle;
+  }
+
+  /**
+   * Set up event listeners to track compass arrow position dynamically
+   */
+  private setupCompassTracking() {
+    // Remove any existing listeners
+    this.cleanupCompassTracking();
+
+    // Only set up if active tab is an image tab
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab || activeTab.type !== 'image') {
+      return;
+    }
+
+    // Reset angle tracking for fresh start
+    this.previousCompassAngle = null;
+
+    // Throttled render for performance (using requestAnimationFrame)
+    let rafPending = false;
+    const throttledRender = () => {
+      if (!rafPending) {
+        rafPending = true;
+        requestAnimationFrame(() => {
+          this.render();
+          rafPending = false;
+        });
+      }
+    };
+
+    // Listen to scroll events on both window and document
+    // (Some sites use scrollable divs instead of window scroll)
+    this.scrollListener = throttledRender;
+    window.addEventListener('scroll', this.scrollListener, { passive: true } as any);
+
+    this.documentScrollListener = throttledRender;
+    document.addEventListener('scroll', this.documentScrollListener, { passive: true, capture: true } as any);
+
+    // Listen to resize events
+    this.resizeListener = throttledRender;
+    window.addEventListener('resize', this.resizeListener);
+  }
+
+  /**
+   * Clean up compass tracking event listeners
+   */
+  private cleanupCompassTracking() {
+    if (this.scrollListener) {
+      window.removeEventListener('scroll', this.scrollListener);
+      this.scrollListener = null;
+    }
+    if (this.documentScrollListener) {
+      document.removeEventListener('scroll', this.documentScrollListener, { capture: true } as any);
+      this.documentScrollListener = null;
+    }
+    if (this.resizeListener) {
+      window.removeEventListener('resize', this.resizeListener);
+      this.resizeListener = null;
+    }
+    // Reset angle tracking when disabling compass
+    this.previousCompassAngle = null;
+  }
+
   private render() {
     // console.log('[Kuma Chat] Render called, initialized:', this.isInitialized, 'visible:', this.settings.visible);
 
     if (!this.shadowRoot || !this.isInitialized) {
-      console.log('[Kuma Chat] Render aborted - not initialized');
       return;
     }
 
     const rootElement = this.shadowRoot.querySelector('div');
     if (!rootElement) {
-      console.log('[Kuma Chat] Render aborted - no root element');
       return;
     }
 
@@ -934,34 +1702,76 @@ class ChatboxInjector {
     const hasChunked = !!(this.currentPaper && this.currentPaper.chunkCount > 0);
 
     if (!this.settings.visible) {
-      console.log('[Kuma Chat] Rendering null (not visible)');
       render(null, rootElement);
       return;
     }
 
-    // console.log('[Kuma Chat] Rendering chatbox, disabled:', isDisabled, 'messages:', this.messages.length);
+    // Get active tab
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) {
+      console.error('[Kuma Chat] Active tab not found');
+      return;
+    }
+
+    // Convert TabState[] to ChatTab[] for the ChatBox component
+    const chatTabs: ChatTab[] = this.tabs.map(tab => ({
+      id: tab.id,
+      type: tab.type,
+      title: tab.title,
+      imageUrl: tab.imageUrl,
+      imageBlob: tab.imageBlob,
+      imageButtonElement: tab.imageButtonElement,
+    }));
+
+    // Calculate compass arrow angle if active tab is an image tab
+    const compassArrowAngle = activeTab.type === 'image' ? this.getCompassArrowAngle(activeTab.id) : undefined;
+
+    // console.log('[Kuma Chat] Rendering chatbox, disabled:', isDisabled, 'messages:', activeTab.messages.length);
 
     try {
       render(
         h(ChatBox, {
-          messages: this.messages,
-          isStreaming: this.isStreaming,
-          streamingMessage: this.streamingMessage,
+          // Multi-tab props (NEW)
+          tabs: chatTabs,
+          activeTabId: this.activeTabId,
+          compassArrowAngle,
+          onSwitchTab: this.switchTab.bind(this),
+          onCloseTab: this.closeTab.bind(this),
+
+          // Active tab messages
+          messages: activeTab.messages,
+          isStreaming: activeTab.isStreaming,
+          streamingMessage: activeTab.streamingMessage,
+
+          // Message handlers
           onSendMessage: this.handleSendMessage.bind(this),
           onClearMessages: this.handleClearMessages.bind(this),
+          onRegenerateExplanation: this.handleRegenerateExplanation.bind(this),
+          isRegenerating: this.isRegeneratingExplanation,
+          onScrollToImage: this.handleScrollToImage.bind(this),
+
+          // Window controls
           onClose: this.hide.bind(this),
           onMinimize: this.minimize.bind(this),
           isMinimized: this.settings.minimized,
+
+          // Position
           initialPosition: this.settings.position,
           onPositionChange: this.handlePositionChange.bind(this),
+
+          // State
           disabled: isDisabled,
           paperTitle: this.currentPaper?.title,
           hasPaper: hasPaper,
           hasChunked: hasChunked,
+
+          // Transparency
           transparencyEnabled: this.settings.transparencyEnabled,
           onToggleTransparency: this.toggleTransparency.bind(this),
           hasInteractedSinceOpen: this.hasInteractedSinceOpen,
           onFirstInteraction: this.handleFirstInteraction.bind(this),
+
+          // Initial input
           initialInputValue: this.initialInputValue,
         }),
         rootElement
@@ -973,12 +1783,17 @@ class ChatboxInjector {
   }
 
   async clearHistory() {
-    this.messages = [];
-    await this.saveChatHistory();
+    // This method is probably not used, but update it anyway
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (activeTab) {
+      activeTab.messages = [];
+    }
+    await this.handleClearMessages();
     this.render();
   }
 
   destroy() {
+    this.cleanupCompassTracking();
     if (this.container && this.container.parentNode) {
       this.container.parentNode.removeChild(this.container);
     }

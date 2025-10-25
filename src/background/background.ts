@@ -130,6 +130,23 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         sendResponse(await chatHandlers.handleClearChatHistory(message.payload));
         break;
 
+      // Image Chat Operations (Multi-tabbed Chatbox)
+      case MessageType.IMAGE_CHAT_MESSAGE:
+        sendResponse(await chatHandlers.handleSendImageChatMessage(message.payload, sender));
+        break;
+
+      case MessageType.GET_IMAGE_CHAT_HISTORY:
+        sendResponse(await chatHandlers.handleGetImageChatHistory(message.payload));
+        break;
+
+      case MessageType.UPDATE_IMAGE_CHAT_HISTORY:
+        sendResponse(await chatHandlers.handleUpdateImageChatHistory(message.payload));
+        break;
+
+      case MessageType.CLEAR_IMAGE_CHAT_HISTORY:
+        sendResponse(await chatHandlers.handleClearImageChatHistory(message.payload));
+        break;
+
       // UI Operations
       case MessageType.OPEN_SIDEPANEL:
         sendResponse(await uiHandlers.handleOpenSidepanel(sender.tab?.id));

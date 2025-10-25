@@ -1,50 +1,96 @@
 import { h } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
-import { ChatMessage, ChatboxPosition } from '../../types/index.ts';
+import { ChatMessage, ChatboxPosition, ChatTab } from '../../types/index.ts';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
 import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.tsx';
 
 interface ChatBoxProps {
+  // Multi-tab support (NEW)
+  tabs: ChatTab[];
+  activeTabId: string;
+  compassArrowAngle?: number; // Angle for compass arrow (image tabs only)
+  onSwitchTab: (tabId: string) => void;
+  onCloseTab: (tabId: string) => void;
+
+  // Active tab messages
   messages: ChatMessage[];
   isStreaming: boolean;
   streamingMessage: string;
+
+  // Message handlers
   onSendMessage: (message: string) => void;
   onClearMessages: () => void;
+  onRegenerateExplanation?: () => void;
+  isRegenerating?: boolean;
+  onScrollToImage?: () => void;
+
+  // Window controls
   onClose: () => void;
   onMinimize: () => void;
   isMinimized: boolean;
+
+  // Position
   initialPosition: ChatboxPosition;
   onPositionChange: (position: ChatboxPosition) => void;
+
+  // State
   disabled: boolean; // Disable when no paper is ready
   paperTitle?: string;
   hasPaper: boolean;
   hasChunked: boolean;
+
+  // Transparency
   transparencyEnabled: boolean;
   onToggleTransparency: () => void;
   hasInteractedSinceOpen: boolean;
   onFirstInteraction: () => void;
+
+  // Initial input
   initialInputValue?: string;
 }
 
 export const ChatBox = ({
+  // Multi-tab props
+  tabs,
+  activeTabId,
+  compassArrowAngle,
+  onSwitchTab,
+  onCloseTab,
+
+  // Active tab messages
   messages,
   isStreaming,
   streamingMessage,
+
+  // Message handlers
   onSendMessage,
   onClearMessages,
+  onRegenerateExplanation,
+  isRegenerating,
+  onScrollToImage,
+
+  // Window controls
   onClose,
   onMinimize,
   isMinimized,
+
+  // Position
   initialPosition,
   onPositionChange,
+
+  // State
   disabled,
   paperTitle,
   hasPaper,
   hasChunked,
+
+  // Transparency
   transparencyEnabled,
   onToggleTransparency,
   hasInteractedSinceOpen,
   onFirstInteraction,
+
+  // Initial input
   initialInputValue
 }: ChatBoxProps) => {
   const [inputValue, setInputValue] = useState('');
@@ -56,6 +102,10 @@ export const ChatBox = ({
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
+  const [showTabCloseModal, setShowTabCloseModal] = useState(false);
+  const [tabToClose, setTabToClose] = useState<string | null>(null);
+  const [dragTimer, setDragTimer] = useState<number | null>(null);
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
 
   const chatboxRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -63,6 +113,7 @@ export const ChatBox = ({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const savedScrollPosition = useRef<number | null>(null);
   const isUserNearBottomRef = useRef(true); // Start true (initially at bottom)
+  const dragRafPending = useRef(false); // For throttling position updates during drag
 
   // Threshold for "near bottom" detection (in pixels)
   const SCROLL_NEAR_BOTTOM_THRESHOLD = 100;
@@ -144,6 +195,16 @@ export const ChatBox = ({
     }
   }, [isMinimized]);
 
+  // Scroll to bottom when switching tabs (ensures DOM has rendered new messages)
+  useEffect(() => {
+    if (!isMinimized && messagesContainerRef.current) {
+      const timer = setTimeout(() => {
+        scrollToBottom('instant');
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTabId, isMinimized]);
+
   // Auto-focus input when opening or maximizing
   useEffect(() => {
     if (!isMinimized && !disabled) {
@@ -200,7 +261,7 @@ export const ChatBox = ({
     }
   }, [position.height, position.width, isMinimized]); // Trigger on size changes
 
-  // Handle mouse down on header for dragging
+  // Handle mouse down on header or tab bar for dragging
   const handleDragStart = (e: MouseEvent) => {
     if ((e.target as HTMLElement).closest('.chatbox-controls')) {
       return; // Don't drag when clicking controls
@@ -211,6 +272,37 @@ export const ChatBox = ({
       y: e.clientY - position.y,
     });
     e.preventDefault();
+  };
+
+  // Handle long press on tab to initiate drag
+  const handleTabMouseDown = (e: MouseEvent) => {
+    e.stopPropagation(); // Prevent immediate drag from parent
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    setDragStartPos({ x: startX, y: startY });
+
+    // Start timer for long press (500ms)
+    const timer = window.setTimeout(() => {
+      // Start dragging after delay
+      setIsDragging(true);
+      setDragOffset({
+        x: e.clientX - position.x,
+        y: e.clientY - position.y,
+      });
+      setDragTimer(null);
+    }, 500);
+
+    setDragTimer(timer);
+  };
+
+  // Clean up timer on mouse up or mouse leave
+  const handleTabMouseUp = () => {
+    if (dragTimer) {
+      clearTimeout(dragTimer);
+      setDragTimer(null);
+    }
+    setDragStartPos(null);
   };
 
   // Handle resize start
@@ -229,14 +321,28 @@ export const ChatBox = ({
         const newY = e.clientY - dragOffset.y;
 
         // Keep chatbox within viewport bounds
-        const maxX = window.innerWidth - position.width;
-        const maxY = window.innerHeight - position.height;
+        // Use actual rendered dimensions (handles minimized vs expanded state)
+        const actualWidth = chatboxRef.current?.getBoundingClientRect().width ?? position.width;
+        const actualHeight = chatboxRef.current?.getBoundingClientRect().height ?? position.height;
+        const maxX = window.innerWidth - actualWidth;
+        const maxY = window.innerHeight - actualHeight;
 
-        setPosition({
+        const newPosition = {
           ...position,
           x: Math.max(0, Math.min(newX, maxX)),
           y: Math.max(0, Math.min(newY, maxY)),
-        });
+        };
+
+        setPosition(newPosition);
+
+        // Throttled position change notification (for compass arrow tracking)
+        if (!dragRafPending.current) {
+          dragRafPending.current = true;
+          requestAnimationFrame(() => {
+            onPositionChange(newPosition);
+            dragRafPending.current = false;
+          });
+        }
       } else if (isResizing && resizeDirection) {
         const newPosition = { ...position };
 
@@ -280,6 +386,15 @@ export const ChatBox = ({
       };
     }
   }, [isDragging, isResizing, dragOffset, position, resizeDirection]);
+
+  // Clean up drag timer on unmount
+  useEffect(() => {
+    return () => {
+      if (dragTimer) {
+        clearTimeout(dragTimer);
+      }
+    };
+  }, [dragTimer]);
 
   const handleSend = () => {
     if (inputValue.trim() && !disabled && !isStreaming) {
@@ -331,6 +446,33 @@ export const ChatBox = ({
     }
   };
 
+  // Tab close handlers
+  const handleTabCloseClick = (tabId: string, e: Event) => {
+    e.stopPropagation();
+    // Cannot close paper tab
+    if (tabId === 'paper') {
+      return;
+    }
+    setTabToClose(tabId);
+    setShowTabCloseModal(true);
+  };
+
+  const confirmTabClose = () => {
+    if (tabToClose) {
+      onCloseTab(tabToClose);
+    }
+    setShowTabCloseModal(false);
+    setTabToClose(null);
+  };
+
+  const cancelTabClose = () => {
+    setShowTabCloseModal(false);
+    setTabToClose(null);
+  };
+
+  // Get active tab
+  const activeTab = tabs.find(t => t.id === activeTabId);
+
   if (isMinimized) {
     return (
       <div
@@ -355,12 +497,37 @@ export const ChatBox = ({
           onMouseDown={handleDragStart}
         >
           <div class="flex items-center gap-2">
+            {/* Compass arrow for image tabs (even when minimized) */}
+            {activeTab && activeTab.type === 'image' && compassArrowAngle !== undefined && (
+              <svg
+                class="chatbox-compass-arrow"
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                style={{
+                  transform: `rotate(${compassArrowAngle}deg)`,
+                  flexShrink: 0,
+                }}
+                title="Points to source image"
+              >
+                <path
+                  d="M 17 10 L 5 3 L 11 10 L 5 17 Z"
+                  fill="currentColor"
+                />
+              </svg>
+            )}
             <img
               src={chrome.runtime.getURL('icons/icon32.png')}
               class="w-5 h-5"
               alt="Kuma icon"
             />
-            <span class="font-medium">Kuma Chat</span>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium">Kuma Chat</div>
+              {activeTab && activeTab.type === 'image' && activeTab.title && (
+                <div class="text-xs opacity-60 truncate">{activeTab.title}</div>
+              )}
+            </div>
           </div>
           <div class="chatbox-controls flex items-center gap-1">
             <button
@@ -430,12 +597,66 @@ export const ChatBox = ({
       <div class="resize-handle resize-se" onMouseDown={(e) => handleResizeStart(e as any, 'se')} />
       <div class="resize-handle resize-sw" onMouseDown={(e) => handleResizeStart(e as any, 'sw')} />
 
+      {/* Tab Bar (NEW - Multi-tab support) */}
+      {tabs.length > 1 && (
+        <div
+          class="chatbox-tab-bar"
+          onMouseDown={handleDragStart}
+          style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+        >
+          <div class="chatbox-tabs">
+            {tabs.map(tab => (
+              <div
+                key={tab.id}
+                class={`chatbox-tab ${tab.id === activeTabId ? 'chatbox-tab-active' : ''}`}
+                onClick={() => onSwitchTab(tab.id)}
+                onMouseDown={(e) => handleTabMouseDown(e as any)}
+                onMouseUp={handleTabMouseUp}
+                onMouseLeave={handleTabMouseUp}
+              >
+                <span class="chatbox-tab-title">{tab.title}</span>
+                {tab.type === 'image' && (
+                  <button
+                    class="chatbox-tab-close"
+                    onClick={(e) => handleTabCloseClick(tab.id, e)}
+                    title="Close tab"
+                    aria-label="Close tab"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div
         class="chatbox-header"
         onMouseDown={handleDragStart}
       >
         <div class="flex items-center gap-2 flex-1 min-w-0" style={{margin: '5px'}}>
+          {/* Compass arrow for image tabs */}
+          {activeTab && activeTab.type === 'image' && compassArrowAngle !== undefined && (
+            <svg
+              class="chatbox-compass-arrow"
+              width="20"
+              height="20"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              style={{
+                transform: `rotate(${compassArrowAngle}deg)`,
+                flexShrink: 0,
+              }}
+              title="Points to source image"
+            >
+              <path
+                d="M 17 10 L 5 3 L 11 10 L 5 17 Z"
+                fill="currentColor"
+              />
+            </svg>
+          )}
           <img
             src={chrome.runtime.getURL('icons/icon32.png')}
             class="w-xl h-xl flex-shrink-0"
@@ -445,6 +666,9 @@ export const ChatBox = ({
             <div class="font-medium">Kuma Chat</div>
             {paperTitle && (
               <div class="text-xs opacity-75 truncate">{paperTitle}</div>
+            )}
+            {activeTab && activeTab.type === 'image' && activeTab.title && (
+              <div class="text-xs opacity-60 truncate">{activeTab.title}</div>
             )}
           </div>
         </div>
@@ -462,6 +686,18 @@ export const ChatBox = ({
               )}
             </svg>
           </button>
+          {/* Scroll to image button - only for image tabs */}
+          {activeTab && activeTab.type === 'image' && onScrollToImage && (
+            <button
+              class="chatbox-control-btn"
+              onClick={onScrollToImage}
+              title="Scroll page to show this image"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          )}
           <button
             class="chatbox-control-btn"
             onClick={handleClearMessages}
@@ -521,6 +757,32 @@ export const ChatBox = ({
               <div class="chatbox-message-sources">
                 <span class="text-xs opacity-75">{msg.sources && msg.sources.length > 0 ? "Sources: " + msg.sources.join(', ') : ''}</span>
               </div>
+            )}
+            {/* Regenerate button for first message in image tabs */}
+            {idx === 0 && msg.role === 'assistant' && activeTab?.type === 'image' && onRegenerateExplanation && (
+              <button
+                class="chatbox-regenerate-btn"
+                onClick={onRegenerateExplanation}
+                disabled={isRegenerating || isStreaming}
+                title={isRegenerating ? "Regenerating..." : "Regenerate explanation"}
+              >
+                {isRegenerating ? (
+                  <>
+                    <svg class="chatbox-regenerate-spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <circle cx="12" cy="12" r="10" opacity="0.25"/>
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+                    </svg>
+                    Regenerating...
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                    </svg>
+                    Regenerate explanation
+                  </>
+                )}
+              </button>
             )}
           </div>
         ))}
@@ -601,6 +863,26 @@ export const ChatBox = ({
               </button>
               <button class="modal-btn modal-btn-confirm" onClick={handleConfirmClear}>
                 Clear Messages
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab close confirmation modal (NEW) */}
+      {showTabCloseModal && (
+        <div class="modal-overlay" onClick={cancelTabClose}>
+          <div class="modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <div class="modal-header">Close Tab</div>
+            <div class="modal-body">
+              Are you sure you want to close this tab? All chat history for this image will be permanently deleted.
+            </div>
+            <div class="modal-footer">
+              <button class="modal-btn modal-btn-cancel" onClick={cancelTabClose}>
+                Cancel
+              </button>
+              <button class="modal-btn modal-btn-confirm" onClick={confirmTabClose}>
+                Close Tab
               </button>
             </div>
           </div>
