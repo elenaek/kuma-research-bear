@@ -50,6 +50,40 @@ async function init() {
 function setupMessageListener() {
   const messageRouter = createMessageRouter(getCurrentPaper);
   chrome.runtime.onMessage.addListener(messageRouter);
+
+  // Listen for paper deletion and chunking completion
+  chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+    // Handle paper deletion
+    if (message.type === 'PAPER_DELETED') {
+      console.log('[Content] Paper deleted:', message.payload);
+
+      // If deleted paper URL matches current page, destroy image buttons
+      if (message.payload.paperUrl === window.location.href) {
+        console.log('[Content] Current page paper was deleted, removing image buttons');
+        imageExplanationHandler.destroy();
+      }
+    }
+
+    // Handle chunking completion
+    if (message.type === 'OPERATION_STATE_CHANGED') {
+      const state = message.payload;
+
+      // If chunking just completed for current page
+      if (state.hasChunked && state.currentPaper?.url === window.location.href) {
+        console.log('[Content] Chunking completed for current page, initializing image buttons');
+
+        // Get fresh paper data from DB
+        const { getPaperFromDBByUrl } = await import('../services/ChromeService.ts');
+        const storedPaper = await getPaperFromDBByUrl(window.location.href);
+
+        if (storedPaper && storedPaper.id) {
+          await imageExplanationHandler.reinitialize(storedPaper);
+          console.log('[Content] ✓ Image buttons reinitialized after chunking');
+        }
+      }
+    }
+  });
+
   console.log('[Content] Message listener registered');
 }
 

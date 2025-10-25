@@ -76,6 +76,20 @@ class ImageExplanationHandler {
     console.log('[ImageExplain] ✓ Image explanation handler initialized');
   }
 
+  /**
+   * Reinitialize image explanation handler
+   * Destroys existing buttons and recreates them
+   */
+  async reinitialize(currentPaper: any) {
+    console.log('[ImageExplain] Reinitializing image explanation handler...');
+
+    // Destroy existing buttons
+    this.destroy();
+
+    // Re-initialize with new paper
+    await this.initialize(currentPaper);
+  }
+
   private async setupImages() {
     if (!this.currentPaper) {
       console.log('[ImageExplain] No current paper, skipping image setup');
