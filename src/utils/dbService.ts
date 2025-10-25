@@ -414,6 +414,14 @@ export async function deletePaper(paperId: string): Promise<boolean> {
   const db = await initDB();
 
   try {
+    // Delete all image explanations for this paper
+    const deletedExplanations = await deleteImageExplanationsByPaper(paperId);
+    console.log(`✓ Deleted ${deletedExplanations} image explanations for paper`);
+
+    // Delete all image chats for this paper
+    const deletedChats = await deleteImageChatsByPaper(paperId);
+    console.log(`✓ Deleted ${deletedChats} image chats for paper`);
+
     // Delete paper
     const paperTransaction = db.transaction([PAPERS_STORE], 'readwrite');
     const paperStore = paperTransaction.objectStore(PAPERS_STORE);
