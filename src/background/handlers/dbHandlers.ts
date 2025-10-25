@@ -306,3 +306,31 @@ export async function handleGetImageExplanationsByPaper(payload: any): Promise<a
     return { success: false, error: String(dbError), explanations: [] };
   }
 }
+
+/**
+ * Extract paper from HTML in offscreen document
+ * Receives HTML from content script and triggers offscreen extraction
+ */
+export async function handleExtractPaperHTML(payload: any): Promise<any> {
+  try {
+    console.log('[DBHandlers] Triggering offscreen extraction for:', payload.paperUrl);
+
+    const { extractPaperFromHTMLOffscreen } = await import('../services/offscreenService.ts');
+    const result = await extractPaperFromHTMLOffscreen(
+      payload.paperHtml,
+      payload.paperUrl,
+      payload.paper
+    );
+
+    if (result.success) {
+      console.log('[DBHandlers] ✓ Offscreen extraction triggered');
+      return { success: true };
+    } else {
+      console.error('[DBHandlers] Failed to trigger offscreen extraction:', result.error);
+      return { success: false, error: result.error };
+    }
+  } catch (error) {
+    console.error('[DBHandlers] Error triggering offscreen extraction:', error);
+    return { success: false, error: String(error) };
+  }
+}

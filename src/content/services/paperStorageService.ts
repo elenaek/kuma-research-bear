@@ -1,4 +1,4 @@
-import { ResearchPaper } from '../../types/index.ts';
+import { ResearchPaper, MessageType } from '../../types/index.ts';
 import * as ChromeService from '../../services/ChromeService.ts';
 import { extractFullText } from './textExtractionService.ts';
 import { detectResearchPaper } from '../../utils/paperDetection.ts';
@@ -18,6 +18,101 @@ export interface StorageResult {
   paperId?: string;
   detectionFailed?: boolean;  // NEW: Indicates if paper detection failed
   detectionReason?: string;   // NEW: Reason for detection failure
+}
+
+/**
+ * Create a metadata chunk containing paper information for RAG semantic search
+ * This allows users to ask questions like "Who wrote this?" or "When was this published?"
+ */
+export function createMetadataChunk(
+  paper: ResearchPaper,
+  paperId: string
+): import('../../types/index.ts').ContentChunk {
+  // Format metadata as semantic-search-friendly text
+  const metadataParts: string[] = [];
+
+  // Title
+  metadataParts.push(`Paper Title: ${paper.title}`);
+  metadataParts.push('');
+
+  // Authors
+  if (paper.authors && paper.authors.length > 0) {
+    metadataParts.push(`Authors: ${paper.authors.join(', ')}`);
+    metadataParts.push('');
+  }
+
+  // Abstract
+  if (paper.abstract) {
+    metadataParts.push('Abstract:');
+    metadataParts.push(paper.abstract);
+    metadataParts.push('');
+  }
+
+  // Publication Information
+  const pubInfo: string[] = [];
+  if (paper.metadata?.publishDate) {
+    pubInfo.push(`Published: ${paper.metadata.publishDate}`);
+  }
+  if (paper.metadata?.journal) {
+    pubInfo.push(`Journal: ${paper.metadata.journal}`);
+  }
+  if (paper.metadata?.venue) {
+    pubInfo.push(`Venue: ${paper.metadata.venue}`);
+  }
+  if (paper.source) {
+    pubInfo.push(`Source: ${paper.source}`);
+  }
+
+  if (pubInfo.length > 0) {
+    metadataParts.push('Publication Information:');
+    pubInfo.forEach(info => metadataParts.push(`- ${info}`));
+    metadataParts.push('');
+  }
+
+  // Identifiers
+  const identifiers: string[] = [];
+  if (paper.metadata?.doi) {
+    identifiers.push(`DOI: ${paper.metadata.doi}`);
+  }
+  if (paper.metadata?.arxivId) {
+    identifiers.push(`arXiv ID: ${paper.metadata.arxivId}`);
+  }
+  if (paper.metadata?.pmid) {
+    identifiers.push(`PubMed ID: ${paper.metadata.pmid}`);
+  }
+  if (paper.metadata?.pmcid) {
+    identifiers.push(`PubMed Central ID: ${paper.metadata.pmcid}`);
+  }
+  if (paper.url) {
+    identifiers.push(`URL: ${paper.url}`);
+  }
+
+  if (identifiers.length > 0) {
+    metadataParts.push('Identifiers:');
+    identifiers.forEach(id => metadataParts.push(`- ${id}`));
+    metadataParts.push('');
+  }
+
+  // Keywords
+  if (paper.metadata?.keywords && paper.metadata.keywords.length > 0) {
+    metadataParts.push(`Keywords: ${paper.metadata.keywords.join(', ')}`);
+  }
+
+  const metadataContent = metadataParts.join('\n');
+
+  // Create chunk object
+  return {
+    id: `chunk_${paperId}_0`,
+    paperId,
+    content: metadataContent,
+    index: 0,
+    section: 'Paper Metadata',
+    sectionLevel: 1,
+    isResearchPaper: true,
+    startChar: 0,
+    endChar: metadataContent.length,
+    tokenCount: Math.ceil(metadataContent.length / 4),
+  };
 }
 
 /**
@@ -50,64 +145,11 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
       };
     }
 
-    // Check if already stored
+    // LEVEL 1 DEDUPLICATION: Check if already stored
     const alreadyStored = await ChromeService.isPaperStoredInDB(paper.url);
     console.log('[PaperStorage] isPaperStored check result:', alreadyStored);
 
-    if (!alreadyStored) {
-      console.log('[PaperStorage] Research paper detected ✓ Extracting and chunking paper...');
-
-      // Generate paper ID (needed for chunk extraction)
-      const paperId = generatePaperId(paper.url);
-
-      // Try to extract research paper with semantic chunking
-      const extractionResult = await extractResearchPaper(paperId);
-
-      let storageResponse;
-
-      if (extractionResult.success && extractionResult.chunks) {
-        console.log('[PaperStorage] ✓ Research paper extraction successful, sending chunks to background');
-
-        // Send pre-chunked data to background
-        storageResponse = await ChromeService.storePaperInDB(paper, undefined, {
-          chunks: extractionResult.chunks,
-          metadata: {
-            averageChunkSize: extractionResult.averageChunkSize,
-          },
-        });
-      } else {
-        console.warn('[PaperStorage] Research paper extraction failed, falling back to simple text extraction:', extractionResult.reason);
-
-        // Fallback: extract full text and let background do simple chunking
-        const fullText = await extractFullText();
-        storageResponse = await ChromeService.storePaperInDB(paper, fullText);
-      }
-
-      if (storageResponse.success && storageResponse.paper) {
-        console.log('[PaperStorage] ✓ Paper stored successfully in background!', {
-          id: storageResponse.paper.id,
-          chunkCount: storageResponse.paper.chunkCount,
-        });
-
-        // Note: Embedding generation now handled by offscreen document in background
-        // This ensures embeddings persist even if user navigates away from tab
-
-        return {
-          stored: true,
-          chunkCount: storageResponse.paper.chunkCount,
-          alreadyStored: false,
-          paperId: storageResponse.paper.id,
-        };
-      } else {
-        console.error('[PaperStorage] Failed to store paper:', storageResponse.error);
-        return {
-          stored: false,
-          chunkCount: 0,
-          alreadyStored: false,
-          storageError: storageResponse.error || 'Failed to store paper',
-        };
-      }
-    } else {
+    if (alreadyStored) {
       console.log('[PaperStorage] Paper already stored, fetching existing data...');
       const existingPaper = await ChromeService.getPaperByUrl(paper.url);
       console.log('[PaperStorage] Existing paper retrieved:', {
@@ -122,9 +164,39 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
         paperId: existingPaper?.id,
       };
     }
+
+    // NEW FLOW: Send HTML to background for offscreen extraction (fire-and-forget)
+    console.log('[PaperStorage] Research paper detected ✓ Sending HTML to background for extraction...');
+
+    // Serialize HTML
+    const paperHtml = document.documentElement.outerHTML;
+
+    // Generate paper ID for returning to caller
+    const paperId = generatePaperId(paper.url);
+
+    // Send to background script which will trigger offscreen extraction
+    chrome.runtime.sendMessage({
+      type: MessageType.EXTRACT_PAPER_HTML,
+      payload: {
+        paperHtml,
+        paperUrl: paper.url,
+        paper,
+      }
+    });
+
+    console.log('[PaperStorage] ✓ Extraction message sent to background (processing in offscreen)');
+
+    // Return immediately - extraction will complete asynchronously
+    // User can navigate away while extraction happens
+    return {
+      stored: true,
+      chunkCount: 0, // Will be populated when extraction completes
+      alreadyStored: false,
+      paperId,
+    };
   } catch (error) {
     // Capture detailed error message for debugging
-    console.error('[PaperStorage] ❌ Failed to store paper in IndexedDB:', {
+    console.error('[PaperStorage] ❌ Failed to store paper:', {
       error,
       stack: error instanceof Error ? error.stack : undefined,
       paperUrl: paper.url
@@ -154,52 +226,34 @@ export async function storePaperSimple(paper: ResearchPaper): Promise<boolean> {
       return false;
     }
 
+    // LEVEL 1 DEDUPLICATION: Check if already stored
     const alreadyStored = await ChromeService.isPaperStoredInDB(paper.url);
-    if (!alreadyStored) {
-      console.log('[PaperStorage] Research paper detected ✓ Extracting and chunking paper...');
 
-      // Generate paper ID (needed for chunk extraction)
-      const paperId = generatePaperId(paper.url);
-
-      // Try to extract research paper with semantic chunking
-      const extractionResult = await extractResearchPaper(paperId);
-
-      let storageResponse;
-
-      if (extractionResult.success && extractionResult.chunks) {
-        console.log('[PaperStorage] ✓ Research paper extraction successful');
-
-        // Send pre-chunked data to background
-        storageResponse = await ChromeService.storePaperInDB(paper, undefined, {
-          chunks: extractionResult.chunks,
-          metadata: {
-            averageChunkSize: extractionResult.averageChunkSize,
-          },
-        });
-      } else {
-        console.warn('[PaperStorage] Research paper extraction failed, falling back to simple text extraction');
-
-        // Fallback: extract full text and let background do simple chunking
-        const fullText = await extractFullText();
-        storageResponse = await ChromeService.storePaperInDB(paper, fullText);
-      }
-
-      if (storageResponse.success && storageResponse.paper) {
-        console.log('[PaperStorage] ✓ Paper stored in background for offline access');
-
-        // Note: Embedding generation handled by offscreen document in background
-
-        return true;
-      } else {
-        console.error('[PaperStorage] Failed to store paper:', storageResponse.error);
-        return false;
-      }
-    } else {
+    if (alreadyStored) {
       console.log('[PaperStorage] Paper already stored in IndexedDB');
       return true;
     }
+
+    // NEW FLOW: Send HTML to background for offscreen extraction (fire-and-forget)
+    console.log('[PaperStorage] Research paper detected ✓ Sending HTML to background for extraction...');
+
+    // Serialize HTML
+    const paperHtml = document.documentElement.outerHTML;
+
+    // Send to background script which will trigger offscreen extraction
+    chrome.runtime.sendMessage({
+      type: MessageType.EXTRACT_PAPER_HTML,
+      payload: {
+        paperHtml,
+        paperUrl: paper.url,
+        paper,
+      }
+    });
+
+    console.log('[PaperStorage] ✓ Extraction message sent to background (processing in offscreen)');
+    return true;
   } catch (error) {
-    console.warn('[PaperStorage] Failed to store paper in IndexedDB:', error);
+    console.warn('[PaperStorage] Failed to store paper:', error);
     return false;
   }
 }

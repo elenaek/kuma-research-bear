@@ -183,6 +183,10 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         sendResponse(result);
         break;
 
+      case MessageType.EXTRACT_PAPER_HTML:
+        sendResponse(await dbHandlers.handleExtractPaperHTML(message.payload));
+        break;
+
       case MessageType.GET_PAPER_FROM_DB_BY_URL:
         sendResponse(await dbHandlers.handleGetPaperByUrl(message.payload));
         break;

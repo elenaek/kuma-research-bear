@@ -17,12 +17,8 @@ export interface PaperSection {
  * Extract sections using semantic <section> tags (preferred for modern HTML papers like arXiv)
  * Returns null if no section tags are found
  */
-function extractSectionElements(): PaperSection[] | null {
-  if (typeof document === 'undefined') {
-    return null;
-  }
-
-  const mainContent = getMainContentElement();
+function extractSectionElements(doc: Document): PaperSection[] | null {
+  const mainContent = getMainContentElement(doc);
   if (!mainContent) {
     return null;
   }
@@ -155,18 +151,22 @@ function extractSectionRecursive(
 /**
  * Extract hierarchical sections from HTML content
  * Tries section-based extraction first, falls back to heading-based extraction
+ * @param doc Optional Document object (defaults to global document in browser context)
  */
-export async function extractHTMLSections(): Promise<PaperSection[]> {
+export async function extractHTMLSections(doc?: Document): Promise<PaperSection[]> {
   try {
+    // Use provided document or fall back to global document
+    const document = doc || (typeof window !== 'undefined' ? window.document : undefined);
+
     // Guard against non-document contexts
-    if (typeof document === 'undefined') {
-      console.warn('[ResearchPaperSplitter] Not a document context');
+    if (!document) {
+      console.warn('[ResearchPaperSplitter] No document available');
       return [];
     }
 
     // STRATEGY 1: Try semantic <section> tag extraction first (preferred for modern papers)
     console.log('[ResearchPaperSplitter] Attempting section-based extraction...');
-    const sectionBasedResults = extractSectionElements();
+    const sectionBasedResults = extractSectionElements(document);
 
     if (sectionBasedResults && sectionBasedResults.length > 0) {
       console.log(`[ResearchPaperSplitter] ✓ Extracted ${sectionBasedResults.length} sections using <section> tags`);
@@ -186,7 +186,7 @@ export async function extractHTMLSections(): Promise<PaperSection[]> {
     console.log('[ResearchPaperSplitter] No <section> tags found, falling back to heading-based extraction...');
 
     // Get main content area (filters out navigation, footers, etc.)
-    const mainContent = getMainContentElement();
+    const mainContent = getMainContentElement(document);
     if (!mainContent) {
       console.warn('[ResearchPaperSplitter] No main content found');
       return [];
@@ -329,12 +329,12 @@ function getTextContent(element: HTMLElement): string {
  * Get the main content element, filtering out navigation and other noise
  * Uses semantic HTML, pattern matching, and heuristics
  */
-function getMainContentElement(): HTMLElement | null {
+function getMainContentElement(doc: Document): HTMLElement | null {
   // STEP 1: Try semantic HTML elements first (most reliable)
   const semanticElements = [
-    document.querySelector('main'),
-    document.querySelector('article'),
-    document.querySelector('[role="main"]'),
+    doc.querySelector('main'),
+    doc.querySelector('article'),
+    doc.querySelector('[role="main"]'),
   ];
 
   for (const element of semanticElements) {
@@ -351,7 +351,7 @@ function getMainContentElement(): HTMLElement | null {
   ];
 
   // Get all elements with class or id attributes
-  const allElements = Array.from(document.querySelectorAll('[class], [id]'));
+  const allElements = Array.from(doc.querySelectorAll('[class], [id]'));
 
   for (const pattern of contentPatterns) {
     for (const element of allElements) {
@@ -371,7 +371,7 @@ function getMainContentElement(): HTMLElement | null {
   }
 
   // STEP 3: Heuristic fallback - find element with most headings
-  const candidateElements = Array.from(document.querySelectorAll('div, section, article'));
+  const candidateElements = Array.from(doc.querySelectorAll('div, section, article'));
   let bestCandidate: HTMLElement | null = null;
   let maxHeadings = 0;
 
@@ -390,14 +390,17 @@ function getMainContentElement(): HTMLElement | null {
 
   // STEP 4: Ultimate fallback - use body
   console.log('[ResearchPaperSplitter] Using document.body as fallback');
-  return document.body;
+  return doc.body;
 }
 
 /**
  * Get a flat list of all headings (for detection/debugging)
+ * @param doc Optional Document object (defaults to global document in browser context)
  */
-export function getAllHeadings(): string[] {
-  if (typeof document === 'undefined') {
+export function getAllHeadings(doc?: Document): string[] {
+  const document = doc || (typeof window !== 'undefined' ? window.document : undefined);
+
+  if (!document) {
     return [];
   }
 
@@ -410,9 +413,10 @@ export function getAllHeadings(): string[] {
 /**
  * Check if page has sufficient heading structure for semantic splitting
  * Returns true if there are at least 2 meaningful headings
+ * @param doc Optional Document object (defaults to global document in browser context)
  */
-export function hasHeadingStructure(): boolean {
-  const headings = getAllHeadings();
+export function hasHeadingStructure(doc?: Document): boolean {
+  const headings = getAllHeadings(doc);
 
   // Filter out very short headings (likely not section headings)
   const meaningfulHeadings = headings.filter(h => h.length >= 3);

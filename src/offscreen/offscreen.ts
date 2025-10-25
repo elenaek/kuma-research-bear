@@ -13,6 +13,12 @@ import { embeddingService } from '../utils/embeddingService.ts';
 console.log('[Offscreen] Offscreen document initialized');
 
 /**
+ * Track in-flight extractions to avoid duplicate processing
+ * Maps paper URL to extraction promise
+ */
+const inFlightExtractions = new Set<string>();
+
+/**
  * Generate embeddings for a paper's chunks
  */
 async function generateEmbeddingsForPaper(paperId: string): Promise<number | null> {
@@ -106,6 +112,107 @@ async function searchSemantic(paperId: string, query: string, limit: number = 5)
 }
 
 /**
+ * Extract paper from HTML and send to background for storage
+ * Includes deduplication to avoid processing same paper multiple times
+ *
+ * Flow:
+ * 1. Parse HTML to Document
+ * 2. Extract sections
+ * 3. Chunk sections by paragraphs (adaptive)
+ * 4. Create metadata chunk
+ * 5. Send all chunks + paper to background for storage
+ */
+async function extractPaperFromHTML(
+  paperHtml: string,
+  paperUrl: string,
+  paper: import('../types/index.ts').ResearchPaper
+): Promise<void> {
+  // LEVEL 2 DEDUPLICATION: Skip if already extracting this URL
+  if (inFlightExtractions.has(paperUrl)) {
+    console.log('[Offscreen] ⏭ Skipping duplicate extraction for:', paperUrl);
+    return;
+  }
+
+  try {
+    // Mark as in-flight
+    inFlightExtractions.add(paperUrl);
+    console.log('[Offscreen] 📄 Starting extraction for:', paperUrl);
+
+    // Parse HTML string into Document
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(paperHtml, 'text/html');
+
+    if (!doc) {
+      console.error('[Offscreen] Failed to parse HTML');
+      return;
+    }
+
+    // Extract sections using researchPaperSplitter
+    const { extractHTMLSections } = await import('../utils/researchPaperSplitter.ts');
+    const sections = await extractHTMLSections(doc);
+
+    if (!sections || sections.length === 0) {
+      console.warn('[Offscreen] No sections extracted from HTML');
+      return;
+    }
+
+    console.log(`[Offscreen] ✓ Extracted ${sections.length} sections`);
+
+    // Generate paper ID
+    const { generatePaperId } = await import('../utils/dbService.ts');
+    const paperId = generatePaperId(paperUrl);
+
+    // Chunk sections adaptively by paragraphs
+    const { chunkSections } = await import('../utils/adaptiveChunker.ts');
+    const { chunks, stats } = await chunkSections(sections, paperId);
+
+    console.log(`[Offscreen] ✓ Created ${chunks.length} adaptive chunks`);
+
+    // Create metadata chunk
+    const { createMetadataChunk } = await import('../content/services/paperStorageService.ts');
+    const metadataChunk = createMetadataChunk(paper, paperId);
+
+    // Renumber all existing chunks (increment index by 1)
+    const renumberedChunks = chunks.map(chunk => ({
+      ...chunk,
+      index: chunk.index + 1,
+      id: `chunk_${paperId}_${chunk.index + 1}`,
+    }));
+
+    // Prepend metadata chunk
+    const allChunks = [metadataChunk, ...renumberedChunks];
+
+    // Recalculate average chunk size including metadata
+    const totalChunkSize = allChunks.reduce((sum, c) => sum + c.content.length, 0);
+    const avgChunkSize = Math.floor(totalChunkSize / allChunks.length);
+
+    console.log(`[Offscreen] ✓ Created metadata chunk, total chunks: ${allChunks.length}`);
+
+    // Send to background for storage
+    chrome.runtime.sendMessage({
+      type: MessageType.STORE_PAPER_IN_DB,
+      payload: {
+        paper,
+        fullText: undefined,
+        preChunkedData: {
+          chunks: allChunks,
+          metadata: {
+            averageChunkSize: avgChunkSize,
+          },
+        },
+      }
+    });
+
+    console.log('[Offscreen] ✓ Sent chunks to background for storage');
+  } catch (error) {
+    console.error('[Offscreen] Error extracting paper from HTML:', error);
+  } finally {
+    // Remove from in-flight set
+    inFlightExtractions.delete(paperUrl);
+  }
+}
+
+/**
  * Message handler for requests from background
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -141,6 +248,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
 
     return true; // Keep message channel open for async response
+  }
+
+  if (message.type === MessageType.EXTRACT_PAPER_HTML) {
+    const { paperHtml, paperUrl, paper } = message.payload;
+
+    // Fire-and-forget: Extract asynchronously without blocking sender
+    (async () => {
+      await extractPaperFromHTML(paperHtml, paperUrl, paper);
+    })();
+
+    // No need to keep channel open - fire and forget
+    return false;
   }
 
   return false;

@@ -110,3 +110,36 @@ export async function searchSemanticOffscreen(
   }
 }
 
+/**
+ * Extract paper from HTML in offscreen document (fire-and-forget)
+ * This triggers extraction in background, allowing user to navigate away
+ *
+ * @param paperHtml Serialized HTML string of the paper page
+ * @param paperUrl URL of the paper (used for deduplication)
+ * @param paper ResearchPaper object with metadata
+ * @returns Promise that resolves when extraction message is sent (not when extraction completes)
+ */
+export async function extractPaperFromHTMLOffscreen(
+  paperHtml: string,
+  paperUrl: string,
+  paper: any
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Ensure offscreen document exists
+    await setupOffscreenDocument();
+
+    // Send message to offscreen document (fire-and-forget)
+    // The offscreen will handle extraction and storage asynchronously
+    chrome.runtime.sendMessage({
+      type: MessageType.EXTRACT_PAPER_HTML,
+      payload: { paperHtml, paperUrl, paper }
+    });
+
+    console.log('[Offscreen] ✓ Extraction triggered for:', paperUrl);
+    return { success: true };
+  } catch (error) {
+    console.error('[Offscreen] Error triggering extraction:', error);
+    return { success: false, error: String(error) };
+  }
+}
+

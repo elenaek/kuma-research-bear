@@ -148,6 +148,14 @@ export async function storePaper(
     const paperId = generatePaperId(paper.url);
     console.log('[IndexedDB] Generated paper ID:', paperId, 'for URL:', paper.url);
 
+    // LEVEL 3 DEDUPLICATION: Check if paper already exists (transaction-level check)
+    // This prevents race conditions when multiple tabs try to store the same paper
+    const existingPaper = await getPaperById(paperId);
+    if (existingPaper) {
+      console.log('[IndexedDB] ⏭ Paper already stored, skipping duplicate storage:', paperId);
+      return existingPaper;
+    }
+
     let extractedText: string;
     let contentChunks: ContentChunk[];
 
