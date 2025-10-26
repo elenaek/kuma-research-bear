@@ -71,31 +71,78 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
         currentPaper: storedPaper,
         isPaperStored: true,
         isChunking: false,
-        isExplaining: true,
         chunkingProgress: '',
         currentChunk: 0,
         totalChunks: 0,
         hasChunked: true,  // Mark chunking as complete
+        chatReady: true,  // Chat is now available (may use keyword search until embeddings ready)
+        isGeneratingEmbeddings: true,
+        embeddingProgress: '🐻 Kuma is learning the semantic meaning of the paper... (Generating embeddings)',
       });
 
       // Broadcast state change to all relevant tabs
       await operationStateService.broadcastStateChange(state);
     }
 
-    // Generate embeddings in offscreen document (non-blocking)
+    // Generate embeddings in offscreen document (tracked operation)
     // Offscreen document persists independently and has DOM access for Transformers.js
     (async () => {
       try {
         const { generateEmbeddingsOffscreen } = await import('../services/offscreenService.ts');
-        const result = await generateEmbeddingsOffscreen(storedPaper.id);
+        const result = await generateEmbeddingsOffscreen(storedPaper.id, storedPaper.url);
 
         if (result.success) {
           console.log('[DBHandlers] ✓ Generated', result.count, 'embeddings in offscreen document');
+
+          // Update state to mark embeddings as complete
+          if (tabId) {
+            const embeddingCompleteState = operationStateService.updateState(tabId, {
+              isGeneratingEmbeddings: false,
+              embeddingProgress: '',
+              hasEmbeddings: true,
+              imageExplanationReady: true,  // Image explanations now available
+            });
+
+            // Broadcast embedding completion to all relevant tabs
+            await operationStateService.broadcastStateChange(embeddingCompleteState);
+
+            // Also send a dedicated EMBEDDINGS_COMPLETE message
+            chrome.runtime.sendMessage({
+              type: MessageType.EMBEDDINGS_COMPLETE,
+              payload: { paperId: storedPaper.id, paperUrl: storedPaper.url },
+            }).catch(() => {
+              // No listeners, that's ok
+            });
+          }
         } else {
           console.log('[DBHandlers] Could not generate embeddings, will use keyword search:', result.error);
+
+          // Even if embeddings fail, enable image explanations (they can still work with keyword search)
+          if (tabId) {
+            const failState = operationStateService.updateState(tabId, {
+              isGeneratingEmbeddings: false,
+              embeddingProgress: '',
+              hasEmbeddings: false,  // Embeddings failed
+              imageExplanationReady: true,  // But image explanations can still work
+            });
+
+            await operationStateService.broadcastStateChange(failState);
+          }
         }
       } catch (error) {
         console.log('[DBHandlers] Error triggering embedding generation:', error);
+
+        // On error, still enable image explanations
+        if (tabId) {
+          const errorState = operationStateService.updateState(tabId, {
+            isGeneratingEmbeddings: false,
+            embeddingProgress: '',
+            hasEmbeddings: false,
+            imageExplanationReady: true,
+          });
+
+          await operationStateService.broadcastStateChange(errorState);
+        }
       }
     })();
 

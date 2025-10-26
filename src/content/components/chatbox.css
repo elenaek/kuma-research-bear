@@ -875,3 +875,39 @@
   color: white;
   opacity: 0.9;
 }
+
+/* Embedding Generation Indicator */
+.chatbox-embedding-indicator {
+  background: linear-gradient(135deg, rgba(255, 243, 205, 0.95) 0%, rgba(254, 240, 138, 0.95) 100%);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(120, 53, 15, 0.9);
+  animation: slideDown 0.3s ease-out;
+}
+
+.chatbox-embedding-indicator svg {
+  margin-top: 2px;
+  color: rgba(180, 83, 9, 0.8);
+}
+
+.chatbox-embedding-indicator span {
+  flex: 1;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

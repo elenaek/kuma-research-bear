@@ -53,6 +53,8 @@ class ChatboxInjector {
   private previousCompassAngle: number | null = null; // Track previous angle to prevent 360° spins
   private initialInputValue = '';
   private isRegeneratingExplanation = false;
+  private isGeneratingEmbeddings = false; // Track if embeddings are being generated
+  private hasEmbeddings = false; // Track if embeddings have been generated
 
   /**
    * Wait for page to be fully loaded
@@ -1013,8 +1015,26 @@ class ChatboxInjector {
         this.handleImageStreamChunk(message.payload);
       } else if (message.type === 'IMAGE_CHAT_STREAM_END') {
         this.handleImageStreamEnd(message.payload);
+      } else if (message.type === 'OPERATION_STATE_CHANGED') {
+        this.handleOperationStateChange(message.payload);
       }
     });
+  }
+
+  private handleOperationStateChange(payload: any) {
+    const state = payload.state;
+    if (!state) return;
+
+    // Update embedding state
+    if (state.isGeneratingEmbeddings !== undefined) {
+      this.isGeneratingEmbeddings = state.isGeneratingEmbeddings;
+    }
+    if (state.hasEmbeddings !== undefined) {
+      this.hasEmbeddings = state.hasEmbeddings;
+    }
+
+    // Re-render to update UI with new state
+    this.render();
   }
 
   private async handlePaperContextChange(paper: StoredPaper | null) {
@@ -1764,6 +1784,8 @@ class ChatboxInjector {
           paperTitle: this.currentPaper?.title,
           hasPaper: hasPaper,
           hasChunked: hasChunked,
+          isGeneratingEmbeddings: this.isGeneratingEmbeddings,
+          hasEmbeddings: this.hasEmbeddings,
 
           // Transparency
           transparencyEnabled: this.settings.transparencyEnabled,

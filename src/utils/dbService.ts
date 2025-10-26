@@ -244,56 +244,12 @@ export async function storePaper(
 
     console.log(`✓ Stored paper: ${paper.title} (${contentChunks.length} chunks)`);
 
-    // Generate hierarchical summary AND extract terms AFTER chunks are stored
-    // Progress tracking happens during summarization (the time-consuming part)
-    console.log('[IndexedDB] Generating hierarchical summary and extracting terms...');
-    try {
-      const { aiService } = await import('./aiService.ts');
-      const result = await aiService.createHierarchicalSummary(
-        extractedText,
-        `paper-${paperId}`,
-        onChunkProgress  // Pass progress callback to track chunk summarization
-      );
-      console.log('[IndexedDB] ✓ Hierarchical summary generated:', result.summary.length, 'chars');
-      console.log('[IndexedDB] ✓ Extracted terms from', result.chunkTerms.length, 'chunks');
+    // Note: Hierarchical summary is lazy-loaded (only generated when user clicks "Analyze")
+    // This allows embeddings to start immediately without waiting for expensive AI summarization
+    // See aiHandlers.ts:248-265 for lazy-loading implementation
 
-      // Update the stored paper with hierarchical summary
-      storedPaper.hierarchicalSummary = result.summary;
-      const paperUpdateTransaction = db.transaction([PAPERS_STORE], 'readwrite');
-      const paperUpdateStore = paperUpdateTransaction.objectStore(PAPERS_STORE);
-      await new Promise<void>((resolve, reject) => {
-        const request = paperUpdateStore.put(storedPaper);
-        request.onsuccess = () => resolve();
-        request.onerror = () => reject(new Error('Failed to update paper with hierarchical summary'));
-      });
-      console.log('[IndexedDB] ✓ Paper updated with hierarchical summary');
-
-      // Update chunks with extracted terms
-      if (result.chunkTerms.length > 0) {
-        console.log('[IndexedDB] Updating chunks with extracted terms...');
-        const chunkUpdateTransaction = db.transaction([CHUNKS_STORE], 'readwrite');
-        const chunkUpdateStore = chunkUpdateTransaction.objectStore(CHUNKS_STORE);
-
-        // Update each chunk with its terms
-        for (let i = 0; i < Math.min(contentChunks.length, result.chunkTerms.length); i++) {
-          contentChunks[i].terms = result.chunkTerms[i];
-          chunkUpdateStore.put(contentChunks[i]);
-        }
-
-        await new Promise<void>((resolve, reject) => {
-          chunkUpdateTransaction.oncomplete = () => resolve();
-          chunkUpdateTransaction.onerror = () => reject(new Error('Failed to update chunks with terms'));
-        });
-
-        console.log('[IndexedDB] ✓ Chunks updated with terms');
-      }
-    } catch (error) {
-      console.error('[IndexedDB] Failed to generate hierarchical summary or extract terms:', error);
-      // Continue without hierarchical summary and terms - analysis will still work but with reduced accuracy
-    }
-
-    // Note: Embedding generation moved to content/services/paperStorageService.ts
-    // This prevents bundling Transformers.js in background worker
+    // Note: Embedding generation happens in dbHandlers.ts after this returns
+    // Embeddings only need chunk.content (raw text), not summaries or terms
 
     db.close();
     return storedPaper;

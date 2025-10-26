@@ -56,8 +56,13 @@ export async function closeOffscreenDocument(): Promise<void> {
 
 /**
  * Generate embeddings for a paper using the offscreen document
+ * @param paperId - The ID of the paper to generate embeddings for
+ * @param paperUrl - The URL of the paper (used for tracking completion)
  */
-export async function generateEmbeddingsOffscreen(paperId: string): Promise<{ success: boolean; count?: number; error?: string }> {
+export async function generateEmbeddingsOffscreen(
+  paperId: string,
+  paperUrl?: string
+): Promise<{ success: boolean; count?: number; error?: string }> {
   try {
     // Ensure offscreen document exists
     await setupOffscreenDocument();
@@ -65,7 +70,7 @@ export async function generateEmbeddingsOffscreen(paperId: string): Promise<{ su
     // Send message to offscreen document
     const response = await chrome.runtime.sendMessage({
       type: MessageType.GENERATE_EMBEDDINGS,
-      payload: { paperId }
+      payload: { paperId, paperUrl }
     });
 
     if (response.success) {

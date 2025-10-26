@@ -14,6 +14,7 @@
 import { MessageType } from '../types/index.ts';
 import { registerTabLifecycleHandlers } from './utils/tabLifecycleHandlers.ts';
 import { tabPaperTracker } from './services/tabPaperTracker.ts';
+import * as operationStateService from './services/operationStateService.ts';
 import * as dbHandlers from './handlers/dbHandlers.ts';
 import * as aiHandlers from './handlers/aiHandlers.ts';
 import * as stateHandlers from './handlers/stateHandlers.ts';
@@ -25,6 +26,10 @@ import { inputQuotaService } from '../utils/inputQuotaService.ts';
 // Context menu IDs for opening chatbox
 const CONTEXT_MENU_ID = 'open-chat'; // Extension icon context menu
 const CONTEXT_MENU_PAGE_ID = 'chat-with-kuma-page'; // Page context menu
+
+// Track pending paper extractions (paperUrl → tabId)
+// Used to reconnect tabId after offscreen processing completes
+const pendingExtractions = new Map<string, number>();
 
 // Handle extension installation
 chrome.runtime.onInstalled.addListener(async () => {
@@ -178,12 +183,29 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
       // Database Operations
       case MessageType.STORE_PAPER_IN_DB:
-        const tabId = message.payload.tabId || sender.tab?.id;
+        let tabId = message.payload.tabId || sender.tab?.id;
+
+        // Fallback: Look up tabId from pending extractions (for offscreen-processed papers)
+        if (!tabId && message.payload.paper?.url) {
+          const paperUrl = message.payload.paper.url;
+          tabId = pendingExtractions.get(paperUrl);
+          if (tabId) {
+            console.log('[Background] Retrieved tabId', tabId, 'from pending extractions for:', paperUrl);
+            pendingExtractions.delete(paperUrl); // Clean up mapping
+          }
+        }
+
         const result = await dbHandlers.handleStorePaper(message.payload, tabId);
         sendResponse(result);
         break;
 
       case MessageType.EXTRACT_PAPER_HTML:
+        // Capture tabId before offscreen processing
+        const extractTabId = sender.tab?.id;
+        if (extractTabId && message.payload.paperUrl) {
+          pendingExtractions.set(message.payload.paperUrl, extractTabId);
+          console.log('[Background] Stored tabId', extractTabId, 'for paper extraction:', message.payload.paperUrl);
+        }
         sendResponse(await dbHandlers.handleExtractPaperHTML(message.payload));
         break;
 
@@ -260,17 +282,24 @@ registerTabLifecycleHandlers();
  */
 
 /**
- * Check if a tab has a paper stored with chunks
+ * Check if chat is ready for a tab (paper is chunked and chat is enabled)
  */
-async function hasChunkedPaper(tabId: number): Promise<boolean> {
+async function isChatReady(tabId: number): Promise<boolean> {
   try {
     const tab = await chrome.tabs.get(tabId);
     if (!tab.url) return false;
 
+    // Check operation state for chatReady flag
+    const state = operationStateService.getStateByPaperUrl(tab.url);
+    if (state && state.chatReady) {
+      return true;
+    }
+
+    // Fallback: check if paper has chunks (for existing papers that were loaded before this change)
     const paper = await dbHandlers.handleGetPaperByUrl({ url: tab.url });
     return !!(paper.success && paper.paper && paper.paper.chunkCount > 0);
   } catch (error) {
-    console.error('[ContextMenu] Error checking paper status:', error);
+    console.error('[ContextMenu] Error checking chat ready status:', error);
     return false;
   }
 }
@@ -283,14 +312,14 @@ async function updateContextMenuState() {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!activeTab || !activeTab.id) return;
 
-    const hasChunked = await hasChunkedPaper(activeTab.id);
+    const chatReady = await isChatReady(activeTab.id);
 
     // Update both context menus
     await chrome.contextMenus.update(CONTEXT_MENU_ID, {
-      enabled: hasChunked,
+      enabled: chatReady,
     });
     await chrome.contextMenus.update(CONTEXT_MENU_PAGE_ID, {
-      enabled: hasChunked,
+      enabled: chatReady,
     });
   } catch (error) {
     // Context menu might not exist yet, that's ok

@@ -28,6 +28,7 @@ export function getState(tabId: number): OperationState {
       isAnalyzing: false,
       isGeneratingGlossary: false,
       isChunking: false,
+      isGeneratingEmbeddings: false,
       currentPaper: null,
       isPaperStored: false,
       error: null,
@@ -41,6 +42,7 @@ export function getState(tabId: number): OperationState {
       chunkingProgress: '',
       currentChunk: 0,
       totalChunks: 0,
+      embeddingProgress: '',
       lastUpdated: Date.now(),
       activeAIRequests: [],
       isUsingCachedRequest: false,
@@ -50,6 +52,9 @@ export function getState(tabId: number): OperationState {
       hasGlossary: false,
       hasDetected: false,
       hasChunked: false,
+      hasEmbeddings: false,
+      chatReady: false,
+      imageExplanationReady: false,
       completionPercentage: 0,
     });
   }

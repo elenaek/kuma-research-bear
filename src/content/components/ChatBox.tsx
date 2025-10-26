@@ -38,6 +38,8 @@ interface ChatBoxProps {
   paperTitle?: string;
   hasPaper: boolean;
   hasChunked: boolean;
+  isGeneratingEmbeddings?: boolean; // Track if embeddings are being generated
+  hasEmbeddings?: boolean; // Track if embeddings have been generated
 
   // Transparency
   transparencyEnabled: boolean;
@@ -83,6 +85,8 @@ export const ChatBox = ({
   paperTitle,
   hasPaper,
   hasChunked,
+  isGeneratingEmbeddings,
+  hasEmbeddings,
 
   // Transparency
   transparencyEnabled,
@@ -745,6 +749,26 @@ export const ChatBox = ({
 
       {/* Messages area */}
       <div ref={messagesContainerRef} class="chatbox-messages">
+        {/* Embedding generation indicator */}
+        {isGeneratingEmbeddings && !hasEmbeddings && activeTab?.type === 'paper' && (
+          <div class="chatbox-embedding-indicator">
+            <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" opacity="0.2"/>
+              <path d="M12 2a10 10 0 0 1 10 10" opacity="1">
+                <animateTransform
+                  attributeName="transform"
+                  type="rotate"
+                  from="0 12 12"
+                  to="360 12 12"
+                  dur="1s"
+                  repeatCount="indefinite"
+                />
+              </path>
+            </svg>
+            <span>🐻 Kuma is still digesting the information from this paper - answers may be limited until semantic search is ready</span>
+          </div>
+        )}
+
         {messages.length === 0 && !isStreaming && (
           <div class="chatbox-empty">
             <svg class="w-12 h-12 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">

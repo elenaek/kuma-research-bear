@@ -32,6 +32,7 @@ export enum MessageType {
   GENERATE_GLOSSARY = 'GENERATE_GLOSSARY',
   GLOSSARY_PROGRESS = 'GLOSSARY_PROGRESS',
   GENERATE_EMBEDDINGS = 'GENERATE_EMBEDDINGS',
+  EMBEDDINGS_COMPLETE = 'EMBEDDINGS_COMPLETE', // Broadcast when embeddings generation completes
   SEMANTIC_SEARCH = 'SEMANTIC_SEARCH',
   EXTRACT_PAPER_HTML = 'EXTRACT_PAPER_HTML', // Extract paper from HTML in offscreen
 
@@ -474,6 +475,7 @@ export interface OperationState {
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
   isChunking: boolean;  // Track if chunking is in progress
+  isGeneratingEmbeddings: boolean;  // Track if embeddings are being generated
   currentPaper: ResearchPaper | null;
   isPaperStored: boolean;  // Track if the current paper is stored in DB
   error: string | null;
@@ -487,6 +489,7 @@ export interface OperationState {
   chunkingProgress: string;  // Status message for chunking
   currentChunk: number;  // Current chunk being processed
   totalChunks: number;  // Total number of chunks to process
+  embeddingProgress: string;  // Status message for embedding generation
   lastUpdated: number;
   // Track active AI requests for this tab
   activeAIRequests: string[];
@@ -499,5 +502,9 @@ export interface OperationState {
   hasGlossary: boolean;
   hasDetected: boolean;  // Track if paper was successfully detected
   hasChunked: boolean;  // Track if chunking completed successfully
+  hasEmbeddings: boolean;  // Track if embeddings have been generated
+  // Progressive readiness states for UX
+  chatReady: boolean;  // Chat available after chunking (may use keyword search initially)
+  imageExplanationReady: boolean;  // Image explanations available after embeddings complete
   completionPercentage: number; // 0-100, based on completed features
 }

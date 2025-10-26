@@ -67,23 +67,28 @@ function setupMessageListener() {
       }
     }
 
-    // Handle chunking completion
+    // Handle operation state changes
     if (message.type === 'OPERATION_STATE_CHANGED') {
-      const state = message.payload;
+      const state = message.payload.state;
 
-      // If chunking just completed for current page
       const currentPageUrl = normalizeUrl(window.location.href);
       const statePaperUrl = state.currentPaper?.url ? normalizeUrl(state.currentPaper.url) : null;
-      if (state.hasChunked && statePaperUrl === currentPageUrl) {
-        console.log('[Content] Chunking completed for current page, initializing image buttons');
 
-        // Get fresh paper data from DB
-        const { getPaperFromDBByUrl } = await import('../services/ChromeService.ts');
-        const storedPaper = await getPaperFromDBByUrl(currentPageUrl);
+      // Only process state changes for the current page
+      if (statePaperUrl === currentPageUrl) {
+        // Initialize image explanation buttons when imageExplanationReady becomes true
+        if (state.imageExplanationReady) {
+          console.log('[Content] Image explanations ready, initializing image buttons');
 
-        if (storedPaper && storedPaper.id) {
-          await imageExplanationHandler.reinitialize(storedPaper);
-          console.log('[Content] ✓ Image buttons reinitialized after chunking');
+          // Get fresh paper data from DB
+          const { getPaperFromDBByUrl } = await import('../services/ChromeService.ts');
+          const storedPaper = await getPaperFromDBByUrl(currentPageUrl);
+
+          if (storedPaper && storedPaper.id) {
+            // imageExplanationHandler.initialize() will check if already initialized and skip if so
+            await imageExplanationHandler.initialize(storedPaper);
+            console.log('[Content] ✓ Image buttons initialized after embeddings complete');
+          }
         }
       }
     }
@@ -128,25 +133,10 @@ async function setupTextSelection() {
 }
 
 /**
- * Initialize image explanation handler
- * Sets up AI-powered image explanations for figures in papers
+ * Note: Image explanation handler is no longer initialized via a dedicated function
+ * It will be initialized dynamically when imageExplanationReady becomes true
+ * via the OPERATION_STATE_CHANGED message listener
  */
-async function setupImageExplanations() {
-  try {
-    // Query IndexedDB directly using current URL
-    const { getPaperFromDBByUrl } = await import('../services/ChromeService.ts');
-    const storedPaper = await getPaperFromDBByUrl(window.location.href);
-
-    if (storedPaper && storedPaper.id) {
-      await imageExplanationHandler.initialize(storedPaper);
-      console.log('[Content] ✓ Image explanation handler initialized for paper:', storedPaper.title);
-    } else {
-      console.log('[Content] Skipping image explanation handler (no stored paper for this URL)');
-    }
-  } catch (error) {
-    console.error('[Content] Error initializing image explanation handler:', error);
-  }
-}
 
 /**
  * Bootstrap the content script
@@ -167,10 +157,11 @@ async function setupImageExplanations() {
   // Initialize text selection handler (depends on chatbox)
   await setupTextSelection();
 
-  // Initialize image explanation handler (depends on paper detection)
-  await setupImageExplanations();
+  // Note: Image explanation handler is no longer initialized on page load
+  // It will be initialized when imageExplanationReady becomes true (after embeddings complete)
+  // This happens via the OPERATION_STATE_CHANGED message listener
 
-  // Restore chatbox tabs AFTER image buttons are created
+  // Restore chatbox tabs AFTER page load
   await chatboxInjector.restoreTabs();
   console.log('[Content] ✓ Tabs restored');
 
