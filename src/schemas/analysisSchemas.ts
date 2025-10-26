@@ -325,7 +325,30 @@ export const imageExplanationSchema: JSONSchema = {
     },
     explanation: {
       type: 'string',
-      description: 'Detailed explanation of what the image shows in the context of the research paper. IMPORTANT: Markdown and LaTeX are SAFE and REQUIRED inside JSON strings. Example valid JSON string: "This figure shows **bold text** and $x^2$ equation.\\n\\n- Key finding 1\\n- Key finding 2". Use markdown formatting (bold, italic, lists, headers) for structure and LaTeX notation for math ($inline$ or $$display$$). Include: what the image depicts, key findings, trends, patterns, and relevance.',
+      description: `Detailed explanation of what the image shows in the context of the research paper.
+
+Math formatting with LaTeX:
+- Use $expr$ for inline math, $$expr$$ for display equations
+- CRITICAL: In JSON strings, backslashes must be escaped by doubling them
+
+LaTeX Escaping Rules (CRITICAL - READ CAREFULLY):
+- Every LaTeX command needs TWO backslashes in your JSON output
+- Example: To render \\alpha, you must write: "The value is \\\\alpha"
+- Example: To render \\theta, you must write: "The formula uses \\\\theta"
+- Example: To render \\frac{a}{b}, you must write: "The fraction \\\\frac{a}{b}"
+
+IMPORTANT - Commands that look like escape sequences:
+- \\text{...} → Write as \\\\text{...} (NOT \\text which becomes tab + "ext")
+- \\theta → Write as \\\\theta (NOT \\theta which could break)
+- \\nabla → Write as \\\\nabla (NOT \\nabla which becomes newline + "abla")
+- \\nu → Write as \\\\nu (NOT \\nu which becomes newline + "u")
+- \\rho → Write as \\\\rho (NOT \\rho which becomes carriage return + "ho")
+- \\times, \\tan, \\tanh → Write as \\\\times, \\\\tan, \\\\tanh
+- \\ne, \\neq, \\not → Write as \\\\ne, \\\\neq, \\\\not
+
+More examples: \\\\alpha, \\\\beta, \\\\gamma, \\\\ell, \\\\sum, \\\\int, \\\\boldsymbol{x}, \\\\frac{a}{b}
+
+Use markdown formatting (bold, italic, lists, headers) for structure. Include: what the image depicts, key findings, trends, patterns, and relevance to the paper.`,
     },
   },
   required: ['title', 'explanation'],

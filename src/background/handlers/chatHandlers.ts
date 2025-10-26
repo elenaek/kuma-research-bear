@@ -24,9 +24,24 @@ Keep responses concise but detailed enough to answer the user's question. Be enc
 
 Math formatting with LaTeX:
 - Use $expr$ for inline math, $$expr$$ for display equations
-- CRITICAL: Since this is a JSON string, you MUST double all backslashes in LaTeX commands
-- Examples: \\\\alpha, \\\\theta, \\\\ell, \\\\sum, \\\\int, \\\\frac{a}{b}, \\\\boldsymbol{x}, \\\\text{word}
-- NEVER use \\textbackslash - always use \\\\ (double backslash) for all LaTeX commands
+- CRITICAL: In JSON strings, backslashes must be escaped by doubling them
+
+LaTeX Escaping Rules (CRITICAL - READ CAREFULLY):
+- Every LaTeX command needs TWO backslashes in your JSON output
+- Example: To render \\alpha, you must write: "The value is \\\\alpha"
+- Example: To render \\theta, you must write: "The formula uses \\\\theta"
+- Example: To render \\frac{a}{b}, you must write: "The fraction \\\\frac{a}{b}"
+
+IMPORTANT - Commands that look like escape sequences:
+- \\text{...} → Write as \\\\text{...} (NOT \\text which becomes tab + "ext")
+- \\theta → Write as \\\\theta (NOT \\theta which could break)
+- \\nabla → Write as \\\\nabla (NOT \\nabla which becomes newline + "abla")
+- \\nu → Write as \\\\nu (NOT \\nu which becomes newline + "u")
+- \\rho → Write as \\\\rho (NOT \\rho which becomes carriage return + "ho")
+- \\times, \\tan, \\tanh → Write as \\\\times, \\\\tan, \\\\tanh
+- \\ne, \\neq, \\not → Write as \\\\ne, \\\\neq, \\\\not
+
+More examples: \\\\alpha, \\\\beta, \\\\gamma, \\\\ell, \\\\sum, \\\\int, \\\\boldsymbol{x}, \\\\frac{a}{b}
 
 Use markdown formatting to make your response easier to read (e.g., **bold**, *italic*, bullet points, numbered lists, etc.).
 Reference specific sections when used in producing answer. Remember conversation context for coherent follow-ups.`
@@ -41,18 +56,90 @@ Reference specific sections when used in producing answer. Remember conversation
 };
 
 /**
- * Unescape JSON string literals (convert \n to actual newlines, etc.)
- * When we extract answer from raw JSON string, it contains literal escape sequences
- * This function converts them to actual characters for proper display
+ * Extract LaTeX expressions from raw JSON string content and replace with safe placeholders
+ * This protects LaTeX from being corrupted by JSON escape sequence processing
  *
- * IMPORTANT: We do NOT unescape \t or \r to avoid breaking LaTeX commands like \tilde, \text, \rho, etc.
+ * Handles: $...$, $$...$$, \(...\), \[...\]
+ * Returns: { content: string with placeholders, latex: array of extracted expressions }
+ *
+ * NOTE: LaTeX is stored as-is (with double backslashes from JSON). Unescaping happens
+ * during rehydration to ensure correct order of operations.
+ */
+function extractLatexFromRawJson(content: string): { content: string; latex: string[] } {
+  const latex: string[] = [];
+  let processed = content;
+  let counter = 0;
+
+  // Extract display math first ($$...$$ and \[...\])
+  processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (match) => {
+    const placeholder = `{{LATEX_${counter}}}`;
+    latex.push(match); // Store as-is with double backslashes
+    counter++;
+    return placeholder;
+  });
+
+  processed = processed.replace(/\\\[([\s\S]+?)\\\]/g, (match) => {
+    const placeholder = `{{LATEX_${counter}}}`;
+    latex.push(match); // Store as-is
+    counter++;
+    return placeholder;
+  });
+
+  // Extract inline math ($...$ and \(...\))
+  processed = processed.replace(/\$([^\$]+?)\$/g, (match) => {
+    const placeholder = `{{LATEX_${counter}}}`;
+    latex.push(match); // Store as-is
+    counter++;
+    return placeholder;
+  });
+
+  processed = processed.replace(/\\\(([\s\S]+?)\\\)/g, (match) => {
+    const placeholder = `{{LATEX_${counter}}}`;
+    latex.push(match); // Store as-is
+    counter++;
+    return placeholder;
+  });
+
+  return { content: processed, latex };
+}
+
+/**
+ * Rehydrate LaTeX expressions by replacing placeholders with original LaTeX
+ * Unescapes each LaTeX expression during rehydration to convert double backslashes
+ * from JSON (e.g., \\text) to single backslashes for KaTeX (e.g., \text)
+ */
+function rehydrateLatex(content: string, latex: string[]): string {
+  let result = content;
+  latex.forEach((latexExpr, index) => {
+    const placeholder = `{{LATEX_${index}}}`;
+    // Unescape the LaTeX expression when rehydrating (convert \\ to \)
+    const unescapedLatex = unescapeJsonString(latexExpr);
+    result = result.replaceAll(placeholder, unescapedLatex);
+  });
+  return result;
+}
+
+/**
+ * Unescape JSON string literals (convert \\n to actual newlines, etc.)
+ * When we extract answer from raw JSON string during streaming, it contains literal escape sequences.
+ * This function converts them to actual characters for proper display.
+ *
+ * IMPORTANT: This should be called AFTER extractLatexFromRawJson() to avoid corrupting LaTeX!
+ * LaTeX expressions like \nu, \frac, \text contain backslashes that would be misinterpreted
+ * as JSON escape sequences (\n → newline, \t → tab, \f → form feed, \r → carriage return).
+ *
+ * Order of operations is critical:
+ * 1. Replace \\\\ → placeholder (protects any double-backslashed content)
+ * 2. Replace \\n → newline (JSON escape sequence)
+ * 3. Replace \\" → quote (JSON escape sequence)
+ * 4. Replace placeholder → \\ (restore double backslashes)
  */
 function unescapeJsonString(str: string): string {
   return str
-    .replace(/\\\\/g, '\x00')  // Temporarily replace \\ with placeholder
-    .replace(/\\n/g, '\n')     // newlines (safe - no LaTeX commands start with \n)
-    .replace(/\\"/g, '"')      // quotes
-    .replace(/\x00/g, '\\');   // Restore single backslash for LaTeX commands
+    .replace(/\\\\/g, '\x00')  // Step 1: Protect double backslashes with placeholder
+    .replace(/\\n/g, '\n')     // Step 2: Convert JSON newline escape
+    .replace(/\\"/g, '"')      // Step 3: Convert JSON quote escape
+    .replace(/\x00/g, '\\');   // Step 4: Restore double backslashes
 }
 
 /**
@@ -564,7 +651,11 @@ User question: ${message}`;
         // Found the pattern! Extract answer up to (but not including) the pattern
         const patternIndex = currentAnswer.indexOf(CLOSING_PATTERN);
         const rawAnswer = currentAnswer.substring(0, patternIndex);
-        answer = unescapeJsonString(rawAnswer); // Unescape for proper display
+
+        // Protect LaTeX from JSON escape sequence corruption
+        const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
+        const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
+        answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
 
         // Send any remaining content that wasn't sent yet
         // Extract from unescaped content since lastSentLength tracks unescaped position
@@ -587,9 +678,12 @@ User question: ${message}`;
           visibleContent = visibleContent.slice(0, -1);
         }
 
-        // Unescape the FULL visible content first, then extract delta
-        // This prevents escape sequences from being split across deltas
-        const unescapedVisible = unescapeJsonString(visibleContent);
+        // Protect LaTeX from JSON escape sequence corruption
+        // Process FULL visible content, then extract delta
+        const { content: visibleWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(visibleContent);
+        const unescapedWithPlaceholders = unescapeJsonString(visibleWithPlaceholders);
+        const unescapedVisible = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
+
         const newDelta = unescapedVisible.substring(lastSentLength);
 
         if (newDelta) {
@@ -607,7 +701,11 @@ User question: ${message}`;
       const parsed = JSON.parse(fullResponseJSON);
       // Use parsed answer if we somehow missed it during streaming
       if (!answer) {
-        answer = parsed.answer || '';
+        const rawAnswer = parsed.answer || '';
+        // Apply same LaTeX protection as streaming (fallback path)
+        const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
+        const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
+        answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
       }
       extractedSources = parsed.sources || [];
       console.log('[ChatHandlers] Parsed sources:', extractedSources);
@@ -1270,7 +1368,11 @@ User question: ${message}`;
         // Found the pattern! Extract answer up to (but not including) the pattern
         const patternIndex = currentAnswer.indexOf(CLOSING_PATTERN);
         const rawAnswer = currentAnswer.substring(0, patternIndex);
-        answer = unescapeJsonString(rawAnswer); // Unescape for proper display
+
+        // Protect LaTeX from JSON escape sequence corruption
+        const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
+        const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
+        answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
 
         // Send any remaining content that wasn't sent yet
         // Extract from unescaped content since lastSentLength tracks unescaped position
@@ -1293,9 +1395,12 @@ User question: ${message}`;
           visibleContent = visibleContent.slice(0, -1);
         }
 
-        // Unescape the FULL visible content first, then extract delta
-        // This prevents escape sequences from being split across deltas
-        const unescapedVisible = unescapeJsonString(visibleContent);
+        // Protect LaTeX from JSON escape sequence corruption
+        // Process FULL visible content, then extract delta
+        const { content: visibleWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(visibleContent);
+        const unescapedWithPlaceholders = unescapeJsonString(visibleWithPlaceholders);
+        const unescapedVisible = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
+
         const newDelta = unescapedVisible.substring(lastSentLength);
 
         if (newDelta) {
@@ -1313,7 +1418,11 @@ User question: ${message}`;
       const parsed = JSON.parse(fullResponseJSON);
       // Use parsed answer if we somehow missed it during streaming
       if (!answer) {
-        answer = parsed.answer || '';
+        const rawAnswer = parsed.answer || '';
+        // Apply same LaTeX protection as streaming (fallback path)
+        const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
+        const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
+        answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
       }
       extractedSources = parsed.sources || [];
       console.log('[ImageChatHandlers] Parsed sources:', extractedSources);
