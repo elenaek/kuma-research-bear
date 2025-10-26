@@ -2,11 +2,47 @@ import { MessageType, ChatMessage, ConversationState } from '../../types/index.t
 import { getPaperByUrl, getRelevantChunksSemantic, updatePaper } from '../../utils/dbService.ts';
 import { aiService } from '../../utils/aiService.ts';
 import { getOptimalRAGChunkCount } from '../../utils/adaptiveRAGService.ts';
+import { JSONSchema } from '../../utils/typeToSchema.ts';
 
 /**
  * Chat Message Handlers
  * Handles chat-related operations with streaming support
  */
+
+/**
+ * JSON Schema for structured chat responses
+ * LLM returns: { answer: string, sources: string[] }
+ */
+const CHAT_RESPONSE_SCHEMA: JSONSchema = {
+  type: "object",
+  properties: {
+    answer: {
+      type: "string",
+      description: "Your conversational response to the user's question. Be friendly and helpful like a supportive colleague. Use markdown formatting to make your response easier to read. Explain complex concepts in simple, everyday language avoiding unnecessary jargon. Keep responses concise (2-4 sentences for simple questions, longer for complex ones). Be encouraging and supportive. Use proper math formatting: $expr$ for inline math (e.g., $E = mc^2$), $$expr$$ for display equations, with LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.). Reference specific sections when relevant. Remember conversation context for coherent follow-ups."
+    },
+    sources: {
+      type: "array",
+      items: { type: "string" },
+      description: "Array of hierarchical citations actually used (e.g., 'Methods > Data Collection > Para 3')"
+    }
+  },
+  required: ["answer", "sources"]
+};
+
+/**
+ * Unescape JSON string literals (convert \n to actual newlines, etc.)
+ * When we extract answer from raw JSON string, it contains literal escape sequences
+ * This function converts them to actual characters for proper display
+ */
+function unescapeJsonString(str: string): string {
+  return str
+    .replace(/\\\\/g, '\x00')  // Temporarily replace \\ with placeholder
+    .replace(/\\n/g, '\n')     // newlines
+    .replace(/\\r/g, '\r')     // carriage returns
+    .replace(/\\t/g, '\t')     // tabs
+    .replace(/\\"/g, '"')      // quotes
+    .replace(/\x00/g, '\\');   // Restore single backslash
+}
 
 /**
  * Validate that a tab exists and is still available
@@ -305,23 +341,14 @@ async function processAndStreamResponse(
 
 Your role:
 - Answer questions about the research paper based on the provided context
-- Be conversational and friendly, like a helpful colleague
-- Explain complex concepts in simple terms
-- Reference specific sections when relevant
 - If the context doesn't contain enough information, say so honestly
-- Remember previous conversation context to provide coherent follow-up answers
 
-Important:
-- Keep responses concise and conversational (2-4 sentences for simple questions, more for complex ones)
-- Use everyday language, avoid unnecessary jargon
-- Be encouraging and supportive
-- If you cite information, mention which section it's from
+Response Format:
+You will respond with a JSON object containing:
+- "answer": Your conversational response (see schema for formatting guidelines)
+- "sources": An array of citations you actually used (use EXACT hierarchical format from context, e.g., "Methods > Data Collection > Para 3")
 
-Mathematical expressions:
-- Use $expression$ for inline math (e.g., $E = mc^2$, $p < 0.05$)
-- Use $$expression$$ for display equations on separate lines
-- Alternative: \\(expression\\) for inline, \\[expression\\] for display
-- Use proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)
+Only include sources you actually referenced. If you didn't use specific sources, provide an empty array.
 
 Paper title: ${storedPaper.title}`;
 
@@ -483,9 +510,6 @@ User question: ${message}`;
         .join('\n\n---\n\n');
     }
 
-    // Update sources based on final context chunks used
-    const finalSources = Array.from(new Set(finalContextChunks.map(c => c.section)));
-
     // Stream the response
     // Include RAG context in the actual prompt (not in initialPrompts) to save quota
     const promptWithContext = `Context from the paper:
@@ -493,20 +517,87 @@ ${finalContextString}
 
 User question: ${message}`;
 
-    let fullResponse = '';
-    const stream = session.promptStreaming(promptWithContext);
+    // Stream response with structured output constraint
+    // Pattern: {"answer": "text here...", "sources": ["src1", "src2"]}
+    let fullResponseJSON = '';
+    const stream = session.promptStreaming(promptWithContext, { responseConstraint: CHAT_RESPONSE_SCHEMA });
 
-    // Process the stream
+    // Lookahead buffer to prevent showing closing JSON pattern
+    // Pattern is the literal JSON structure: ", "sources
+    const CLOSING_PATTERN = '", "sources';
+    const LOOKAHEAD_SIZE = CLOSING_PATTERN.length; // 11 characters
+    let lastSentLength = 0;
+    let answer = '';
+    let extractedSources: string[] = [];
+    let shouldStopDisplaying = false; // Flag to stop sending to user but continue accumulating JSON
+
+    console.log('[ChatHandlers] 🔄 Starting structured streaming...');
+
     for await (const chunk of stream) {
-      fullResponse += chunk;
-      await sendChatChunk(tabId, chunk);
+      fullResponseJSON += chunk;
+
+      // Find the answer field boundaries
+      if (!fullResponseJSON.includes('"answer"')) continue;
+
+      const answerStart = fullResponseJSON.indexOf('"answer"');
+      const colonIndex = fullResponseJSON.indexOf(':', answerStart);
+      const openQuoteIndex = fullResponseJSON.indexOf('"', colonIndex + 1);
+
+      if (openQuoteIndex === -1) continue;
+
+      // Extract current answer content (everything after the opening quote)
+      const currentAnswer = fullResponseJSON.substring(openQuoteIndex + 1);
+
+      // Check if closing pattern appears anywhere in accumulated answer
+      if (!shouldStopDisplaying && currentAnswer.includes(CLOSING_PATTERN)) {
+        // Found the pattern! Extract answer up to (but not including) the pattern
+        const patternIndex = currentAnswer.indexOf(CLOSING_PATTERN);
+        const rawAnswer = currentAnswer.substring(0, patternIndex);
+        answer = unescapeJsonString(rawAnswer); // Unescape for proper display
+
+        // Send any remaining content that wasn't sent yet
+        const finalDelta = rawAnswer.substring(lastSentLength);
+        if (finalDelta) {
+          await sendChatChunk(tabId, unescapeJsonString(finalDelta));
+        }
+
+        shouldStopDisplaying = true; // Stop sending to user but continue loop to get full JSON
+      }
+
+      // Pattern not found yet - continue streaming with lookahead buffer delay
+      // Only stream if we have more than the buffer size (maintains 11-char delay)
+      if (!shouldStopDisplaying && currentAnswer.length > LOOKAHEAD_SIZE) {
+        const visibleContent = currentAnswer.substring(0, currentAnswer.length - LOOKAHEAD_SIZE);
+        const newDelta = visibleContent.substring(lastSentLength);
+
+        if (newDelta) {
+          // Unescape the delta to convert \n to actual newlines before displaying
+          await sendChatChunk(tabId, unescapeJsonString(newDelta));
+          lastSentLength = visibleContent.length;
+        }
+      }
+      // If less than 11 chars accumulated, keep buffering (don't send yet)
     }
 
     console.log('[ChatHandlers] ✓ Chat response streamed successfully');
 
-    // Send end signal immediately after streaming completes
-    // This ensures user gets their response even if post-processing fails
-    await sendChatEnd(tabId, fullResponse, finalSources);
+    // Parse final JSON to extract sources
+    try {
+      const parsed = JSON.parse(fullResponseJSON);
+      // Use parsed answer if we somehow missed it during streaming
+      if (!answer) {
+        answer = parsed.answer || '';
+      }
+      extractedSources = parsed.sources || [];
+      console.log('[ChatHandlers] Parsed sources:', extractedSources);
+    } catch (error) {
+      console.error('[ChatHandlers] Failed to parse final JSON:', error);
+      // Use streamed answer, empty sources
+      extractedSources = [];
+    }
+
+    // Send end signal with final answer and sources
+    await sendChatEnd(tabId, answer.trim(), extractedSources);
 
     // Post-stream processing: token tracking and summarization
     // Wrapped in try-catch to prevent failures from affecting the successful stream
@@ -525,7 +616,7 @@ User question: ${message}`;
           const newChatHistory: ChatMessage[] = [
             ...chatHistory,
             { role: 'user', content: message, timestamp: Date.now() },
-            { role: 'assistant', content: fullResponse, timestamp: Date.now(), sources: finalSources }
+            { role: 'assistant', content: answer.trim(), timestamp: Date.now(), sources: extractedSources }
           ];
 
           // Determine which messages to summarize (all except last 6)
@@ -935,23 +1026,14 @@ async function processAndStreamImageChatResponse(
 
 Your role:
 - Answer questions about the image and how it relates to the paper
-- Be conversational and friendly, like a helpful colleague
-- Explain complex concepts in simple terms
-- Reference specific sections of the paper when relevant
 - If the context doesn't contain enough information, say so honestly
-- Remember previous conversation context to provide coherent follow-up answers
 
-Important:
-- Keep responses concise and conversational (2-4 sentences for simple questions, more for complex ones)
-- Use everyday language, avoid unnecessary jargon
-- Be encouraging and supportive
-- If you cite information from the paper, mention which section it's from
+Response Format:
+You will respond with a JSON object containing:
+- "answer": Your conversational response (see schema for formatting guidelines)
+- "sources": An array of citations you actually used (use EXACT hierarchical format from context, e.g., "Methods > Data Collection > Para 3")
 
-Mathematical expressions:
-- Use $expression$ for inline math (e.g., $E = mc^2$, $p < 0.05$)
-- Use $$expression$$ for display equations on separate lines
-- Alternative: \\(expression\\) for inline, \\[expression\\] for display
-- Use proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)
+Only include sources you actually referenced. If you didn't use specific sources, provide an empty array.
 
 Paper title: ${paper.title}`;
 
@@ -1114,9 +1196,6 @@ User question: ${message}`;
         .join('\n\n---\n\n');
     }
 
-    // Update sources based on final context chunks used
-    const finalSources = Array.from(new Set(finalContextChunks.map(c => c.section)));
-
     // Prepare multimodal message with image and text
     const promptWithContext = `Context from the paper:
 ${finalContextString}
@@ -1134,20 +1213,87 @@ User question: ${message}`;
       }
     ]);
 
-    // Get streaming response
-    let fullResponse = '';
-    const stream = session.promptStreaming('');  // Empty prompt since we already appended the message
+    // Get streaming response with structured output constraint
+    // Pattern: {"answer": "text here...", "sources": ["src1", "src2"]}
+    let fullResponseJSON = '';
+    const stream = session.promptStreaming('', { responseConstraint: CHAT_RESPONSE_SCHEMA });  // Empty prompt since we already appended the message
 
-    // Process the stream
+    // Lookahead buffer to prevent showing closing JSON pattern
+    // Pattern is the literal JSON structure: ", "sources
+    const CLOSING_PATTERN = '", "sources';
+    const LOOKAHEAD_SIZE = CLOSING_PATTERN.length; // 11 characters
+    let lastSentLength = 0;
+    let answer = '';
+    let extractedSources: string[] = [];
+    let shouldStopDisplaying = false; // Flag to stop sending to user but continue accumulating JSON
+
+    console.log('[ImageChatHandlers] 🔄 Starting structured streaming...');
+
     for await (const chunk of stream) {
-      fullResponse += chunk;
-      await sendImageChatChunk(tabId, chunk);
+      fullResponseJSON += chunk;
+
+      // Find the answer field boundaries
+      if (!fullResponseJSON.includes('"answer"')) continue;
+
+      const answerStart = fullResponseJSON.indexOf('"answer"');
+      const colonIndex = fullResponseJSON.indexOf(':', answerStart);
+      const openQuoteIndex = fullResponseJSON.indexOf('"', colonIndex + 1);
+
+      if (openQuoteIndex === -1) continue;
+
+      // Extract current answer content (everything after the opening quote)
+      const currentAnswer = fullResponseJSON.substring(openQuoteIndex + 1);
+
+      // Check if closing pattern appears anywhere in accumulated answer
+      if (!shouldStopDisplaying && currentAnswer.includes(CLOSING_PATTERN)) {
+        // Found the pattern! Extract answer up to (but not including) the pattern
+        const patternIndex = currentAnswer.indexOf(CLOSING_PATTERN);
+        const rawAnswer = currentAnswer.substring(0, patternIndex);
+        answer = unescapeJsonString(rawAnswer); // Unescape for proper display
+
+        // Send any remaining content that wasn't sent yet
+        const finalDelta = rawAnswer.substring(lastSentLength);
+        if (finalDelta) {
+          await sendImageChatChunk(tabId, unescapeJsonString(finalDelta));
+        }
+
+        shouldStopDisplaying = true; // Stop sending to user but continue loop to get full JSON
+      }
+
+      // Pattern not found yet - continue streaming with lookahead buffer delay
+      // Only stream if we have more than the buffer size (maintains 11-char delay)
+      if (!shouldStopDisplaying && currentAnswer.length > LOOKAHEAD_SIZE) {
+        const visibleContent = currentAnswer.substring(0, currentAnswer.length - LOOKAHEAD_SIZE);
+        const newDelta = visibleContent.substring(lastSentLength);
+
+        if (newDelta) {
+          // Unescape the delta to convert \n to actual newlines before displaying
+          await sendImageChatChunk(tabId, unescapeJsonString(newDelta));
+          lastSentLength = visibleContent.length;
+        }
+      }
+      // If less than 11 chars accumulated, keep buffering (don't send yet)
     }
 
     console.log('[ImageChatHandlers] ✓ Image chat response streamed successfully');
 
-    // Send end signal
-    await sendImageChatEnd(tabId, fullResponse, finalSources);
+    // Parse final JSON to extract sources
+    try {
+      const parsed = JSON.parse(fullResponseJSON);
+      // Use parsed answer if we somehow missed it during streaming
+      if (!answer) {
+        answer = parsed.answer || '';
+      }
+      extractedSources = parsed.sources || [];
+      console.log('[ImageChatHandlers] Parsed sources:', extractedSources);
+    } catch (error) {
+      console.error('[ImageChatHandlers] Failed to parse final JSON:', error);
+      // Use streamed answer, empty sources
+      extractedSources = [];
+    }
+
+    // Send end signal with final answer and sources
+    await sendImageChatEnd(tabId, answer.trim(), extractedSources);
 
     // Post-stream processing: save history and check for summarization
     try {
@@ -1155,7 +1301,7 @@ User question: ${message}`;
       const newChatHistory = [
         ...imageChatHistory,
         { role: 'user' as const, content: message, timestamp: Date.now() },
-        { role: 'assistant' as const, content: fullResponse, timestamp: Date.now(), sources: finalSources }
+        { role: 'assistant' as const, content: answer.trim(), timestamp: Date.now(), sources: extractedSources }
       ];
 
       // Save to IndexedDB

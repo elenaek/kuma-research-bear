@@ -176,8 +176,8 @@ export interface AISessionOptions {
 }
 
 export interface AILanguageModelSession {
-  prompt: (input: string, options?: { responseConstraint?: JSONSchema }) => Promise<string>;
-  promptStreaming: (input: string) => ReadableStream;
+  prompt: (input: string, options?: { responseConstraint?: JSONSchema; signal?: AbortSignal }) => Promise<string>;
+  promptStreaming: (input: string, options?: { responseConstraint?: JSONSchema }) => ReadableStream;
   append: (messages: AIMessage[]) => Promise<void>; // For multimodal inputs
   destroy: () => void;
   clone: () => Promise<AILanguageModelSession>; // Clone session to reset token count
