@@ -106,6 +106,7 @@ export const ChatBox = ({
   const [tabToClose, setTabToClose] = useState<string | null>(null);
   const [dragTimer, setDragTimer] = useState<number | null>(null);
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
+  const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set()); // Track which message indices have sources expanded
 
   const chatboxRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -129,6 +130,19 @@ export const ChatBox = ({
   // Helper to scroll to bottom
   const scrollToBottom = (behavior: 'smooth' | 'instant' = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
+  };
+
+  // Toggle source expansion for a specific message
+  const toggleSourceExpansion = (messageIndex: number) => {
+    setExpandedSources(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageIndex)) {
+        newSet.delete(messageIndex);
+      } else {
+        newSet.add(messageIndex);
+      }
+      return newSet;
+    });
   };
 
   // Auto-scroll to bottom when new messages arrive (only if already near bottom)
@@ -755,7 +769,33 @@ export const ChatBox = ({
             <div class="chatbox-message-content"><MarkdownRenderer content={msg.content} /></div>
             {msg.sources && msg.sources.length > 0 && (
               <div class="chatbox-message-sources">
-                <span class="text-xs opacity-75">{msg.sources && msg.sources.length > 0 ? "Sources: " + msg.sources.join(', ') : ''}</span>
+                <button
+                  class="chatbox-sources-header"
+                  onClick={() => toggleSourceExpansion(idx)}
+                  aria-expanded={expandedSources.has(idx)}
+                >
+                  <span class="chatbox-sources-label">
+                    Sources ({msg.sources.length})
+                  </span>
+                  <svg
+                    class={`chatbox-sources-chevron ${expandedSources.has(idx) ? 'expanded' : ''}`}
+                    width="12"
+                    height="12"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                  >
+                    <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                {expandedSources.has(idx) && (
+                  <ul class="chatbox-sources-list">
+                    {msg.sources.map((source, sourceIdx) => (
+                      <li key={sourceIdx} class="chatbox-sources-item">
+                        {source}
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
             {/* Regenerate button for first message in image tabs */}
