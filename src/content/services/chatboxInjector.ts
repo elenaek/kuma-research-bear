@@ -55,6 +55,7 @@ class ChatboxInjector {
   private isRegeneratingExplanation = false;
   private isGeneratingEmbeddings = false; // Track if embeddings are being generated
   private hasEmbeddings = false; // Track if embeddings have been generated
+  private embeddingProgress = ''; // Track embedding progress message
 
   /**
    * Wait for page to be fully loaded
@@ -1032,6 +1033,9 @@ class ChatboxInjector {
     if (state.hasEmbeddings !== undefined) {
       this.hasEmbeddings = state.hasEmbeddings;
     }
+    if (state.embeddingProgress !== undefined) {
+      this.embeddingProgress = state.embeddingProgress;
+    }
 
     // Re-render to update UI with new state
     this.render();
@@ -1786,6 +1790,7 @@ class ChatboxInjector {
           hasChunked: hasChunked,
           isGeneratingEmbeddings: this.isGeneratingEmbeddings,
           hasEmbeddings: this.hasEmbeddings,
+          embeddingProgress: this.embeddingProgress,
 
           // Transparency
           transparencyEnabled: this.settings.transparencyEnabled,

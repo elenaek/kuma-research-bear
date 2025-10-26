@@ -21,7 +21,7 @@ const inFlightExtractions = new Set<string>();
 /**
  * Generate embeddings for a paper's chunks
  */
-async function generateEmbeddingsForPaper(paperId: string): Promise<number | null> {
+async function generateEmbeddingsForPaper(paperId: string, paperUrl?: string): Promise<number | null> {
   try {
     // Check if embedding model is available
     const capabilities = await embeddingService.checkAvailability();
@@ -43,6 +43,28 @@ async function generateEmbeddingsForPaper(paperId: string): Promise<number | nul
     for (let i = 0; i < chunks.length; i++) {
       const embedding = await embeddingService.generateEmbedding(chunks[i].content, false);
       embeddings.push(embedding);
+
+      // Send progress update every 10 embeddings or at 25%, 50%, 75%, 100%
+      const current = i + 1;
+      const shouldUpdate = current % 10 === 0 ||
+                          current === Math.floor(chunks.length * 0.25) ||
+                          current === Math.floor(chunks.length * 0.50) ||
+                          current === Math.floor(chunks.length * 0.75) ||
+                          current === chunks.length;
+
+      if (shouldUpdate) {
+        chrome.runtime.sendMessage({
+          type: 'EMBEDDING_PROGRESS',
+          payload: {
+            paperId,
+            paperUrl,
+            current,
+            total: chunks.length,
+          }
+        }).catch(() => {
+          // Background might not be listening, that's ok
+        });
+      }
 
       // Small delay to allow WASM memory cleanup between chunks
       if (i < chunks.length - 1) {
@@ -217,12 +239,12 @@ async function extractPaperFromHTML(
  */
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === MessageType.GENERATE_EMBEDDINGS) {
-    const { paperId } = message.payload;
+    const { paperId, paperUrl } = message.payload;
 
     // Generate embeddings asynchronously
     (async () => {
       try {
-        const embeddingCount = await generateEmbeddingsForPaper(paperId);
+        const embeddingCount = await generateEmbeddingsForPaper(paperId, paperUrl);
         sendResponse({ success: true, count: embeddingCount });
       } catch (error) {
         console.error('[Offscreen] Error generating embeddings:', error);

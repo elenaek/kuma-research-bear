@@ -77,7 +77,7 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
         hasChunked: true,  // Mark chunking as complete
         chatReady: true,  // Chat is now available (may use keyword search until embeddings ready)
         isGeneratingEmbeddings: true,
-        embeddingProgress: '🐻 Kuma is learning the semantic meaning of the paper... (Generating embeddings)',
+        embeddingProgress: 'Kuma is learning the semantic meaning of the paper... (Generating embeddings)',
       });
 
       // Broadcast state change to all relevant tabs

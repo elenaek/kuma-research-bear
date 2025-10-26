@@ -40,6 +40,7 @@ interface ChatBoxProps {
   hasChunked: boolean;
   isGeneratingEmbeddings?: boolean; // Track if embeddings are being generated
   hasEmbeddings?: boolean; // Track if embeddings have been generated
+  embeddingProgress?: string; // Progress message for embedding generation
 
   // Transparency
   transparencyEnabled: boolean;
@@ -87,6 +88,7 @@ export const ChatBox = ({
   hasChunked,
   isGeneratingEmbeddings,
   hasEmbeddings,
+  embeddingProgress,
 
   // Transparency
   transparencyEnabled,
@@ -752,20 +754,15 @@ export const ChatBox = ({
         {/* Embedding generation indicator */}
         {isGeneratingEmbeddings && !hasEmbeddings && activeTab?.type === 'paper' && (
           <div class="chatbox-embedding-indicator">
-            <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10" opacity="0.2"/>
-              <path d="M12 2a10 10 0 0 1 10 10" opacity="1">
-                <animateTransform
-                  attributeName="transform"
-                  type="rotate"
-                  from="0 12 12"
-                  to="360 12 12"
-                  dur="1s"
-                  repeatCount="indefinite"
-                />
-              </path>
-            </svg>
-            <span>🐻 Kuma is still digesting the information from this paper - answers may be limited until semantic search is ready</span>
+            <LottiePlayer
+              path={chrome.runtime.getURL('lotties/kuma-thinking.lottie')}
+              size={20}
+              autoStartLoop={true}
+              loopPurpose={LoopPurpose.QASection}
+            />
+            <span>
+              {embeddingProgress || 'Kuma is still digesting the information from this paper - answers may be limited until semantic search is ready'}
+            </span>
           </div>
         )}
 

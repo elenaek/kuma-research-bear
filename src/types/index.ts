@@ -32,6 +32,7 @@ export enum MessageType {
   GENERATE_GLOSSARY = 'GENERATE_GLOSSARY',
   GLOSSARY_PROGRESS = 'GLOSSARY_PROGRESS',
   GENERATE_EMBEDDINGS = 'GENERATE_EMBEDDINGS',
+  EMBEDDING_PROGRESS = 'EMBEDDING_PROGRESS', // Progress updates during embedding generation
   EMBEDDINGS_COMPLETE = 'EMBEDDINGS_COMPLETE', // Broadcast when embeddings generation completes
   SEMANTIC_SEARCH = 'SEMANTIC_SEARCH',
   EXTRACT_PAPER_HTML = 'EXTRACT_PAPER_HTML', // Extract paper from HTML in offscreen

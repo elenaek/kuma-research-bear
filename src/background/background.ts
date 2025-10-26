@@ -252,6 +252,38 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         sendResponse(await stateHandlers.handleGetOperationStateByPaper(message.payload));
         break;
 
+      case MessageType.EMBEDDING_PROGRESS:
+        // Handle embedding progress updates from offscreen document
+        (async () => {
+          const { paperId, current, total } = message.payload;
+
+          // Find the tab(s) viewing this paper
+          const paperUrl = message.payload.paperUrl;
+          if (!paperUrl) {
+            // Try to get paperUrl from pending extractions or stored papers
+            const { getPaperById } = await import('../utils/dbService.ts');
+            const paper = await getPaperById(paperId);
+            if (paper) {
+              const tabIds = tabPaperTracker.getTabsForPaperUrl(paper.url);
+              for (const tabId of tabIds) {
+                const state = operationStateService.updateState(tabId, {
+                  embeddingProgress: `Kuma is learning the semantic meaning... (${current}/${total} embeddings)`,
+                });
+                await operationStateService.broadcastStateChange(state);
+              }
+            }
+          } else {
+            const tabIds = tabPaperTracker.getTabsForPaperUrl(paperUrl);
+            for (const tabId of tabIds) {
+              const state = operationStateService.updateState(tabId, {
+                embeddingProgress: `Kuma is learning the semantic meaning... (${current}/${total} embeddings)`,
+              });
+              await operationStateService.broadcastStateChange(state);
+            }
+          }
+        })();
+        break;
+
       // Orchestrated Workflows
       case MessageType.START_DETECT_AND_EXPLAIN:
         (async () => {
