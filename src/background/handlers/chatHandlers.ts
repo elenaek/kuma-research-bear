@@ -18,12 +18,18 @@ const CHAT_RESPONSE_SCHEMA: JSONSchema = {
   properties: {
     answer: {
       type: "string",
-      description: `Your conversational response to the user's question. 
-Be friendly and helpful like a supportive colleague. Explain complex concepts in simple, everyday language avoiding unnecessary jargon. 
-Keep responses concise but detailed enough to answer the user's question. Be encouraging and supportive. 
-Use proper math formatting: $expr$ for inline math (e.g., $E = mc^2$), $$expr$$ for display equations, with LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.). 
-Use markdown formatting to make your response easier to read (e.g., **bold**, *italic*, bullet points, numbered lists, etc.). Reference specific sections when used in producing answer. 
-Remember conversation context for coherent follow-ups.`
+      description: `Your conversational response to the user's question.
+Be friendly and helpful like a supportive colleague. Explain complex concepts in simple, everyday language avoiding unnecessary jargon.
+Keep responses concise but detailed enough to answer the user's question. Be encouraging and supportive.
+
+Math formatting with LaTeX:
+- Use $expr$ for inline math, $$expr$$ for display equations
+- CRITICAL: Since this is a JSON string, you MUST double all backslashes in LaTeX commands
+- Examples: \\\\alpha, \\\\theta, \\\\ell, \\\\sum, \\\\int, \\\\frac{a}{b}, \\\\boldsymbol{x}, \\\\text{word}
+- NEVER use \\textbackslash - always use \\\\ (double backslash) for all LaTeX commands
+
+Use markdown formatting to make your response easier to read (e.g., **bold**, *italic*, bullet points, numbered lists, etc.).
+Reference specific sections when used in producing answer. Remember conversation context for coherent follow-ups.`
     },
     sources: {
       type: "array",
@@ -38,15 +44,15 @@ Remember conversation context for coherent follow-ups.`
  * Unescape JSON string literals (convert \n to actual newlines, etc.)
  * When we extract answer from raw JSON string, it contains literal escape sequences
  * This function converts them to actual characters for proper display
+ *
+ * IMPORTANT: We do NOT unescape \t or \r to avoid breaking LaTeX commands like \tilde, \text, \rho, etc.
  */
 function unescapeJsonString(str: string): string {
   return str
     .replace(/\\\\/g, '\x00')  // Temporarily replace \\ with placeholder
-    .replace(/\\n/g, '\n')     // newlines
-    .replace(/\\r/g, '\r')     // carriage returns
-    .replace(/\\t/g, '\t')     // tabs
+    .replace(/\\n/g, '\n')     // newlines (safe - no LaTeX commands start with \n)
     .replace(/\\"/g, '"')      // quotes
-    .replace(/\x00/g, '\\');   // Restore single backslash
+    .replace(/\x00/g, '\\');   // Restore single backslash for LaTeX commands
 }
 
 /**
