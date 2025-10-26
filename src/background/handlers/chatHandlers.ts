@@ -441,6 +441,27 @@ Your role:
 - Answer questions about the research paper based on the provided context
 - If the context doesn't contain enough information, say so honestly
 
+Math formatting with LaTeX:
+- Use $expr$ for inline math, $$expr$$ for display equations
+- CRITICAL: In JSON strings, backslashes must be escaped by doubling them
+
+LaTeX Escaping Rules (CRITICAL - READ CAREFULLY):
+- Every LaTeX command needs TWO backslashes in your JSON output
+- Example: To render \\alpha, you must write: "The value is \\\\alpha"
+- Example: To render \\theta, you must write: "The formula uses \\\\theta"
+- Example: To render \\frac{a}{b}, you must write: "The fraction \\\\frac{a}{b}"
+
+IMPORTANT - Commands that look like escape sequences:
+- \\text{...} → Write as \\\\text{...} (NOT \\text which becomes tab + "ext")
+- \\theta → Write as \\\\theta (NOT \\theta which could break)
+- \\nabla → Write as \\\\nabla (NOT \\nabla which becomes newline + "abla")
+- \\nu → Write as \\\\nu (NOT \\nu which becomes newline + "u")
+- \\rho → Write as \\\\rho (NOT \\rho which becomes carriage return + "ho")
+- \\times, \\tan, \\tanh → Write as \\\\times, \\\\tan, \\\\tanh
+- \\ne, \\neq, \\not → Write as \\\\ne, \\\\neq, \\\\not
+
+More examples: \\\\alpha, \\\\beta, \\\\gamma, \\\\ell, \\\\sum, \\\\int, \\\\boldsymbol{x}, \\\\frac{a}{b}
+
 Response Format:
 You will respond with a JSON object containing:
 - "answer": Your conversational response (see schema for formatting guidelines)
@@ -1146,6 +1167,27 @@ async function processAndStreamImageChatResponse(
 Your role:
 - Answer questions about the image and how it relates to the paper
 - If the context doesn't contain enough information, say so honestly
+
+Math formatting with LaTeX:
+- Use $expr$ for inline math, $$expr$$ for display equations
+- CRITICAL: In JSON strings, backslashes must be escaped by doubling them
+
+LaTeX Escaping Rules (CRITICAL - READ CAREFULLY):
+- Every LaTeX command needs TWO backslashes in your JSON output
+- Example: To render \\alpha, you must write: "The value is \\\\alpha"
+- Example: To render \\theta, you must write: "The formula uses \\\\theta"
+- Example: To render \\frac{a}{b}, you must write: "The fraction \\\\frac{a}{b}"
+
+IMPORTANT - Commands that look like escape sequences:
+- \\text{...} → Write as \\\\text{...} (NOT \\text which becomes tab + "ext")
+- \\theta → Write as \\\\theta (NOT \\theta which could break)
+- \\nabla → Write as \\\\nabla (NOT \\nabla which becomes newline + "abla")
+- \\nu → Write as \\\\nu (NOT \\nu which becomes newline + "u")
+- \\rho → Write as \\\\rho (NOT \\rho which becomes carriage return + "ho")
+- \\times, \\tan, \\tanh → Write as \\\\times, \\\\tan, \\\\tanh
+- \\ne, \\neq, \\not → Write as \\\\ne, \\\\neq, \\\\not
+
+More examples: \\\\alpha, \\\\beta, \\\\gamma, \\\\ell, \\\\sum, \\\\int, \\\\boldsymbol{x}, \\\\frac{a}{b}
 
 Response Format:
 You will respond with a JSON object containing:

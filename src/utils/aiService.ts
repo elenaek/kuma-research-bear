@@ -240,6 +240,27 @@ class ChromeAIService {
         expectedInputs: [{ type: 'image' }],
         systemPrompt: `You are an expert research assistant helping readers understand scientific figures and images in research papers. 
 Provide clear, concise explanations of images in the context of the paper. 
+
+Math formatting with LaTeX:
+- Use $expr$ for inline math, $$expr$$ for display equations
+- CRITICAL: In JSON strings, backslashes must be escaped by doubling them
+
+LaTeX Escaping Rules (CRITICAL - READ CAREFULLY):
+- Every LaTeX command needs TWO backslashes in your JSON output
+- Example: To render \\alpha, you must write: "The value is \\\\alpha"
+- Example: To render \\theta, you must write: "The formula uses \\\\theta"
+- Example: To render \\frac{a}{b}, you must write: "The fraction \\\\frac{a}{b}"
+
+IMPORTANT - Commands that look like escape sequences:
+- \\text{...} → Write as \\\\text{...} (NOT \\text which becomes tab + "ext")
+- \\theta → Write as \\\\theta (NOT \\theta which could break)
+- \\nabla → Write as \\\\nabla (NOT \\nabla which becomes newline + "abla")
+- \\nu → Write as \\\\nu (NOT \\nu which becomes newline + "u")
+- \\rho → Write as \\\\rho (NOT \\rho which becomes carriage return + "ho")
+- \\times, \\tan, \\tanh → Write as \\\\times, \\\\tan, \\\\tanh
+- \\ne, \\neq, \\not → Write as \\\\ne, \\\\neq, \\\\not
+
+More examples: \\\\alpha, \\\\beta, \\\\gamma, \\\\ell, \\\\sum, \\\\int, \\\\boldsymbol{x}, \\\\frac{a}{b}
 Use markdown formatting to make your response easier to read (e.g., **bold**, *italic*, bullet points, numbered lists, etc.).`,
       });
 
@@ -273,6 +294,27 @@ FORMATTING INSTRUCTIONS:
   * Display math: $$equation$$ (e.g., $$\\frac{1}{2}mv^2$$)
 - Use code blocks for algorithms or code snippets
 - Use bullet points or numbered lists for clarity
+
+Math formatting with LaTeX:
+- Use $expr$ for inline math, $$expr$$ for display equations
+- CRITICAL: In JSON strings, backslashes must be escaped by doubling them
+
+LaTeX Escaping Rules (CRITICAL - READ CAREFULLY):
+- Every LaTeX command needs TWO backslashes in your JSON output
+- Example: To render \\alpha, you must write: "The value is \\\\alpha"
+- Example: To render \\theta, you must write: "The formula uses \\\\theta"
+- Example: To render \\frac{a}{b}, you must write: "The fraction \\\\frac{a}{b}"
+
+IMPORTANT - Commands that look like escape sequences:
+- \\text{...} → Write as \\\\text{...} (NOT \\text which becomes tab + "ext")
+- \\theta → Write as \\\\theta (NOT \\theta which could break)
+- \\nabla → Write as \\\\nabla (NOT \\nabla which becomes newline + "abla")
+- \\nu → Write as \\\\nu (NOT \\nu which becomes newline + "u")
+- \\rho → Write as \\\\rho (NOT \\rho which becomes carriage return + "ho")
+- \\times, \\tan, \\tanh → Write as \\\\times, \\\\tan, \\\\tanh
+- \\ne, \\neq, \\not → Write as \\\\ne, \\\\neq, \\\\not
+
+More examples: \\\\alpha, \\\\beta, \\\\gamma, \\\\ell, \\\\sum, \\\\int, \\\\boldsymbol{x}, \\\\frac{a}{b}
 
 Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Spanish' : outputLanguage === 'ja' ? 'Japanese' : 'English'}.`,
             },

@@ -125,19 +125,14 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
   const safeContent = typeof content === 'string' ? content : String(content || '');
 
   useEffect(() => {
+    let isStale = false; // Flag to prevent updating with stale renders
+
     // Process content asynchronously
     const processContent = async () => {
-      // Step 1: Extract LaTeX and replace with placeholders (protects from markdown escaping)
-      const { content: contentWithPlaceholders, expressions } = extractLatexWithPlaceholders(safeContent);
-
-      // Step 2: Parse markdown to HTML (placeholders are safe from escaping)
-      const rawHTML = marked.parse(contentWithPlaceholders) as string;
-
-      // Step 3: Render LaTeX expressions and replace placeholders with KaTeX HTML
-      const htmlWithLatex = await renderLatexExpressions(rawHTML, expressions);
-
-      // Step 4: Sanitize HTML to prevent XSS attacks
-      const sanitizedHTML = DOMPurify.sanitize(htmlWithLatex, {
+      // OPTIMIZATION: First pass - show markdown WITHOUT LaTeX processing
+      // This provides immediate feedback during streaming
+      const quickHTML = marked.parse(safeContent) as string;
+      const quickSanitized = DOMPurify.sanitize(quickHTML, {
         ALLOWED_TAGS: [
           // Standard HTML tags
           'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -147,30 +142,68 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
           'a', 'blockquote',
           'table', 'thead', 'tbody', 'tr', 'th', 'td',
           'del', 'ins', 'sub', 'sup',
-          // KaTeX container tags
           'span', 'div',
-          // MathML tags (complete set for KaTeX)
-          'math', 'annotation', 'semantics',
-          'mrow', 'mi', 'mn', 'mo', 'mtext', 'mspace',
-          'msup', 'msub', 'msubsup',  // ← Added msubsup!
-          'mfrac', 'msqrt', 'mroot',
-          'mover', 'munder', 'munderover',
-          'mtable', 'mtr', 'mtd', 'mlabeledtr',
-          'mmultiscripts', 'mprescripts', 'none',
-          'menclose', 'mpadded', 'mphantom', 'mglyph',
         ],
-        ALLOWED_ATTR: [
-          'href', 'target', 'rel', 'class', 'style', 'aria-hidden', 'xmlns',
-          // MathML attributes used by KaTeX
-          'mathvariant', 'display', 'stretchy', 'fence', 'separator',
-          'lspace', 'rspace', 'notation', 'encoding',
-        ],
+        ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style'],
       });
 
-      setProcessedHTML(sanitizedHTML);
+      // Show interim content immediately (LaTeX appears in original syntax like $x^2$)
+      if (!isStale) {
+        setProcessedHTML(quickSanitized);
+      }
+
+      // Step 1: Extract LaTeX and replace with placeholders (protects from markdown escaping)
+      const { content: contentWithPlaceholders, expressions } = extractLatexWithPlaceholders(safeContent);
+
+      // Step 2: Parse markdown to HTML (placeholders are safe from escaping)
+      const rawHTML = marked.parse(contentWithPlaceholders) as string;
+
+      // Step 3: Render LaTeX expressions and replace placeholders with KaTeX HTML (async)
+      const htmlWithLatex = await renderLatexExpressions(rawHTML, expressions);
+
+      // Step 4: Sanitize HTML with full tag set (including MathML) and update
+      // Only update if this render is still current
+      if (!isStale) {
+        const sanitizedHTML = DOMPurify.sanitize(htmlWithLatex, {
+          ALLOWED_TAGS: [
+            // Standard HTML tags
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'p', 'br', 'hr',
+            'strong', 'em', 'code', 'pre',
+            'ul', 'ol', 'li',
+            'a', 'blockquote',
+            'table', 'thead', 'tbody', 'tr', 'th', 'td',
+            'del', 'ins', 'sub', 'sup',
+            // KaTeX container tags
+            'span', 'div',
+            // MathML tags (complete set for KaTeX)
+            'math', 'annotation', 'semantics',
+            'mrow', 'mi', 'mn', 'mo', 'mtext', 'mspace',
+            'msup', 'msub', 'msubsup',  // ← Added msubsup!
+            'mfrac', 'msqrt', 'mroot',
+            'mover', 'munder', 'munderover',
+            'mtable', 'mtr', 'mtd', 'mlabeledtr',
+            'mmultiscripts', 'mprescripts', 'none',
+            'menclose', 'mpadded', 'mphantom', 'mglyph',
+          ],
+          ALLOWED_ATTR: [
+            'href', 'target', 'rel', 'class', 'style', 'aria-hidden', 'xmlns',
+            // MathML attributes used by KaTeX
+            'mathvariant', 'display', 'stretchy', 'fence', 'separator',
+            'lspace', 'rspace', 'notation', 'encoding',
+          ],
+        });
+
+        setProcessedHTML(sanitizedHTML);
+      }
     };
 
     processContent();
+
+    // Cleanup: mark this render as stale when content changes
+    return () => {
+      isStale = true;
+    };
   }, [safeContent]);
 
   return (
