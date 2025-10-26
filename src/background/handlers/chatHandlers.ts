@@ -18,12 +18,17 @@ const CHAT_RESPONSE_SCHEMA: JSONSchema = {
   properties: {
     answer: {
       type: "string",
-      description: "Your conversational response to the user's question. Be friendly and helpful like a supportive colleague. Use markdown formatting to make your response easier to read. Explain complex concepts in simple, everyday language avoiding unnecessary jargon. Keep responses concise (2-4 sentences for simple questions, longer for complex ones). Be encouraging and supportive. Use proper math formatting: $expr$ for inline math (e.g., $E = mc^2$), $$expr$$ for display equations, with LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.). Reference specific sections when relevant. Remember conversation context for coherent follow-ups."
+      description: `Your conversational response to the user's question. 
+Be friendly and helpful like a supportive colleague. Explain complex concepts in simple, everyday language avoiding unnecessary jargon. 
+Keep responses concise but detailed enough to answer the user's question. Be encouraging and supportive. 
+Use proper math formatting: $expr$ for inline math (e.g., $E = mc^2$), $$expr$$ for display equations, with LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.). 
+Use markdown formatting to make your response easier to read (e.g., **bold**, *italic*, bullet points, numbered lists, etc.). Reference specific sections when used in producing answer. 
+Remember conversation context for coherent follow-ups.`
     },
     sources: {
       type: "array",
       items: { type: "string" },
-      description: "Array of hierarchical citations actually used (e.g., 'Methods > Data Collection > Para 3')"
+      description: "Array of hierarchical citations actually used (e.g., 'Section: Methods > Data Collection > P 3')"
     }
   },
   required: ["answer", "sources"]
@@ -317,9 +322,9 @@ async function processAndStreamResponse(
           : chunk.section;
 
         // Add paragraph/sentence info if available (natural boundaries)
-        let citation = `[${hierarchy}`;
+        let citation = `[Section: ${hierarchy}`;
         if (chunk.paragraphIndex !== undefined) {
-          citation += ` > Para ${chunk.paragraphIndex + 1}`;
+          citation += ` > P ${chunk.paragraphIndex + 1}`;
           if (chunk.sentenceGroupIndex !== undefined) {
             citation += ` > Sentences`;
           }
@@ -346,7 +351,7 @@ Your role:
 Response Format:
 You will respond with a JSON object containing:
 - "answer": Your conversational response (see schema for formatting guidelines)
-- "sources": An array of citations you actually used (use EXACT hierarchical format from context, e.g., "Methods > Data Collection > Para 3")
+- "sources": An array of citations you actually used (use EXACT hierarchical format from context, e.g., "Section: Methods > Data Collection > P 3")
 
 Only include sources you actually referenced. If you didn't use specific sources, provide an empty array.
 
@@ -556,9 +561,10 @@ User question: ${message}`;
         answer = unescapeJsonString(rawAnswer); // Unescape for proper display
 
         // Send any remaining content that wasn't sent yet
-        const finalDelta = rawAnswer.substring(lastSentLength);
+        // Extract from unescaped content since lastSentLength tracks unescaped position
+        const finalDelta = answer.substring(lastSentLength);
         if (finalDelta) {
-          await sendChatChunk(tabId, unescapeJsonString(finalDelta));
+          await sendChatChunk(tabId, finalDelta);
         }
 
         shouldStopDisplaying = true; // Stop sending to user but continue loop to get full JSON
@@ -567,13 +573,22 @@ User question: ${message}`;
       // Pattern not found yet - continue streaming with lookahead buffer delay
       // Only stream if we have more than the buffer size (maintains 11-char delay)
       if (!shouldStopDisplaying && currentAnswer.length > LOOKAHEAD_SIZE) {
-        const visibleContent = currentAnswer.substring(0, currentAnswer.length - LOOKAHEAD_SIZE);
-        const newDelta = visibleContent.substring(lastSentLength);
+        let visibleContent = currentAnswer.substring(0, currentAnswer.length - LOOKAHEAD_SIZE);
+
+        // Hold back trailing backslash to prevent incomplete escape sequences
+        // If visibleContent ends with \, don't include it (wait for next char to see if it's \n, \t, etc.)
+        if (visibleContent.endsWith('\\')) {
+          visibleContent = visibleContent.slice(0, -1);
+        }
+
+        // Unescape the FULL visible content first, then extract delta
+        // This prevents escape sequences from being split across deltas
+        const unescapedVisible = unescapeJsonString(visibleContent);
+        const newDelta = unescapedVisible.substring(lastSentLength);
 
         if (newDelta) {
-          // Unescape the delta to convert \n to actual newlines before displaying
-          await sendChatChunk(tabId, unescapeJsonString(newDelta));
-          lastSentLength = visibleContent.length;
+          await sendChatChunk(tabId, newDelta);
+          lastSentLength = unescapedVisible.length; // Track position in unescaped content
         }
       }
       // If less than 11 chars accumulated, keep buffering (don't send yet)
@@ -985,9 +1000,9 @@ async function processAndStreamImageChatResponse(
           : chunk.section;
 
         // Add paragraph/sentence info if available (natural boundaries)
-        let citation = `[${hierarchy}`;
+        let citation = `[Section: ${hierarchy}`;
         if (chunk.paragraphIndex !== undefined) {
-          citation += ` > Para ${chunk.paragraphIndex + 1}`;
+          citation += ` > P ${chunk.paragraphIndex + 1}`;
           if (chunk.sentenceGroupIndex !== undefined) {
             citation += ` > Sentences`;
           }
@@ -1031,7 +1046,7 @@ Your role:
 Response Format:
 You will respond with a JSON object containing:
 - "answer": Your conversational response (see schema for formatting guidelines)
-- "sources": An array of citations you actually used (use EXACT hierarchical format from context, e.g., "Methods > Data Collection > Para 3")
+- "sources": An array of citations you actually used (use EXACT hierarchical format from context, e.g., "Section: Methods > Data Collection > P 3")
 
 Only include sources you actually referenced. If you didn't use specific sources, provide an empty array.
 
@@ -1252,9 +1267,10 @@ User question: ${message}`;
         answer = unescapeJsonString(rawAnswer); // Unescape for proper display
 
         // Send any remaining content that wasn't sent yet
-        const finalDelta = rawAnswer.substring(lastSentLength);
+        // Extract from unescaped content since lastSentLength tracks unescaped position
+        const finalDelta = answer.substring(lastSentLength);
         if (finalDelta) {
-          await sendImageChatChunk(tabId, unescapeJsonString(finalDelta));
+          await sendImageChatChunk(tabId, finalDelta);
         }
 
         shouldStopDisplaying = true; // Stop sending to user but continue loop to get full JSON
@@ -1263,13 +1279,22 @@ User question: ${message}`;
       // Pattern not found yet - continue streaming with lookahead buffer delay
       // Only stream if we have more than the buffer size (maintains 11-char delay)
       if (!shouldStopDisplaying && currentAnswer.length > LOOKAHEAD_SIZE) {
-        const visibleContent = currentAnswer.substring(0, currentAnswer.length - LOOKAHEAD_SIZE);
-        const newDelta = visibleContent.substring(lastSentLength);
+        let visibleContent = currentAnswer.substring(0, currentAnswer.length - LOOKAHEAD_SIZE);
+
+        // Hold back trailing backslash to prevent incomplete escape sequences
+        // If visibleContent ends with \, don't include it (wait for next char to see if it's \n, \t, etc.)
+        if (visibleContent.endsWith('\\')) {
+          visibleContent = visibleContent.slice(0, -1);
+        }
+
+        // Unescape the FULL visible content first, then extract delta
+        // This prevents escape sequences from being split across deltas
+        const unescapedVisible = unescapeJsonString(visibleContent);
+        const newDelta = unescapedVisible.substring(lastSentLength);
 
         if (newDelta) {
-          // Unescape the delta to convert \n to actual newlines before displaying
-          await sendImageChatChunk(tabId, unescapeJsonString(newDelta));
-          lastSentLength = visibleContent.length;
+          await sendImageChatChunk(tabId, newDelta);
+          lastSentLength = unescapedVisible.length; // Track position in unescaped content
         }
       }
       // If less than 11 chars accumulated, keep buffering (don't send yet)

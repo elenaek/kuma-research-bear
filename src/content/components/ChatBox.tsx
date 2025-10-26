@@ -861,10 +861,10 @@ export const ChatBox = ({
             onInput={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={disabled ? 'Load a paper to start chatting...' : 'Ask about this paper...'}
-            disabled={disabled || isStreaming}
+            disabled={disabled}
             rows={1}
           />
-          {inputValue.trim() && !disabled && !isStreaming && (
+          {inputValue.trim() && !disabled && (
             <button
               class="chatbox-input-clear-btn"
               onClick={handleClearInput}

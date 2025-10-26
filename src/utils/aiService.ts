@@ -238,7 +238,9 @@ class ChromeAIService {
         temperature: 0.7,
         topK: 40,
         expectedInputs: [{ type: 'image' }],
-        systemPrompt: `You are an expert research assistant helping readers understand scientific figures and images in research papers. Provide clear, concise explanations of images in the context of the paper.`,
+        systemPrompt: `You are an expert research assistant helping readers understand scientific figures and images in research papers. 
+Provide clear, concise explanations of images in the context of the paper. 
+Use markdown formatting to make your response easier to read (e.g., **bold**, *italic*, bullet points, numbered lists, etc.).`,
       });
 
       console.log('[ImageExplain] Session created, sending image...');
@@ -265,7 +267,7 @@ Please analyze this image and provide:
 Keep the explanation concise (2-3 paragraphs) and accessible to readers who may not be experts in the field.
 
 FORMATTING INSTRUCTIONS:
-- Use markdown formatting (headers, bold, italic, lists, etc.) to structure your explanation
+- Use markdown formatting (e.g., **bold**, *italic*, bullet points, numbered lists, etc.) to structure your explanation
 - For mathematical equations, formulas, or variables, use LaTeX notation:
   * Inline math: $equation$ (e.g., $E = mc^2$)
   * Display math: $$equation$$ (e.g., $$\\frac{1}{2}mv^2$$)
