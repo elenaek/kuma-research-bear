@@ -12,6 +12,8 @@ import { usePaperData } from './hooks/usePaperData.ts';
 import { QASection } from './components/QASection.tsx';
 import { AnalysisSection } from './components/AnalysisSection.tsx';
 import { GlossarySection } from './components/GlossarySection.tsx';
+import { ExplanationSection } from './components/ExplanationSection.tsx';
+import { SummarySection } from './components/SummarySection.tsx';
 import { OriginalPaperTab } from './components/OriginalPaperTab.tsx';
 import { OperationBanner } from './components/ui/OperationBanner.tsx';
 import { TabButton } from './components/ui/TabButton.tsx';
@@ -33,8 +35,8 @@ type TabType = 'summary' | 'explanation' | 'qa' | 'analysis' | 'glossary' | 'ori
 
 interface ExplanationData {
   paper: ResearchPaper;
-  explanation: ExplanationResult;
-  summary: SummaryResult;
+  explanation: ExplanationResult | null;
+  summary: SummaryResult | null;
 }
 
 export function Sidepanel() {
@@ -48,6 +50,11 @@ export function Sidepanel() {
   const [glossary, setGlossary] = useState<GlossaryResult | null>(null);
   const [glossaryProgress, setGlossaryProgress] = useState<{
     stage: 'extracting' | 'filtering-terms' | 'generating-definitions';
+    current?: number;
+    total?: number;
+  } | null>(null);
+  const [analysisProgress, setAnalysisProgress] = useState<{
+    stage: 'evaluating' | 'analyzing';
     current?: number;
     total?: number;
   } | null>(null);
@@ -89,6 +96,8 @@ export function Sidepanel() {
       // Clean up generation state for deleted paper
       const deletedPaperUrl = deletedPaper.url;
       if (deletedPaperUrl) {
+        operationState.clearExplainingPaper(deletedPaperUrl);
+        operationState.clearSummaryGeneratingPaper(deletedPaperUrl);
         operationState.clearAnalyzingPaper(deletedPaperUrl);
         operationState.clearGlossaryGeneratingPaper(deletedPaperUrl);
       }
@@ -129,11 +138,36 @@ export function Sidepanel() {
       // Update paper-specific generation states
       const paperUrl = state.currentPaper?.url;
       if (paperUrl) {
+        // Update explaining papers Set
+        if (state.isExplaining) {
+          operationState.addExplainingPaper(paperUrl);
+        } else {
+          operationState.removeExplainingPaper(paperUrl);
+        }
+
+        // Update summary generating papers Set
+        if (state.isGeneratingSummary) {
+          operationState.addSummaryGeneratingPaper(paperUrl);
+        } else {
+          operationState.removeSummaryGeneratingPaper(paperUrl);
+        }
+
         // Update analyzing papers Set
         if (state.isAnalyzing) {
           operationState.addAnalyzingPaper(paperUrl);
+
+          // Restore analysis progress if available
+          if (state.analysisProgressStage) {
+            setAnalysisProgress({
+              stage: state.analysisProgressStage as 'evaluating' | 'analyzing',
+              current: state.currentAnalysisStep,
+              total: state.totalAnalysisSteps,
+            });
+          }
         } else {
           operationState.removeAnalyzingPaper(paperUrl);
+          // Clear analysis progress when generation stops
+          setAnalysisProgress(null);
         }
 
         // Update glossary generating papers Set
@@ -176,13 +210,11 @@ export function Sidepanel() {
               setStoredPaper(freshPaper);
 
               // Update data (explanation/summary)
-              if (freshPaper.explanation && freshPaper.summary) {
-                setData({
-                  paper: freshPaper,
-                  explanation: freshPaper.explanation,
-                  summary: freshPaper.summary,
-                });
-              }
+              setData({
+                paper: freshPaper,
+                explanation: freshPaper.explanation || null,
+                summary: freshPaper.summary || null,
+              });
 
               // Update analysis
               if (freshPaper.analysis) {
@@ -235,15 +267,25 @@ export function Sidepanel() {
       }
     };
 
+    // Create analysis progress listener for ANALYSIS_PROGRESS updates
+    const analysisProgressListener = (message: any) => {
+      if (message.type === MessageType.ANALYSIS_PROGRESS) {
+        console.log('[Sidepanel] Analysis progress update:', message.payload);
+        setAnalysisProgress(message.payload);
+      }
+    };
+
     // Register message listeners
     chrome.runtime.onMessage.addListener(messageListener);
     chrome.runtime.onMessage.addListener(navigationListener);
     chrome.runtime.onMessage.addListener(glossaryProgressListener);
+    chrome.runtime.onMessage.addListener(analysisProgressListener);
 
     return () => {
       chrome.runtime.onMessage.removeListener(messageListener);
       chrome.runtime.onMessage.removeListener(navigationListener);
       chrome.runtime.onMessage.removeListener(glossaryProgressListener);
+      chrome.runtime.onMessage.removeListener(analysisProgressListener);
     };
   }, []);
 
@@ -305,22 +347,14 @@ export function Sidepanel() {
     setStoredPaper(paper);
     setQaHistory(paper.qaHistory || []);
 
-    // Load explanation and summary
-    if (paper.explanation && paper.summary) {
-      setData({
-        paper: paper,
-        explanation: paper.explanation,
-        summary: paper.summary,
-      });
-      setViewState('content');
-    } else {
-      setData({
-        paper: paper,
-        explanation: { originalText: '', explanation: '', timestamp: 0 },
-        summary: { summary: '', keyPoints: [], timestamp: 0 }
-      });
-      setViewState('stored-only');
-    }
+    // Always show content state (all tabs) for stored papers
+    // Individual section components handle showing "Generate" buttons when content doesn't exist
+    setData({
+      paper: paper,
+      explanation: paper.explanation || null,
+      summary: paper.summary || null
+    });
+    setViewState('content');
 
     // Load analysis
     if (paper.analysis) {
@@ -405,8 +439,24 @@ export function Sidepanel() {
               setIsExplainingInBackground(state.isExplaining);
 
               // Update paper-specific generation states
+              if (state.isExplaining) {
+                operationState.addExplainingPaper(paperToLoad.url);
+              }
+              if (state.isGeneratingSummary) {
+                operationState.addSummaryGeneratingPaper(paperToLoad.url);
+              }
               if (state.isAnalyzing) {
                 operationState.addAnalyzingPaper(paperToLoad.url);
+
+                // Restore analysis progress if available
+                if (state.analysisProgressStage) {
+                  setAnalysisProgress({
+                    stage: state.analysisProgressStage as 'evaluating' | 'analyzing',
+                    current: state.currentAnalysisStep,
+                    total: state.totalAnalysisSteps,
+                  });
+                  console.log('[Sidepanel] Restored analysis progress:', state.analysisProgressStage, state.currentAnalysisStep, '/', state.totalAnalysisSteps);
+                }
               }
               if (state.isGeneratingGlossary) {
                 operationState.addGlossaryGeneratingPaper(paperToLoad.url);
@@ -554,6 +604,108 @@ export function Sidepanel() {
       // Remove from glossary generating papers Set and reset progress
       operationState.removeGlossaryGeneratingPaper(paperUrl);
       setGlossaryProgress(null);
+    }
+  }
+
+  async function triggerExplanation(paperUrl: string) {
+    // Guard: Don't retrigger if already explaining for THIS paper
+    if (operationState.isExplaining(paperUrl)) {
+      console.log('[Sidepanel] Explanation generation already in progress for this paper, skipping');
+      setOperationQueueMessage('Explanation generation already in progress for this paper');
+      setHasQueuedOperations(true);
+      setTimeout(() => {
+        setHasQueuedOperations(false);
+        setOperationQueueMessage('');
+      }, 3000);
+      return;
+    }
+
+    try {
+      // Add to explaining papers Set
+      operationState.addExplainingPaper(paperUrl);
+      console.log('Starting explanation generation for:', paperUrl);
+
+      // Get active tab ID to associate operation state
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tab?.id;
+
+      const response = await ChromeService.explainPaperManual(paperUrl, tabId);
+
+      if (response.success) {
+        console.log('✓ Explanation generated successfully');
+        // Explanation will be loaded automatically via storage change listener
+      } else {
+        console.error('Explanation generation failed:', response.error);
+        // Show error to user
+        setOperationQueueMessage(`Explanation generation failed: ${response.error}`);
+        setHasQueuedOperations(true);
+        setTimeout(() => {
+          setHasQueuedOperations(false);
+          setOperationQueueMessage('');
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('Error triggering explanation generation:', error);
+      setOperationQueueMessage('Failed to generate explanation');
+      setHasQueuedOperations(true);
+      setTimeout(() => {
+        setHasQueuedOperations(false);
+        setOperationQueueMessage('');
+      }, 3000);
+    } finally {
+      // Remove from explaining papers Set
+      operationState.removeExplainingPaper(paperUrl);
+    }
+  }
+
+  async function triggerSummary(paperUrl: string) {
+    // Guard: Don't retrigger if already generating summary for THIS paper
+    if (operationState.isGeneratingSummary(paperUrl)) {
+      console.log('[Sidepanel] Summary generation already in progress for this paper, skipping');
+      setOperationQueueMessage('Summary generation already in progress for this paper');
+      setHasQueuedOperations(true);
+      setTimeout(() => {
+        setHasQueuedOperations(false);
+        setOperationQueueMessage('');
+      }, 3000);
+      return;
+    }
+
+    try {
+      // Add to summary generating papers Set
+      operationState.addSummaryGeneratingPaper(paperUrl);
+      console.log('Starting summary generation for:', paperUrl);
+
+      // Get active tab ID to associate operation state
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tab?.id;
+
+      const response = await ChromeService.generateSummaryManual(paperUrl, tabId);
+
+      if (response.success) {
+        console.log('✓ Summary generated successfully');
+        // Summary will be loaded automatically via storage change listener
+      } else {
+        console.error('Summary generation failed:', response.error);
+        // Show error to user
+        setOperationQueueMessage(`Summary generation failed: ${response.error}`);
+        setHasQueuedOperations(true);
+        setTimeout(() => {
+          setHasQueuedOperations(false);
+          setOperationQueueMessage('');
+        }, 5000);
+      }
+    } catch (error) {
+      console.error('Error triggering summary generation:', error);
+      setOperationQueueMessage('Failed to generate summary');
+      setHasQueuedOperations(true);
+      setTimeout(() => {
+        setHasQueuedOperations(false);
+        setOperationQueueMessage('');
+      }, 3000);
+    } finally {
+      // Remove from summary generating papers Set
+      operationState.removeSummaryGeneratingPaper(paperUrl);
     }
   }
 
@@ -756,26 +908,14 @@ Source: ${paper.url}
     setQaHistory(paperToUse.qaHistory || []);
 
     // Load explanation and summary from IndexedDB (single source of truth)
-    if (paperToUse.explanation && paperToUse.summary) {
-      console.log('[Sidepanel] Loading explanation from IndexedDB');
-      setData({
-        paper: paperToUse,
-        explanation: paperToUse.explanation,
-        summary: paperToUse.summary,
-      });
-      setActiveTab('summary');
-      setViewState('content');
-    } else {
-      // No explanation for this paper, show stored-only view
-      console.log('[Sidepanel] No explanation found for this paper');
-      setData({
-        paper: paperToUse,
-        explanation: { originalText: '', explanation: '', timestamp: 0 },
-        summary: { summary: '', keyPoints: [], timestamp: 0 }
-      });
-      setActiveTab('analysis');
-      setViewState('stored-only');
-    }
+    console.log('[Sidepanel] Loading paper data from IndexedDB');
+    setData({
+      paper: paperToUse,
+      explanation: paperToUse.explanation || null,
+      summary: paperToUse.summary || null,
+    });
+    setActiveTab('summary');
+    setViewState('content');
 
     // Load analysis from IndexedDB (single source of truth)
     if (paperToUse.analysis) {
@@ -963,21 +1103,10 @@ Source: ${paper.url}
           {/* Paper Info Card */}
           <PaperInfoCard paper={data?.paper || null} storedPaper={storedPaper} />
 
-          {(viewState === 'stored-only') && (
-              <div class="card">
-                <LottiePlayer path="/lotties/kuma-thinking.lottie" size={120} className="mb-4 mx-auto" autoStartLoop={true} loopPurpose={LoopPurpose.SIDEPANEL} />
-                <div class="text-center">
-                  <p class="text-gray-900 text-base font-medium">Kuma is working on explaining this research paper</p>
-                  <p class="text-xs text-gray-500 mt-2 mb-2">Generating explanation and summary</p>
-                </div>
-              </div>
-          )}
-
           {/* Tabs */}
           {/* Dropdown for narrow screens */}
-          {viewState !== 'stored-only' && (
-            <>
-              <div class="mb-4 hide-on-wide text-center">
+          <>
+            <div class="mb-4 hide-on-wide text-center">
                 <TabDropdown
                   tabs={[
                     {
@@ -1040,12 +1169,16 @@ Source: ${paper.url}
                   <TabButton
                     active={activeTab === 'summary'}
                     onClick={() => setActiveTab('summary')}
+                    loading={storedPaper?.url ? operationState.isGeneratingSummary(storedPaper.url) : false}
+                    title={(storedPaper?.url && operationState.isGeneratingSummary(storedPaper.url)) ? 'Summary being generated...' : !data?.summary ? 'Summary will be generated when paper is stored' : ''}
                   >
                     Summary
                   </TabButton>
                   <TabButton
                     active={activeTab === 'explanation'}
                     onClick={() => setActiveTab('explanation')}
+                    loading={storedPaper?.url ? operationState.isExplaining(storedPaper.url) : false}
+                    title={(storedPaper?.url && operationState.isExplaining(storedPaper.url)) ? 'Explanation being generated...' : !data?.explanation ? 'Explanation will be generated when paper is stored' : ''}
                   >
                     Explanation
                   </TabButton>
@@ -1087,13 +1220,21 @@ Source: ${paper.url}
               <div class="space-y-4">
                 {activeTab === 'summary' && (
                   <div class="tab-content space-y-4">
-                    <SummaryTab summary={data?.summary || null} />
+                    <SummarySection
+                      summary={data?.summary || null}
+                      isGeneratingSummary={storedPaper?.url ? operationState.isGeneratingSummary(storedPaper.url) : false}
+                      onGenerateSummary={storedPaper?.url ? () => triggerSummary(storedPaper.url) : undefined}
+                    />
                   </div>
                 )}
 
                 {activeTab === 'explanation' && (
                   <div class="tab-content space-y-4">
-                    <ExplanationTab explanation={data?.explanation || null} />
+                    <ExplanationSection
+                      explanation={data?.explanation || null}
+                      isExplaining={storedPaper?.url ? operationState.isExplaining(storedPaper.url) : false}
+                      onGenerateExplanation={storedPaper?.url ? () => triggerExplanation(storedPaper.url) : undefined}
+                    />
                   </div>
                 )}
 
@@ -1102,6 +1243,7 @@ Source: ${paper.url}
                     <AnalysisSection
                       analysis={analysis}
                       isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
+                      analysisProgress={analysisProgress}
                       onGenerateAnalysis={storedPaper?.url ? () => triggerAnalysis(storedPaper.url) : undefined}
                     />
                   </div>
@@ -1163,7 +1305,6 @@ Source: ${paper.url}
                 </LoadingButton>
               </div>
             </>
-          )}
         </div>
       </div>
     </div>

@@ -2,12 +2,16 @@ import { CheckCircle, Clock, Loader, ArrowBigUpDash } from 'lucide-preact';
 
 interface CompletionBadgesProps {
   isExplaining: boolean;
+  isGeneratingSummary: boolean;
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
   hasExplanation: boolean;
   hasSummary: boolean;
   hasAnalysis: boolean;
   hasGlossary: boolean;
+  hasChunked: boolean;
+  onExplanationClick?: () => void;
+  onSummaryClick?: () => void;
   onAnalysisClick?: () => void;
   onGlossaryClick?: () => void;
 }
@@ -58,53 +62,87 @@ function FeatureBadge({ name, completed, active, onClick, readyIdle = false, too
  */
 export function CompletionBadges({
   isExplaining,
+  isGeneratingSummary,
   isAnalyzing,
   isGeneratingGlossary,
   hasExplanation,
   hasSummary,
   hasAnalysis,
   hasGlossary,
+  hasChunked,
+  onExplanationClick,
+  onSummaryClick,
   onAnalysisClick,
   onGlossaryClick,
 }: CompletionBadgesProps) {
-  // Only allow Analysis and Glossary to be triggered after Explanation and Summary are complete
-  const prerequisitesComplete = hasExplanation && hasSummary;
+  // All features can be triggered independently once paper is chunked
+  const canTrigger = hasChunked;
 
   // Tooltip messages
+  const explanationTooltip = hasExplanation
+    ? 'Explanation complete'
+    : isExplaining
+    ? 'Generating explanation...'
+    : canTrigger
+    ? 'Click to generate an explanation of the paper'
+    : 'Complete paper extraction/chunking first';
+
+  const summaryTooltip = hasSummary
+    ? 'Summary complete'
+    : isGeneratingSummary
+    ? 'Generating summary...'
+    : canTrigger
+    ? 'Click to generate a summary of the paper'
+    : 'Complete paper extraction/chunking first';
+
   const analysisTooltip = hasAnalysis
     ? 'Analysis complete'
     : isAnalyzing
     ? 'Analysis in progress...'
-    : prerequisitesComplete
+    : canTrigger
     ? 'Click to analyze methodology, confounders, and limitations'
-    : 'Complete Explanation and Summary first';
+    : 'Complete paper extraction/chunking first';
 
   const glossaryTooltip = hasGlossary
     ? 'Glossary complete'
     : isGeneratingGlossary
     ? 'Generating glossary...'
-    : prerequisitesComplete
+    : canTrigger
     ? 'Click to generate a glossary of key terms'
-    : 'Complete Explanation and Summary first';
+    : 'Complete paper extraction/chunking first';
 
   return (
     <div class="grid grid-cols-2 gap-2 mt-3">
-      <FeatureBadge name="Explanation" completed={hasExplanation} active={isExplaining} />
-      <FeatureBadge name="Summary" completed={hasSummary} active={isExplaining} />
+      <FeatureBadge
+        name="Explanation"
+        completed={hasExplanation}
+        active={isExplaining}
+        onClick={canTrigger ? onExplanationClick : undefined}
+        readyIdle={canTrigger && !hasExplanation && !isExplaining}
+        tooltip={explanationTooltip}
+      />
+      <FeatureBadge
+        name="Summary"
+        completed={hasSummary}
+        active={isGeneratingSummary}
+        onClick={canTrigger ? onSummaryClick : undefined}
+        readyIdle={canTrigger && !hasSummary && !isGeneratingSummary}
+        tooltip={summaryTooltip}
+      />
       <FeatureBadge
         name="Analysis"
         completed={hasAnalysis}
         active={isAnalyzing}
-        onClick={prerequisitesComplete ? onAnalysisClick : undefined}
-        readyIdle={prerequisitesComplete}
+        onClick={canTrigger ? onAnalysisClick : undefined}
+        readyIdle={canTrigger && !hasAnalysis && !isAnalyzing}
         tooltip={analysisTooltip}
       />
       <FeatureBadge
         name="Glossary"
         completed={hasGlossary}
         active={isGeneratingGlossary}
-        onClick={prerequisitesComplete ? onGlossaryClick : undefined}
-        readyIdle={prerequisitesComplete}
+        onClick={canTrigger ? onGlossaryClick : undefined}
+        readyIdle={canTrigger && !hasGlossary && !isGeneratingGlossary}
         tooltip={glossaryTooltip}
       />
     </div>

@@ -2,8 +2,20 @@ import { useState } from 'preact/hooks';
 
 interface UseOperationStateReturn {
   // State
+  explainingPapers: Set<string>;
+  summaryGeneratingPapers: Set<string>;
   analyzingPapers: Set<string>;
   glossaryGeneratingPapers: Set<string>;
+
+  // Explaining operations
+  addExplainingPaper: (paperUrl: string) => void;
+  removeExplainingPaper: (paperUrl: string) => void;
+  clearExplainingPaper: (paperUrl: string) => void;
+
+  // Summary generating operations
+  addSummaryGeneratingPaper: (paperUrl: string) => void;
+  removeSummaryGeneratingPaper: (paperUrl: string) => void;
+  clearSummaryGeneratingPaper: (paperUrl: string) => void;
 
   // Analyzing operations
   addAnalyzingPaper: (paperUrl: string) => void;
@@ -16,17 +28,63 @@ interface UseOperationStateReturn {
   clearGlossaryGeneratingPaper: (paperUrl: string) => void;
 
   // Utility
+  isExplaining: (paperUrl: string) => boolean;
+  isGeneratingSummary: (paperUrl: string) => boolean;
   isAnalyzing: (paperUrl: string) => boolean;
   isGeneratingGlossary: (paperUrl: string) => boolean;
 }
 
 /**
  * Custom hook to track operation states for multiple papers
- * Uses Sets to efficiently track which papers are currently being analyzed or having glossaries generated
+ * Uses Sets to efficiently track which papers are currently being explained, summarized, analyzed, or having glossaries generated
  */
 export function useOperationState(): UseOperationStateReturn {
+  const [explainingPapers, setExplainingPapers] = useState<Set<string>>(new Set());
+  const [summaryGeneratingPapers, setSummaryGeneratingPapers] = useState<Set<string>>(new Set());
   const [analyzingPapers, setAnalyzingPapers] = useState<Set<string>>(new Set());
   const [glossaryGeneratingPapers, setGlossaryGeneratingPapers] = useState<Set<string>>(new Set());
+
+  // Explaining operations
+  function addExplainingPaper(paperUrl: string) {
+    setExplainingPapers(prev => {
+      const next = new Set(prev);
+      next.add(paperUrl);
+      return next;
+    });
+  }
+
+  function removeExplainingPaper(paperUrl: string) {
+    setExplainingPapers(prev => {
+      const next = new Set(prev);
+      next.delete(paperUrl);
+      return next;
+    });
+  }
+
+  function clearExplainingPaper(paperUrl: string) {
+    removeExplainingPaper(paperUrl);
+  }
+
+  // Summary generating operations
+  function addSummaryGeneratingPaper(paperUrl: string) {
+    setSummaryGeneratingPapers(prev => {
+      const next = new Set(prev);
+      next.add(paperUrl);
+      return next;
+    });
+  }
+
+  function removeSummaryGeneratingPaper(paperUrl: string) {
+    setSummaryGeneratingPapers(prev => {
+      const next = new Set(prev);
+      next.delete(paperUrl);
+      return next;
+    });
+  }
+
+  function clearSummaryGeneratingPaper(paperUrl: string) {
+    removeSummaryGeneratingPaper(paperUrl);
+  }
 
   // Analyzing operations
   function addAnalyzingPaper(paperUrl: string) {
@@ -71,6 +129,14 @@ export function useOperationState(): UseOperationStateReturn {
   }
 
   // Utility functions
+  function isExplaining(paperUrl: string): boolean {
+    return explainingPapers.has(paperUrl);
+  }
+
+  function isGeneratingSummary(paperUrl: string): boolean {
+    return summaryGeneratingPapers.has(paperUrl);
+  }
+
   function isAnalyzing(paperUrl: string): boolean {
     return analyzingPapers.has(paperUrl);
   }
@@ -80,14 +146,24 @@ export function useOperationState(): UseOperationStateReturn {
   }
 
   return {
+    explainingPapers,
+    summaryGeneratingPapers,
     analyzingPapers,
     glossaryGeneratingPapers,
+    addExplainingPaper,
+    removeExplainingPaper,
+    clearExplainingPaper,
+    addSummaryGeneratingPaper,
+    removeSummaryGeneratingPaper,
+    clearSummaryGeneratingPaper,
     addAnalyzingPaper,
     removeAnalyzingPaper,
     clearAnalyzingPaper,
     addGlossaryGeneratingPaper,
     removeGlossaryGeneratingPaper,
     clearGlossaryGeneratingPaper,
+    isExplaining,
+    isGeneratingSummary,
     isAnalyzing,
     isGeneratingGlossary,
   };

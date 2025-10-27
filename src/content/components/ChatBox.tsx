@@ -6,7 +6,6 @@ import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.
 import { AlertCircle } from 'lucide-preact';
 
 interface ChatBoxProps {
-  // Multi-tab support (NEW)
   tabs: ChatTab[];
   activeTabId: string;
   compassArrowAngle?: number; // Angle for compass arrow (image tabs only)

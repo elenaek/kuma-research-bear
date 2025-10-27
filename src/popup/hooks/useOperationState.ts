@@ -5,6 +5,7 @@ interface OperationState {
   tabId?: number;
   isDetecting: boolean;
   isExplaining: boolean;
+  isGeneratingSummary: boolean;
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
   isChunking: boolean;
@@ -14,6 +15,7 @@ interface OperationState {
   };
   detectionProgress?: string;
   explanationProgress?: string;
+  summaryProgress?: string;
   analysisProgress?: string;
   glossaryProgress?: string;
   chunkingProgress?: string;
@@ -34,6 +36,7 @@ interface UseOperationStateReturn {
   // State
   isDetecting: boolean;
   isExplaining: boolean;
+  isGeneratingSummary: boolean;
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
   isChunking: boolean;
@@ -79,6 +82,7 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
 
   const [isDetecting, setIsDetecting] = useState(false);
   const [isExplaining, setIsExplaining] = useState(false);
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingGlossary, setIsGeneratingGlossary] = useState(false);
   const [isChunking, setIsChunking] = useState(false);
@@ -119,6 +123,7 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
         // Update UI based on state changes
         setIsDetecting(state.isDetecting);
         setIsExplaining(state.isExplaining);
+        setIsGeneratingSummary(state.isGeneratingSummary);
         setIsAnalyzing(state.isAnalyzing);
         setIsGeneratingGlossary(state.isGeneratingGlossary);
         setIsChunking(state.isChunking);
@@ -145,6 +150,8 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
           setDetectionStatus(state.detectionProgress || '🐻 Kuma is foraging for research papers... (Detecting paper)');
         } else if (state.isExplaining) {
           setDetectionStatus(state.explanationProgress || '🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)');
+        } else if (state.isGeneratingSummary) {
+          setDetectionStatus(state.summaryProgress || '🐻 Kuma is generating a summary for the research paper... (Generating summary)');
         } else if (state.isAnalyzing && state.isGeneratingGlossary) {
           // Both analysis and glossary are running in parallel
           setDetectionStatus('🐻 Kuma is analyzing the paper and extracting key terms... (Analyzing + Glossary)');
@@ -181,6 +188,7 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
 
         setIsDetecting(state.isDetecting);
         setIsExplaining(state.isExplaining);
+        setIsGeneratingSummary(state.isGeneratingSummary);
         setIsAnalyzing(state.isAnalyzing);
         setIsGeneratingGlossary(state.isGeneratingGlossary);
         setIsChunking(state.isChunking);
@@ -214,6 +222,8 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
           setDetectionStatus(state.detectionProgress || '🐻 Kuma is foraging for research papers... (Detecting paper)');
         } else if (state.isExplaining) {
           setDetectionStatus(state.explanationProgress || '🐻 Kuma is thinking of ways to explain the research paper... (Generating explanation)');
+        } else if (state.isGeneratingSummary) {
+          setDetectionStatus(state.summaryProgress || '🐻 Kuma is generating a summary for the research paper... (Generating summary)');
         } else if (state.isAnalyzing && state.isGeneratingGlossary) {
           setDetectionStatus('🐻 Kuma is analyzing the paper and extracting key terms... (Analyzing + Glossary)');
         } else if (state.isAnalyzing) {
@@ -255,6 +265,7 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
   function clearState() {
     setIsDetecting(false);
     setIsExplaining(false);
+    setIsGeneratingSummary(false);
     setIsAnalyzing(false);
     setIsGeneratingGlossary(false);
     setIsChunking(false);
@@ -274,6 +285,7 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
   return {
     isDetecting,
     isExplaining,
+    isGeneratingSummary,
     isAnalyzing,
     isGeneratingGlossary,
     isChunking,

@@ -223,6 +223,68 @@ export async function generateGlossary(paperUrl: string, tabId?: number): Promis
   }
 }
 
+export interface ExplanationResponse {
+  success: boolean;
+  error?: string;
+  explanation?: any;
+}
+
+/**
+ * Generate explanation for a paper manually
+ */
+export async function explainPaperManual(paperUrl: string, tabId?: number): Promise<ExplanationResponse> {
+  console.log('[ChromeService] Starting explanation generation for:', paperUrl, 'tabId:', tabId);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.EXPLAIN_PAPER_MANUAL,
+      payload: { url: paperUrl, tabId },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Explanation generated successfully');
+      return { success: true, explanation: response.explanation };
+    } else {
+      console.error('[ChromeService] Explanation generation failed:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error generating explanation:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+export interface SummaryResponse {
+  success: boolean;
+  error?: string;
+  summary?: any;
+}
+
+/**
+ * Generate summary for a paper manually
+ */
+export async function generateSummaryManual(paperUrl: string, tabId?: number): Promise<SummaryResponse> {
+  console.log('[ChromeService] Starting summary generation for:', paperUrl, 'tabId:', tabId);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.GENERATE_SUMMARY_MANUAL,
+      payload: { url: paperUrl, tabId },
+    });
+
+    if (response.success) {
+      console.log('[ChromeService] ✓ Summary generated successfully');
+      return { success: true, summary: response.summary };
+    } else {
+      console.error('[ChromeService] Summary generation failed:', response.error);
+      return { success: false, error: response.error };
+    }
+  } catch (error) {
+    console.error('[ChromeService] Error generating summary:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
 export interface QuestionResponse {
   success: boolean;
   error?: string;

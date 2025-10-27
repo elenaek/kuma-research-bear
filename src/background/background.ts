@@ -110,6 +110,11 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         }
         break;
 
+      case MessageType.EXPLAIN_PAPER_MANUAL:
+        const explainManualTabId = message.payload.tabId || sender.tab?.id;
+        sendResponse(await aiHandlers.handleExplainPaperManual(message.payload, explainManualTabId));
+        break;
+
       case MessageType.EXPLAIN_SECTION:
         sendResponse(await aiHandlers.handleExplainSection(message.payload, sender.tab?.id));
         break;
@@ -120,6 +125,11 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
       case MessageType.GENERATE_SUMMARY:
         sendResponse(await aiHandlers.handleGenerateSummary(message.payload, sender.tab?.id));
+        break;
+
+      case MessageType.GENERATE_SUMMARY_MANUAL:
+        const summaryManualTabId = message.payload.tabId || sender.tab?.id;
+        sendResponse(await aiHandlers.handleGenerateSummaryManual(message.payload, summaryManualTabId));
         break;
 
       case MessageType.ANALYZE_PAPER:

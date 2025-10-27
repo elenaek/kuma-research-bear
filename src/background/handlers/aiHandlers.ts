@@ -148,6 +148,167 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
 }
 
 /**
+ * Explain a paper manually (URL-based, for manual triggering from UI)
+ */
+export async function handleExplainPaperManual(payload: any, tabId?: number): Promise<any> {
+  const paperUrl = payload.url;
+  const contextId = tabId ? `tab-${tabId}-explain-manual` : 'default-explain-manual';
+  const requestKey = requestDeduplicationService.getRequestKey(tabId, 'explain-manual', paperUrl);
+
+  try {
+    // Check for existing active request
+    if (requestDeduplicationService.hasRequest(requestKey)) {
+      console.log(`[AIHandlers] Reusing existing explanation request for ${requestKey}`);
+      const existingExplanation = await requestDeduplicationService.getRequest(requestKey);
+      return { success: true, explanation: existingExplanation };
+    }
+
+    // Update operation state to show explanation is starting
+    if (tabId) {
+      const state = operationStateService.updateState(tabId, {
+        isExplaining: true,
+        explanationProgress: '🐻 Kuma is generating an explanation for the research paper...',
+        error: null,
+      });
+      broadcastStateChange(state);
+    }
+
+    // Create new explanation promise
+    const explanationPromise = (async () => {
+      // Retrieve paper from IndexedDB
+      const storedPaper = await getPaperByUrl(paperUrl);
+
+      if (!storedPaper) {
+        throw new Error('Paper not found in storage. Please store the paper first.');
+      }
+
+      // Update state with current paper
+      if (tabId) {
+        const state = operationStateService.updateState(tabId, {
+          currentPaper: storedPaper,
+        });
+        broadcastStateChange(state);
+      }
+
+      console.log(`[AIHandlers] Generating explanation for paper: ${storedPaper.title} with context: ${contextId}`);
+
+      // Determine if we should use hierarchical summary (for large papers)
+      const THRESHOLD = 6000;
+      const shouldUseHierarchicalSummary =
+        storedPaper.hierarchicalSummary &&
+        storedPaper.fullText.length > THRESHOLD;
+
+      if (shouldUseHierarchicalSummary) {
+        console.log(`[AIHandlers] Paper is large (${storedPaper.fullText.length} chars), using hierarchical summary for comprehensive explanation`);
+      }
+
+      // Generate explanation
+      const explanation = await aiService.explainAbstract(
+        storedPaper.abstract,
+        contextId,
+        shouldUseHierarchicalSummary ? storedPaper.hierarchicalSummary : undefined
+      );
+
+      return { explanation, storedPaper };
+    })();
+
+    // Store the promise for deduplication
+    requestDeduplicationService.setRequest(requestKey, explanationPromise);
+
+    try {
+      const { explanation, storedPaper } = await explanationPromise;
+
+      // Get output language for metadata
+      const { getOutputLanguage } = await import('../../utils/settingsService.ts');
+      const outputLanguage = await getOutputLanguage();
+
+      // Update paper with new explanation (preserve existing summary)
+      const { updatePaper } = await import('../../utils/dbService.ts');
+      await updatePaper(storedPaper.id, {
+        explanation,
+        explanationLanguage: outputLanguage,
+      });
+      console.log('[AIHandlers] ✓ Explanation stored in IndexedDB');
+
+      // Update completion tracking in operation state
+      if (tabId) {
+        const status = await paperStatusService.checkPaperStatus(storedPaper.url);
+        operationStateService.updateState(tabId, {
+          hasExplanation: status.hasExplanation,
+          hasSummary: status.hasSummary,
+          hasAnalysis: status.hasAnalysis,
+          hasGlossary: status.hasGlossary,
+          completionPercentage: status.completionPercentage,
+        });
+        console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
+      }
+
+      // Update operation state to show completion
+      if (tabId) {
+        const state = operationStateService.updateState(tabId, {
+          isExplaining: false,
+          explanationProgress: '🐻 Kuma has finished generating the explanation!',
+          error: null,
+        });
+        broadcastStateChange(state);
+
+        // Clear the progress message after a delay
+        setTimeout(() => {
+          const state = operationStateService.updateState(tabId, {
+            explanationProgress: '',
+          });
+          broadcastStateChange(state);
+        }, 5000);
+      }
+
+      console.log('[AIHandlers] ✓ Paper explanation complete');
+      return { success: true, explanation };
+    } catch (explanationError) {
+      console.error('[AIHandlers] Error generating explanation:', explanationError);
+
+      // Update operation state to show error
+      if (tabId) {
+        const state = operationStateService.updateState(tabId, {
+          isExplaining: false,
+          explanationProgress: '',
+          error: `🐻 Kuma had trouble generating explanation: ${String(explanationError)}`,
+        });
+        broadcastStateChange(state);
+      }
+
+      return {
+        success: false,
+        error: `Explanation generation failed: ${String(explanationError)}`
+      };
+    } finally {
+      // Clean up the active request
+      requestDeduplicationService.deleteRequest(requestKey);
+    }
+  } catch (error) {
+    console.error('[AIHandlers] Error in explanation setup:', error);
+
+    // Update operation state to show error
+    if (tabId) {
+      const state = operationStateService.updateState(tabId, {
+        isExplaining: false,
+        explanationProgress: '',
+        error: `🐻 Kuma couldn't generate explanation: ${String(error)}`,
+      });
+      broadcastStateChange(state);
+    }
+
+    requestDeduplicationService.deleteRequest(requestKey);
+    return {
+      success: false,
+      error: `Explanation generation failed: ${String(error)}`
+    };
+  } finally {
+    // Always destroy the session when done
+    aiService.destroySessionForContext(contextId);
+  }
+}
+
+/**
  * Explain a text section
  */
 export async function handleExplainSection(payload: any, tabId?: number): Promise<any> {
@@ -187,6 +348,168 @@ export async function handleGenerateSummary(payload: any, tabId?: number): Promi
     return { success: true, summary: summaryResult };
   } finally {
     aiService.destroySessionForContext(summaryContextId);
+  }
+}
+
+/**
+ * Generate summary manually (URL-based, for manual triggering from UI)
+ */
+export async function handleGenerateSummaryManual(payload: any, tabId?: number): Promise<any> {
+  const paperUrl = payload.url;
+  const contextId = tabId ? `tab-${tabId}-summary-manual` : 'default-summary-manual';
+  const requestKey = requestDeduplicationService.getRequestKey(tabId, 'summary-manual', paperUrl);
+
+  try {
+    // Check for existing active request
+    if (requestDeduplicationService.hasRequest(requestKey)) {
+      console.log(`[AIHandlers] Reusing existing summary request for ${requestKey}`);
+      const existingSummary = await requestDeduplicationService.getRequest(requestKey);
+      return { success: true, summary: existingSummary };
+    }
+
+    // Update operation state to show summary generation is starting
+    if (tabId) {
+      const state = operationStateService.updateState(tabId, {
+        isGeneratingSummary: true,
+        summaryProgress: '🐻 Kuma is generating a summary for the research paper...',
+        error: null,
+      });
+      broadcastStateChange(state);
+    }
+
+    // Create new summary generation promise
+    const summaryPromise = (async () => {
+      // Retrieve paper from IndexedDB
+      const storedPaper = await getPaperByUrl(paperUrl);
+
+      if (!storedPaper) {
+        throw new Error('Paper not found in storage. Please store the paper first.');
+      }
+
+      // Update state with current paper
+      if (tabId) {
+        const state = operationStateService.updateState(tabId, {
+          currentPaper: storedPaper,
+        });
+        broadcastStateChange(state);
+      }
+
+      console.log(`[AIHandlers] Generating summary for paper: ${storedPaper.title} with context: ${contextId}`);
+
+      // Determine if we should use hierarchical summary (for large papers)
+      const THRESHOLD = 6000;
+      const shouldUseHierarchicalSummary =
+        storedPaper.hierarchicalSummary &&
+        storedPaper.fullText.length > THRESHOLD;
+
+      if (shouldUseHierarchicalSummary) {
+        console.log(`[AIHandlers] Paper is large (${storedPaper.fullText.length} chars), using hierarchical summary for comprehensive summary`);
+      }
+
+      // Generate summary
+      const summary = await aiService.generateSummary(
+        storedPaper.title,
+        storedPaper.abstract,
+        contextId,
+        shouldUseHierarchicalSummary ? storedPaper.hierarchicalSummary : undefined
+      );
+
+      return { summary, storedPaper };
+    })();
+
+    // Store the promise for deduplication
+    requestDeduplicationService.setRequest(requestKey, summaryPromise);
+
+    try {
+      const { summary, storedPaper } = await summaryPromise;
+
+      // Get output language for metadata
+      const { getOutputLanguage } = await import('../../utils/settingsService.ts');
+      const outputLanguage = await getOutputLanguage();
+
+      // Update paper with new summary (preserve existing explanation)
+      const { updatePaper } = await import('../../utils/dbService.ts');
+      await updatePaper(storedPaper.id, {
+        summary,
+        summaryLanguage: outputLanguage,
+      });
+      console.log('[AIHandlers] ✓ Summary stored in IndexedDB');
+
+      // Update completion tracking in operation state
+      if (tabId) {
+        const status = await paperStatusService.checkPaperStatus(storedPaper.url);
+        operationStateService.updateState(tabId, {
+          hasExplanation: status.hasExplanation,
+          hasSummary: status.hasSummary,
+          hasAnalysis: status.hasAnalysis,
+          hasGlossary: status.hasGlossary,
+          completionPercentage: status.completionPercentage,
+        });
+        console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
+      }
+
+      // Update operation state to show completion
+      if (tabId) {
+        const state = operationStateService.updateState(tabId, {
+          isGeneratingSummary: false,
+          summaryProgress: '🐻 Kuma has finished generating the summary!',
+          error: null,
+        });
+        broadcastStateChange(state);
+
+        // Clear the progress message after a delay
+        setTimeout(() => {
+          const state = operationStateService.updateState(tabId, {
+            summaryProgress: '',
+          });
+          broadcastStateChange(state);
+        }, 5000);
+      }
+
+      console.log('[AIHandlers] ✓ Paper summary complete');
+      return { success: true, summary };
+    } catch (summaryError) {
+      console.error('[AIHandlers] Error generating summary:', summaryError);
+
+      // Update operation state to show error
+      if (tabId) {
+        const state = operationStateService.updateState(tabId, {
+          isGeneratingSummary: false,
+          summaryProgress: '',
+          error: `🐻 Kuma had trouble generating summary: ${String(summaryError)}`,
+        });
+        broadcastStateChange(state);
+      }
+
+      return {
+        success: false,
+        error: `Summary generation failed: ${String(summaryError)}`
+      };
+    } finally {
+      // Clean up the active request
+      requestDeduplicationService.deleteRequest(requestKey);
+    }
+  } catch (error) {
+    console.error('[AIHandlers] Error in summary generation setup:', error);
+
+    // Update operation state to show error
+    if (tabId) {
+      const state = operationStateService.updateState(tabId, {
+        isGeneratingSummary: false,
+        summaryProgress: '',
+        error: `🐻 Kuma couldn't generate summary: ${String(error)}`,
+      });
+      broadcastStateChange(state);
+    }
+
+    requestDeduplicationService.deleteRequest(requestKey);
+    return {
+      success: false,
+      error: `Summary generation failed: ${String(error)}`
+    };
+  } finally {
+    // Always destroy the session when done
+    aiService.destroySessionForContext(contextId);
   }
 }
 
@@ -251,7 +574,33 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
         console.log('[AIHandlers] No hierarchical summary found, generating one...');
         try {
           const fullText = storedPaper.fullText || storedPaper.abstract;
-          hierarchicalSummary = await aiService.createHierarchicalSummary(fullText, `${analysisContextId}-summary`);
+          const result = await aiService.createHierarchicalSummary(
+            fullText,
+            `${analysisContextId}-summary`,
+            (current, total) => {
+              // Update operation state with progress
+              if (tabId) {
+                operationStateService.updateState(tabId, {
+                  analysisProgressStage: 'evaluating',
+                  currentAnalysisStep: current,
+                  totalAnalysisSteps: total,
+                });
+              }
+
+              // Send progress update for hierarchical summary generation
+              chrome.runtime.sendMessage({
+                type: MessageType.ANALYSIS_PROGRESS,
+                payload: {
+                  stage: 'evaluating',
+                  current,
+                  total,
+                },
+              });
+            }
+          );
+
+          // Extract summary string from result object
+          hierarchicalSummary = result.summary;
 
           // Update stored paper with hierarchical summary for future use
           const { updatePaper } = await import('../../utils/dbService.ts');
@@ -268,7 +617,27 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
       const analysis: PaperAnalysisResult = await aiService.analyzePaper(
         storedPaper.id,
         hierarchicalSummary,
-        analysisContextId
+        analysisContextId,
+        (step, total) => {
+          // Update operation state with progress
+          if (tabId) {
+            operationStateService.updateState(tabId, {
+              analysisProgressStage: 'analyzing',
+              currentAnalysisStep: step,
+              totalAnalysisSteps: total,
+            });
+          }
+
+          // Send progress update for each analysis step
+          chrome.runtime.sendMessage({
+            type: MessageType.ANALYSIS_PROGRESS,
+            payload: {
+              stage: 'analyzing',
+              current: step,
+              total,
+            },
+          });
+        }
       );
 
       return analysis;
@@ -315,6 +684,9 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
         const state = operationStateService.updateState(tabId, {
           isAnalyzing: false,
           analysisProgress: '🐻 Kuma has finished analyzing the research paper!',
+          analysisProgressStage: null,
+          currentAnalysisStep: 0,
+          totalAnalysisSteps: 0,
           error: null,
         });
         broadcastStateChange(state);
@@ -338,6 +710,9 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
         const state = operationStateService.updateState(tabId, {
           isAnalyzing: false,
           analysisProgress: '',
+          analysisProgressStage: null,
+          currentAnalysisStep: 0,
+          totalAnalysisSteps: 0,
           error: `🐻 Kuma had trouble analyzing: ${String(analysisError)}`,
         });
         broadcastStateChange(state);
@@ -359,6 +734,9 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
       const state = operationStateService.updateState(tabId, {
         isAnalyzing: false,
         analysisProgress: '',
+        analysisProgressStage: null,
+        currentAnalysisStep: 0,
+        totalAnalysisSteps: 0,
         error: `🐻 Kuma couldn't analyze: ${String(error)}`,
       });
       broadcastStateChange(state);

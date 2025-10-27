@@ -10,6 +10,7 @@ interface PaperInfoCardProps {
   isDetecting?: boolean;
   isChunking?: boolean;
   isExplaining?: boolean;
+  isGeneratingSummary?: boolean;
   isAnalyzing?: boolean;
   isGeneratingGlossary?: boolean;
   hasDetected?: boolean;
@@ -23,6 +24,8 @@ interface PaperInfoCardProps {
   hasGlossary?: boolean;
   completionPercentage?: number;
   // Callbacks
+  onGenerateExplanation?: () => void;
+  onGenerateSummary?: () => void;
   onGenerateAnalysis?: () => void;
   onGenerateGlossary?: () => void;
 }
@@ -37,6 +40,7 @@ export function PaperInfoCard({
   isDetecting = false,
   isChunking = false,
   isExplaining = false,
+  isGeneratingSummary = false,
   isAnalyzing = false,
   isGeneratingGlossary = false,
   hasDetected = false,
@@ -47,6 +51,8 @@ export function PaperInfoCard({
   hasSummary = false,
   hasAnalysis = false,
   hasGlossary = false,
+  onGenerateExplanation,
+  onGenerateSummary,
   onGenerateAnalysis,
   onGenerateGlossary,
 }: PaperInfoCardProps) {
@@ -81,9 +87,13 @@ export function PaperInfoCard({
           hasSummary={hasSummary}
           hasAnalysis={hasAnalysis}
           hasGlossary={hasGlossary}
+          hasChunked={hasChunked}
           isExplaining={isExplaining}
+          isGeneratingSummary={isGeneratingSummary}
           isAnalyzing={isAnalyzing}
           isGeneratingGlossary={isGeneratingGlossary}
+          onExplanationClick={onGenerateExplanation}
+          onSummaryClick={onGenerateSummary}
           onAnalysisClick={onGenerateAnalysis}
           onGlossaryClick={onGenerateGlossary}
         />

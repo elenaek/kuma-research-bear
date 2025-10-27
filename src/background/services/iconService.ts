@@ -41,27 +41,38 @@ const ICON_PATHS = {
 
 /**
  * Update extension icon based on operation state
- * Priority: analyzing > explaining > detecting > stored > default
+ * Priority: detecting/chunking > processing (post-detect/chunk operations) > stored > default
+ * Processing operations: explaining, summarizing, analyzing, glossary generation, embedding generation
  */
 export async function updateIconForTab(tabId: number, state: OperationState): Promise<void> {
   try {
     let iconType = 'default';
 
-    // Priority: analyzing > explaining > detecting > stored > default
-    if (state.isAnalyzing) {
-      iconType = 'analyzing';
-    } else if (state.isExplaining) {
-      iconType = 'explaining';
-    } else if (state.isDetecting) {
+    // Check if any post-detect/chunk operation is running
+    const isProcessing =
+      state.isExplaining ||
+      state.isGeneratingSummary ||
+      state.isAnalyzing ||
+      state.isGeneratingGlossary ||
+      state.isGeneratingEmbeddings;
+
+    // Priority: detecting/chunking > processing (post-detect/chunk operations) > stored > default
+    if (state.isDetecting || state.isChunking) {
       iconType = 'detecting';
+    } else if (isProcessing) {
+      iconType = 'analyzing';
     } else if (state.isPaperStored && state.currentPaper) {
       iconType = 'stored';
     }
 
     console.log(`[IconService] Updating icon for tab ${tabId}: ${iconType}, state:`, {
       isDetecting: state.isDetecting,
+      isChunking: state.isChunking,
       isExplaining: state.isExplaining,
+      isGeneratingSummary: state.isGeneratingSummary,
       isAnalyzing: state.isAnalyzing,
+      isGeneratingGlossary: state.isGeneratingGlossary,
+      isGeneratingEmbeddings: state.isGeneratingEmbeddings,
       isPaperStored: state.isPaperStored,
       completionPercentage: state.completionPercentage
     });
@@ -76,12 +87,20 @@ export async function updateIconForTab(tabId: number, state: OperationState): Pr
 
     // Also update the tooltip to show the current operation
     let title = 'Kuma the Research Bear';
-    if (state.isAnalyzing) {
+    if (state.isDetecting) {
+      title += ' - Detecting paper...';
+    } else if (state.isChunking) {
+      title += ' - Processing paper...';
+    } else if (state.isAnalyzing) {
       title += ' - Analyzing paper...';
+    } else if (state.isGeneratingGlossary) {
+      title += ' - Generating glossary...';
+    } else if (state.isGeneratingSummary) {
+      title += ' - Generating summary...';
     } else if (state.isExplaining) {
       title += ' - Explaining paper...';
-    } else if (state.isDetecting) {
-      title += ' - Detecting paper...';
+    } else if (state.isGeneratingEmbeddings) {
+      title += ' - Generating embeddings...';
     } else if (state.isPaperStored && state.currentPaper) {
       // Show completion status in title
       title += getCompletionTitle(state);

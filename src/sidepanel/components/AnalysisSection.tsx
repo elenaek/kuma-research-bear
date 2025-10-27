@@ -8,6 +8,11 @@ import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.
 interface AnalysisSectionProps {
   analysis: PaperAnalysisResult | null;
   isAnalyzing: boolean;
+  analysisProgress?: {
+    stage: 'evaluating' | 'analyzing';
+    current?: number;
+    total?: number;
+  } | null;
   onGenerateAnalysis?: () => void;
 }
 
@@ -16,18 +21,43 @@ interface AnalysisSectionProps {
  * Displays paper analysis results including methodology, confounders, implications, and limitations
  */
 export function AnalysisSection(props: AnalysisSectionProps) {
-  const { analysis, isAnalyzing, onGenerateAnalysis } = props;
+  const { analysis, isAnalyzing, analysisProgress, onGenerateAnalysis } = props;
 
-  // Loading state
+  // Helper to get step label
+  const getStepLabel = (step: number): string => {
+    switch (step) {
+      case 1: return 'methodology';
+      case 2: return 'confounders';
+      case 3: return 'implications';
+      case 4: return 'limitations';
+      default: return '';
+    }
+  };
+
+  // Loading state with progress
   if (isAnalyzing && !analysis) {
+    let progressMessage = 'Analyzing Paper...';
+    let progressDetail = 'Evaluating methodology, identifying confounders, analyzing implications, and assessing limitations.';
+
+    if (analysisProgress) {
+      if (analysisProgress.stage === 'evaluating' && analysisProgress.current !== undefined && analysisProgress.total !== undefined) {
+        progressMessage = `Evaluating section(s): ${analysisProgress.current}/${analysisProgress.total}`;
+        progressDetail = 'Evaluating the entirety of the paper\'s sections...';
+      } else if (analysisProgress.stage === 'analyzing' && analysisProgress.current !== undefined && analysisProgress.total !== undefined) {
+        const stepLabel = getStepLabel(analysisProgress.current);
+        progressMessage = `Analyzing ${analysisProgress.current}/4`;
+        progressDetail = stepLabel ? `Analyzing ${stepLabel}...` : 'Analyzing paper components...';
+      }
+    }
+
     return (
       <div class="card">
         <div class="flex flex-col items-center justify-center gap-4 py-12">
           <LottiePlayer path="/lotties/kuma-thinking-glasses.lottie" className="mx-auto mb-1" autoStartLoop={true} size={100} loopPurpose={LoopPurpose.SIDEPANEL} />
           <div class="text-center">
-            <p class="text-base font-medium text-gray-900 mb-2">Analyzing Paper...</p>
+            <p class="text-base font-medium text-gray-900 mb-2">{progressMessage}</p>
             <p class="text-sm text-gray-600">
-              Evaluating methodology, identifying confounders, analyzing implications, and assessing limitations.
+              {progressDetail}
             </p>
           </div>
         </div>
@@ -78,7 +108,9 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 Study Type
                 <Tooltip text="The type of study (e.g. randomized controlled trial, cohort study, case-control study, etc.)" />
               </p>
-              <p class="text-sm text-gray-600">{analysis.methodology.studyType}</p>
+              <p class="text-sm text-gray-600">
+                <MarkdownRenderer content={analysis.methodology.studyType} />
+              </p>
             </div>
 
             <div>
@@ -86,7 +118,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 Study Design
                 <Tooltip text="The overall framework and approach used to conduct the research study" />
               </p>
-              <p class="text-sm text-gray-600">{analysis.methodology.studyDesign}</p>
+              <p class="text-sm text-gray-600"><MarkdownRenderer content={analysis.methodology.studyDesign} /></p>
             </div>
 
             <div>
@@ -94,7 +126,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 Data Collection
                 <Tooltip text="Methods and procedures used to gather information and measurements for the study" />
               </p>
-              <p class="text-sm text-gray-600">{analysis.methodology.dataCollection}</p>
+              <p class="text-sm text-gray-600"><MarkdownRenderer content={analysis.methodology.dataCollection} /></p>
             </div>
 
             <div>
@@ -102,7 +134,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 Sample Size
                 <Tooltip text="The number of participants or observations included in the study" />
               </p>
-              <p class="text-sm text-gray-600">{analysis.methodology.sampleSize}</p>
+              <p class="text-sm text-gray-600"><MarkdownRenderer content={analysis.methodology.sampleSize} /></p>
             </div>
 
             <div>
@@ -110,7 +142,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 Statistical Methods
                 <Tooltip text="Analytical techniques and tests used to evaluate and interpret the data" />
               </p>
-              <p class="text-sm text-gray-600">{analysis.methodology.statisticalMethods}</p>
+              <p class="text-sm text-gray-600"><MarkdownRenderer content={analysis.methodology.statisticalMethods} /></p>
             </div>
 
             <div>
@@ -167,7 +199,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 {analysis.confounders.identified.map((item, idx) => (
                   <li key={idx} class="flex flex-col gap-2 text-sm text-gray-600">
                     <span class="font-medium text-gray-600">{item.name}</span>
-                    <span class="text-gray-500 text-xs">{item.explanation}</span>
+                    <span class="text-gray-500 text-xs"><MarkdownRenderer content={item.explanation} /></span>
                   </li>
                 ))}
               </ul>
@@ -182,7 +214,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 {analysis.confounders.biases.map((bias, idx) => (
                   <li key={idx} class="flex flex-col gap-2 text-sm text-gray-600">
                     <span class="font-medium text-gray-600">{bias.name}</span>
-                    <span class="text-gray-500 text-xs">{bias.explanation}</span>
+                    <span class="text-gray-500 text-xs"><MarkdownRenderer content={bias.explanation} /></span>
                   </li>
                 ))}
               </ul>
@@ -197,7 +229,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 {analysis.confounders.controlMeasures.map((controlMeasure, idx) => (
                   <li key={idx} class="flex flex-col gap-2 text-sm text-gray-600">
                     <span class="font-medium text-gray-600">{controlMeasure.name}</span>
-                    <span class="text-gray-500 text-xs">{controlMeasure.explanation}</span>
+                    <span class="text-gray-500 text-xs"><MarkdownRenderer content={controlMeasure.explanation} /></span>
                   </li>
                 ))}
               </ul>
@@ -221,7 +253,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 Significance
                 <Tooltip text="The importance and meaning of the research findings within the field" />
               </p>
-              <p class="text-sm text-gray-600">{analysis.implications.significance}</p>
+              <p class="text-sm text-gray-600"><MarkdownRenderer content={analysis.implications.significance} /></p>
             </div>
 
             <div>
@@ -287,7 +319,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
                 Generalizability
                 <Tooltip text="The extent to which findings can be applied to other populations, settings, or contexts" />
               </p>
-              <p class="text-sm text-gray-600">{analysis.limitations.generalizability}</p>
+              <p class="text-sm text-gray-600"><MarkdownRenderer content={analysis.limitations.generalizability} /></p>
             </div>
           </div>
         </CollapsibleSection>

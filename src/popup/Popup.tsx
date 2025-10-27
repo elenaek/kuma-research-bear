@@ -226,9 +226,40 @@ export function Popup() {
       } else if (tab.id) {
         // Open sidepanel
         await chrome.sidePanel.open({ tabId: tab.id });
+
+        // Navigate to current paper if there is one
+        if (currentUrlHasPaper && tab.url) {
+          await ChromeService.navigateSidepanelToPaper(tab.url);
+        }
       }
     } catch (error) {
       console.error('[Popup] Failed to open sidepanel:', error);
+    }
+  }
+
+  async function handleGenerateExplanation() {
+    // Guard against missing paper or already generating explanation
+    if (!paperStatus.paper || operationState.isExplaining) {
+      return;
+    }
+
+    try {
+      await ChromeService.explainPaperManual(paperStatus.paper.url, currentTabId);
+    } catch (error) {
+      console.error('[Popup] Failed to generate explanation:', error);
+    }
+  }
+
+  async function handleGenerateSummary() {
+    // Guard against missing paper or already generating summary
+    if (!paperStatus.paper || operationState.isGeneratingSummary) {
+      return;
+    }
+
+    try {
+      await ChromeService.generateSummaryManual(paperStatus.paper.url, currentTabId);
+    } catch (error) {
+      console.error('[Popup] Failed to generate summary:', error);
     }
   }
 
@@ -272,6 +303,7 @@ export function Popup() {
   const isOperationActive =
     operationState.isDetecting ||
     operationState.isExplaining ||
+    operationState.isGeneratingSummary ||
     operationState.isAnalyzing ||
     operationState.isGeneratingGlossary;
 
@@ -298,6 +330,7 @@ export function Popup() {
           isResetting={aiStatus.isResetting}
           isDetecting={operationState.isDetecting}
           isExplaining={operationState.isExplaining}
+          isGeneratingSummary={operationState.isGeneratingSummary}
           isAnalyzing={operationState.isAnalyzing}
           isGeneratingGlossary={operationState.isGeneratingGlossary}
           isChunking={operationState.isChunking}
@@ -337,6 +370,7 @@ export function Popup() {
             isDetecting={operationState.isDetecting}
             isChunking={operationState.isChunking}
             isExplaining={operationState.isExplaining}
+            isGeneratingSummary={operationState.isGeneratingSummary}
             isAnalyzing={operationState.isAnalyzing}
             isGeneratingGlossary={operationState.isGeneratingGlossary}
             hasDetected={operationState.hasDetected}
@@ -348,6 +382,8 @@ export function Popup() {
             hasAnalysis={operationState.hasAnalysis}
             hasGlossary={operationState.hasGlossary}
             completionPercentage={operationState.completionPercentage}
+            onGenerateExplanation={handleGenerateExplanation}
+            onGenerateSummary={handleGenerateSummary}
             onGenerateAnalysis={handleGenerateAnalysis}
             onGenerateGlossary={handleGenerateGlossary}
           />

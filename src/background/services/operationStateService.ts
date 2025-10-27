@@ -2,6 +2,7 @@ import { OperationState, MessageType } from '../../types/index.ts';
 import { tabPaperTracker } from './tabPaperTracker.ts';
 import { updateContextMenuForPaper } from '../background.ts';
 import { normalizeUrl } from '../../utils/urlUtils.ts';
+import * as iconService from './iconService.ts';
 
 /**
  * Operation State Service
@@ -25,6 +26,7 @@ export function getState(tabId: number): OperationState {
       tabId,
       isDetecting: false,
       isExplaining: false,
+      isGeneratingSummary: false,
       isAnalyzing: false,
       isGeneratingGlossary: false,
       isChunking: false,
@@ -34,11 +36,15 @@ export function getState(tabId: number): OperationState {
       error: null,
       detectionProgress: '',
       explanationProgress: '',
+      summaryProgress: '',
       analysisProgress: '',
       glossaryProgress: '',
       glossaryProgressStage: null,
       currentGlossaryTerm: 0,
       totalGlossaryTerms: 0,
+      analysisProgressStage: null,
+      currentAnalysisStep: 0,
+      totalAnalysisSteps: 0,
       chunkingProgress: '',
       currentChunk: 0,
       totalChunks: 0,
@@ -178,10 +184,12 @@ export async function broadcastStateChange(state: OperationState): Promise<void>
 /**
  * Update operation state and broadcast changes
  * This is the preferred method to use when updating state
+ * Also updates the extension icon to reflect the current operation state
  * @returns The updated state
  */
 export async function updateStateAndBroadcast(tabId: number, updates: Partial<OperationState>): Promise<OperationState> {
   const state = updateState(tabId, updates);
+  await iconService.updateIconForTab(tabId, state);
   await broadcastStateChange(state);
   return state;
 }

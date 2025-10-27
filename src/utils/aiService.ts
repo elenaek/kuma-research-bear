@@ -1637,17 +1637,29 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
   async analyzePaper(
     paperId: string,
     hierarchicalSummary: string,
-    contextId: string = 'analysis'
+    contextId: string = 'analysis',
+    onProgress?: (step: number, total: number) => void
   ): Promise<PaperAnalysisResult> {
     console.log('Starting comprehensive paper analysis with hierarchical summary + RAG...');
 
-    // Run all analyses in parallel with unique sub-contexts
-    const [methodology, confounders, implications, limitations] = await Promise.all([
-      this.analyzeMethodology(paperId, hierarchicalSummary, `${contextId}-methodology`),
-      this.identifyConfounders(paperId, hierarchicalSummary, `${contextId}-confounders`),
-      this.analyzeImplications(paperId, hierarchicalSummary, `${contextId}-implications`),
-      this.identifyLimitations(paperId, hierarchicalSummary, `${contextId}-limitations`),
-    ]);
+    const totalSteps = 4;
+
+    // Run analyses sequentially to report progress after each step
+    console.log('[Analysis] Step 1/4: Analyzing methodology...');
+    const methodology = await this.analyzeMethodology(paperId, hierarchicalSummary, `${contextId}-methodology`);
+    if (onProgress) onProgress(1, totalSteps);
+
+    console.log('[Analysis] Step 2/4: Identifying confounders...');
+    const confounders = await this.identifyConfounders(paperId, hierarchicalSummary, `${contextId}-confounders`);
+    if (onProgress) onProgress(2, totalSteps);
+
+    console.log('[Analysis] Step 3/4: Analyzing implications...');
+    const implications = await this.analyzeImplications(paperId, hierarchicalSummary, `${contextId}-implications`);
+    if (onProgress) onProgress(3, totalSteps);
+
+    console.log('[Analysis] Step 4/4: Identifying limitations...');
+    const limitations = await this.identifyLimitations(paperId, hierarchicalSummary, `${contextId}-limitations`);
+    if (onProgress) onProgress(4, totalSteps);
 
     return {
       methodology,

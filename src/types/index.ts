@@ -4,9 +4,11 @@ import { JSONSchema } from "../utils/typeToSchema";
 export enum MessageType {
   DETECT_PAPER = 'DETECT_PAPER',
   EXPLAIN_PAPER = 'EXPLAIN_PAPER',
+  EXPLAIN_PAPER_MANUAL = 'EXPLAIN_PAPER_MANUAL',
   EXPLAIN_SECTION = 'EXPLAIN_SECTION',
   EXPLAIN_TERM = 'EXPLAIN_TERM',
   GENERATE_SUMMARY = 'GENERATE_SUMMARY',
+  GENERATE_SUMMARY_MANUAL = 'GENERATE_SUMMARY_MANUAL',
   OPEN_SIDEPANEL = 'OPEN_SIDEPANEL',
   AI_STATUS = 'AI_STATUS',
   INITIALIZE_AI = 'INITIALIZE_AI',
@@ -27,6 +29,7 @@ export enum MessageType {
   CHECK_PAPER_STORED = 'CHECK_PAPER_STORED',
 
   ANALYZE_PAPER = 'ANALYZE_PAPER',
+  ANALYSIS_PROGRESS = 'ANALYSIS_PROGRESS',
   ASK_QUESTION = 'ASK_QUESTION',
   UPDATE_PAPER_QA_HISTORY = 'UPDATE_PAPER_QA_HISTORY',
   GENERATE_GLOSSARY = 'GENERATE_GLOSSARY',
@@ -474,6 +477,7 @@ export interface OperationState {
   tabId: number;
   isDetecting: boolean;
   isExplaining: boolean;
+  isGeneratingSummary: boolean;
   isAnalyzing: boolean;
   isGeneratingGlossary: boolean;
   isChunking: boolean;  // Track if chunking is in progress
@@ -483,11 +487,15 @@ export interface OperationState {
   error: string | null;
   detectionProgress: string;
   explanationProgress: string;
+  summaryProgress: string;
   analysisProgress: string;
   glossaryProgress: string;
   glossaryProgressStage: string | null;  // Current stage: 'extracting' | 'filtering-terms' | 'generating-definitions'
   currentGlossaryTerm: number;  // Current glossary term being processed
   totalGlossaryTerms: number;  // Total glossary terms to process
+  analysisProgressStage: string | null;  // Current stage: 'evaluating' | 'analyzing'
+  currentAnalysisStep: number;  // Current analysis step being processed (0-4)
+  totalAnalysisSteps: number;  // Total analysis steps to process (4)
   chunkingProgress: string;  // Status message for chunking
   currentChunk: number;  // Current chunk being processed
   totalChunks: number;  // Total number of chunks to process
