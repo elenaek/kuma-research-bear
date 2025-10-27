@@ -26,6 +26,10 @@ export function Popup() {
   // Track chatbox state for dynamic button behavior
   const [isChatOpen, setIsChatOpen] = useState(false);
 
+  // Delete paper state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Custom hooks
   const aiStatus = useAIStatus();
   const operationState = useOperationState(currentTabUrl, currentTabId);
@@ -299,6 +303,43 @@ export function Popup() {
     }
   }
 
+  async function handleDeletePaper() {
+    if (!paperStatus.paper) return;
+
+    // Show confirmation on first click
+    if (!showDeleteConfirm) {
+      setShowDeleteConfirm(true);
+      return;
+    }
+
+    // Get paper ID (stored papers have an id field)
+    const paperId = (paperStatus.paper as any).id;
+    if (!paperId) {
+      console.error('[Popup] Cannot delete: paper has no ID');
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const success = await ChromeService.deletePaper(paperId);
+      if (success) {
+        console.log('[Popup] Paper deleted successfully');
+        // State will be cleared by PAPER_DELETED listener
+        setShowDeleteConfirm(false);
+      } else {
+        console.error('[Popup] Failed to delete paper');
+      }
+    } catch (error) {
+      console.error('[Popup] Error deleting paper:', error);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  function handleCancelDelete() {
+    setShowDeleteConfirm(false);
+  }
+
   // Determine if Lottie animation should auto-start looping
   const isOperationActive =
     operationState.isDetecting ||
@@ -361,6 +402,34 @@ export function Popup() {
             )}
           </div>
         )}
+        
+        {/* Delete Confirmation Banner */}
+        {showDeleteConfirm && paperStatus.paper && (
+          <div class="card mb-4 bg-red-50 border-red-200">
+            <p class="text-sm font-semibold text-red-900 mb-2">
+              Delete "{paperStatus.paper.title}"?
+            </p>
+            <p class="text-xs text-red-800 mb-3">
+              This will remove all data including Q&A history.
+            </p>
+            <div class="flex gap-2">
+              <button
+                onClick={handleDeletePaper}
+                disabled={isDeleting}
+                class="flex-1 px-3 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:cursor-pointer"
+              >
+                {isDeleting ? 'Deleting...' : 'Confirm Delete'}
+              </button>
+              <button
+                onClick={handleCancelDelete}
+                disabled={isDeleting}
+                class="flex-1 px-3 py-2 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Paper Info Card - Show when paper exists */}
         {paperStatus.paper && (
@@ -386,6 +455,8 @@ export function Popup() {
             onGenerateSummary={handleGenerateSummary}
             onGenerateAnalysis={handleGenerateAnalysis}
             onGenerateGlossary={handleGenerateGlossary}
+            onDeletePaper={handleDeletePaper}
+            paperId={(paperStatus.paper as any).id}
           />
         )}
 
