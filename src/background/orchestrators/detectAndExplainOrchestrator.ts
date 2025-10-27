@@ -15,24 +15,11 @@ import * as iconService from '../services/iconService.ts';
  */
 
 /**
- * Broadcast operation state change
- */
-function broadcastStateChange(state: any): void {
-  chrome.runtime.sendMessage({
-    type: MessageType.OPERATION_STATE_CHANGED,
-    payload: { state },
-  }).catch(() => {
-    // No listeners, that's ok
-  });
-}
-
-/**
  * Helper to update state and broadcast changes
+ * Now uses updateStateAndBroadcast which automatically updates icons
  */
-function updateOperationState(tabId: number, updates: any): void {
-  const state = operationStateService.updateState(tabId, updates);
-  iconService.updateIconForTab(tabId, state);
-  broadcastStateChange(state);
+async function updateOperationState(tabId: number, updates: any): Promise<void> {
+  await operationStateService.updateStateAndBroadcast(tabId, updates);
 }
 
 /**
@@ -43,7 +30,7 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
     console.log('[Orchestrator] Starting detect and explain flow for tab', tabId);
 
     // Phase 1: Detection
-    updateOperationState(tabId, {
+    await updateOperationState(tabId, {
       isDetecting: true,
       detectionProgress: '🐻 Kuma is foraging for research papers... (Detecting paper)',
       error: null,
@@ -56,7 +43,7 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
     });
 
     if (!detectResponse.paper) {
-      updateOperationState(tabId, {
+      await updateOperationState(tabId, {
         isDetecting: false,
         detectionProgress: '',
         error: '🐻 Kuma didn\'t find any research papers. (No paper detected on this page)',
@@ -72,7 +59,7 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
     }
 
     // Update state with detected paper
-    updateOperationState(tabId, {
+    await updateOperationState(tabId, {
       isDetecting: false,  // Detection phase is complete
       detectionProgress: '🐻 Kuma found a research paper! (Paper detected!)',
       currentPaper: detectResponse.paper,
@@ -88,7 +75,7 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
     return { success: true, paper: detectResponse.paper };
   } catch (flowError) {
     console.error('[Orchestrator] Error in detect flow:', flowError);
-    updateOperationState(tabId, {
+    await updateOperationState(tabId, {
       isDetecting: false,
       isExplaining: false,
       isAnalyzing: false,

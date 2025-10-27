@@ -280,19 +280,17 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
             if (paper) {
               const tabIds = tabPaperTracker.getTabsForPaperUrl(paper.url);
               for (const tabId of tabIds) {
-                const state = operationStateService.updateState(tabId, {
+                await operationStateService.updateStateAndBroadcast(tabId, {
                   embeddingProgress: progressMessage,
                 });
-                await operationStateService.broadcastStateChange(state);
               }
             }
           } else {
             const tabIds = tabPaperTracker.getTabsForPaperUrl(paperUrl);
             for (const tabId of tabIds) {
-              const state = operationStateService.updateState(tabId, {
+              await operationStateService.updateStateAndBroadcast(tabId, {
                 embeddingProgress: progressMessage,
               });
-              await operationStateService.broadcastStateChange(state);
             }
           }
         })();

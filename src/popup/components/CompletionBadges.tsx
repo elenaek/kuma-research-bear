@@ -79,20 +79,20 @@ export function CompletionBadges({
   const canTrigger = hasChunked;
 
   // Tooltip messages
-  const explanationTooltip = hasExplanation
-    ? 'Explanation complete'
-    : isExplaining
-    ? 'Generating explanation...'
-    : canTrigger
-    ? 'Click to generate an explanation of the paper'
-    : 'Complete paper extraction/chunking first';
-
   const summaryTooltip = hasSummary
     ? 'Summary complete'
     : isGeneratingSummary
     ? 'Generating summary...'
     : canTrigger
     ? 'Click to generate a summary of the paper'
+    : 'Complete paper extraction/chunking first';
+
+  const explanationTooltip = hasExplanation
+    ? 'Explanation complete'
+    : isExplaining
+    ? 'Generating explanation...'
+    : canTrigger
+    ? 'Click to generate an explanation of the paper'
     : 'Complete paper extraction/chunking first';
 
   const analysisTooltip = hasAnalysis
@@ -114,20 +114,20 @@ export function CompletionBadges({
   return (
     <div class="grid grid-cols-2 gap-2 mt-3">
       <FeatureBadge
-        name="Explanation"
-        completed={hasExplanation}
-        active={isExplaining}
-        onClick={canTrigger ? onExplanationClick : undefined}
-        readyIdle={canTrigger && !hasExplanation && !isExplaining}
-        tooltip={explanationTooltip}
-      />
-      <FeatureBadge
         name="Summary"
         completed={hasSummary}
         active={isGeneratingSummary}
         onClick={canTrigger ? onSummaryClick : undefined}
         readyIdle={canTrigger && !hasSummary && !isGeneratingSummary}
         tooltip={summaryTooltip}
+      />
+      <FeatureBadge
+        name="Explanation"
+        completed={hasExplanation}
+        active={isExplaining}
+        onClick={canTrigger ? onExplanationClick : undefined}
+        readyIdle={canTrigger && !hasExplanation && !isExplaining}
+        tooltip={explanationTooltip}
       />
       <FeatureBadge
         name="Analysis"

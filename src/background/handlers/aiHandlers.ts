@@ -57,13 +57,12 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
 
     // Update operation state to show explaining is in progress
     if (tabId) {
-      const state = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         isExplaining: true,
         explanationProgress: '🐻 Kuma is thinking of ways to explain the research paper...',
         currentPaper: paper,
         error: null,
       });
-      broadcastStateChange(state);
     }
 
     // Get stored paper to check for hierarchical summary
@@ -99,12 +98,11 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
 
     // Update operation state to show completion
     if (tabId) {
-      const state = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         isExplaining: false,
         explanationProgress: '🐻 Kuma has finished explaining the research paper!',
         error: null,
       });
-      broadcastStateChange(state);
     }
 
     // Get output language for metadata
@@ -118,7 +116,7 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
     // Update completion tracking in operation state
     if (tabId) {
       const status = await paperStatusService.checkPaperStatus(storedPaper.url);
-      operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         hasExplanation: status.hasExplanation,
         hasSummary: status.hasSummary,
         hasAnalysis: status.hasAnalysis,
@@ -132,12 +130,11 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
   } catch (explainError) {
     // Update operation state to show error
     if (tabId) {
-      const state = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         isExplaining: false,
         explanationProgress: '',
         error: `🐻 Kuma had trouble explaining: ${String(explainError)}`,
       });
-      broadcastStateChange(state);
     }
 
     throw explainError;
@@ -165,12 +162,11 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
 
     // Update operation state to show explanation is starting
     if (tabId) {
-      const state = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         isExplaining: true,
         explanationProgress: '🐻 Kuma is generating an explanation for the research paper...',
         error: null,
       });
-      broadcastStateChange(state);
     }
 
     // Create new explanation promise
@@ -184,10 +180,9 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
 
       // Update state with current paper
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           currentPaper: storedPaper,
         });
-        broadcastStateChange(state);
       }
 
       console.log(`[AIHandlers] Generating explanation for paper: ${storedPaper.title} with context: ${contextId}`);
@@ -233,7 +228,7 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
       // Update completion tracking in operation state
       if (tabId) {
         const status = await paperStatusService.checkPaperStatus(storedPaper.url);
-        operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           hasExplanation: status.hasExplanation,
           hasSummary: status.hasSummary,
           hasAnalysis: status.hasAnalysis,
@@ -245,19 +240,17 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
 
       // Update operation state to show completion
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           isExplaining: false,
           explanationProgress: '🐻 Kuma has finished generating the explanation!',
           error: null,
         });
-        broadcastStateChange(state);
 
         // Clear the progress message after a delay
-        setTimeout(() => {
-          const state = operationStateService.updateState(tabId, {
+        setTimeout(async () => {
+          await operationStateService.updateStateAndBroadcast(tabId, {
             explanationProgress: '',
           });
-          broadcastStateChange(state);
         }, 5000);
       }
 
@@ -268,12 +261,11 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
 
       // Update operation state to show error
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           isExplaining: false,
           explanationProgress: '',
           error: `🐻 Kuma had trouble generating explanation: ${String(explanationError)}`,
         });
-        broadcastStateChange(state);
       }
 
       return {
@@ -369,12 +361,11 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
 
     // Update operation state to show summary generation is starting
     if (tabId) {
-      const state = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         isGeneratingSummary: true,
         summaryProgress: '🐻 Kuma is generating a summary for the research paper...',
         error: null,
       });
-      broadcastStateChange(state);
     }
 
     // Create new summary generation promise
@@ -388,10 +379,9 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
 
       // Update state with current paper
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           currentPaper: storedPaper,
         });
-        broadcastStateChange(state);
       }
 
       console.log(`[AIHandlers] Generating summary for paper: ${storedPaper.title} with context: ${contextId}`);
@@ -438,7 +428,7 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
       // Update completion tracking in operation state
       if (tabId) {
         const status = await paperStatusService.checkPaperStatus(storedPaper.url);
-        operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           hasExplanation: status.hasExplanation,
           hasSummary: status.hasSummary,
           hasAnalysis: status.hasAnalysis,
@@ -450,19 +440,17 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
 
       // Update operation state to show completion
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           isGeneratingSummary: false,
           summaryProgress: '🐻 Kuma has finished generating the summary!',
           error: null,
         });
-        broadcastStateChange(state);
 
         // Clear the progress message after a delay
-        setTimeout(() => {
-          const state = operationStateService.updateState(tabId, {
+        setTimeout(async () => {
+          await operationStateService.updateStateAndBroadcast(tabId, {
             summaryProgress: '',
           });
-          broadcastStateChange(state);
         }, 5000);
       }
 
@@ -473,12 +461,11 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
 
       // Update operation state to show error
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           isGeneratingSummary: false,
           summaryProgress: '',
           error: `🐻 Kuma had trouble generating summary: ${String(summaryError)}`,
         });
-        broadcastStateChange(state);
       }
 
       return {
@@ -494,12 +481,11 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
 
     // Update operation state to show error
     if (tabId) {
-      const state = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         isGeneratingSummary: false,
         summaryProgress: '',
         error: `🐻 Kuma couldn't generate summary: ${String(error)}`,
       });
-      broadcastStateChange(state);
     }
 
     requestDeduplicationService.deleteRequest(requestKey);
@@ -541,12 +527,11 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
 
     // Update operation state to show analysis is starting
     if (tabId) {
-      const state = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         isAnalyzing: true,
         analysisProgress: '🐻 Kuma is deeply analyzing the research paper...',
         error: null,
       });
-      broadcastStateChange(state);
     }
 
     // Create new analysis promise
@@ -560,10 +545,9 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
 
       // Update state with current paper
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           currentPaper: storedPaper,
         });
-        broadcastStateChange(state);
       }
 
       console.log(`[AIHandlers] Analyzing paper: ${storedPaper.title} with context: ${analysisContextId}`);
@@ -669,7 +653,7 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
       // Update completion tracking in operation state
       if (tabId) {
         const status = await paperStatusService.checkPaperStatus(storedPaper.url);
-        operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           hasExplanation: status.hasExplanation,
           hasSummary: status.hasSummary,
           hasAnalysis: status.hasAnalysis,
@@ -681,7 +665,7 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
 
       // Update operation state to show completion
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           isAnalyzing: false,
           analysisProgress: '🐻 Kuma has finished analyzing the research paper!',
           analysisProgressStage: null,
@@ -689,14 +673,12 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
           totalAnalysisSteps: 0,
           error: null,
         });
-        broadcastStateChange(state);
 
         // Clear the progress message after a delay
-        setTimeout(() => {
-          const state = operationStateService.updateState(tabId, {
+        setTimeout(async () => {
+          await operationStateService.updateStateAndBroadcast(tabId, {
             analysisProgress: '',
           });
-          broadcastStateChange(state);
         }, 5000);
       }
 
@@ -707,7 +689,7 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
 
       // Update operation state to show error
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           isAnalyzing: false,
           analysisProgress: '',
           analysisProgressStage: null,
@@ -715,7 +697,6 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
           totalAnalysisSteps: 0,
           error: `🐻 Kuma had trouble analyzing: ${String(analysisError)}`,
         });
-        broadcastStateChange(state);
       }
 
       return {
@@ -731,7 +712,7 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
 
     // Update operation state to show error
     if (tabId) {
-      const state = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         isAnalyzing: false,
         analysisProgress: '',
         analysisProgressStage: null,
@@ -739,7 +720,6 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
         totalAnalysisSteps: 0,
         error: `🐻 Kuma couldn't analyze: ${String(error)}`,
       });
-      broadcastStateChange(state);
     }
 
     requestDeduplicationService.deleteRequest(requestKey);
@@ -822,13 +802,12 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
 
       // Update operation state to show glossary generation is in progress
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           isGeneratingGlossary: true,
           glossaryProgress: '🐻 Kuma is generating a glossary for the research paper...',
           currentPaper: storedPaper,
           error: null,
         });
-        broadcastStateChange(state);
       }
 
       // Step 1: Aggregate terms from chunks
@@ -1028,7 +1007,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
       // Update completion tracking in operation state
       if (tabId) {
         const status = await paperStatusService.checkPaperStatus(storedPaper.url);
-        operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           hasExplanation: status.hasExplanation,
           hasSummary: status.hasSummary,
           hasAnalysis: status.hasAnalysis,
@@ -1040,7 +1019,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
 
       // Update operation state to show completion
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           isGeneratingGlossary: false,
           glossaryProgress: '🐻 Kuma has finished generating the glossary!',
           glossaryProgressStage: null,
@@ -1048,17 +1027,15 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
           totalGlossaryTerms: 0,
           error: null,
         });
-        broadcastStateChange(state);
 
         // Clear the progress message after a delay
-        setTimeout(() => {
-          const state = operationStateService.updateState(tabId, {
+        setTimeout(async () => {
+          await operationStateService.updateStateAndBroadcast(tabId, {
             glossaryProgress: '',
             glossaryProgressStage: null,
             currentGlossaryTerm: 0,
             totalGlossaryTerms: 0,
           });
-          broadcastStateChange(state);
         }, 5000);
       }
 
@@ -1069,7 +1046,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
 
       // Update operation state to show error
       if (tabId) {
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           isGeneratingGlossary: false,
           glossaryProgress: '',
           glossaryProgressStage: null,
@@ -1077,7 +1054,6 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
           totalGlossaryTerms: 0,
           error: `🐻 Kuma had trouble generating glossary: ${String(glossaryError)}`,
         });
-        broadcastStateChange(state);
       }
 
       return {
@@ -1093,7 +1069,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
 
     // Update operation state to show error
     if (tabId) {
-      const state = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         isGeneratingGlossary: false,
         glossaryProgress: '',
         glossaryProgressStage: null,
@@ -1101,7 +1077,6 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
         totalGlossaryTerms: 0,
         error: `🐻 Kuma couldn't generate glossary: ${String(error)}`,
       });
-      broadcastStateChange(state);
     }
 
     return {

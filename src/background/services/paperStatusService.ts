@@ -84,7 +84,7 @@ export async function checkPaperStatus(url: string): Promise<PaperStatus> {
  * Update operation state from a stored paper's completion status
  * Syncs the operation state with what's actually in the database
  */
-export function updateOperationStateFromStoredPaper(tabId: number, status: PaperStatus): void {
+export async function updateOperationStateFromStoredPaper(tabId: number, status: PaperStatus): Promise<void> {
   if (!status.isStored || !status.paper) {
     console.log('[PaperStatus] No stored paper, keeping operation state as-is');
     return;
@@ -94,7 +94,7 @@ export function updateOperationStateFromStoredPaper(tabId: number, status: Paper
   tabPaperTracker.registerPaper(tabId, status.paper);
 
   // Update the operation state with completion info
-  operationStateService.updateState(tabId, {
+  await operationStateService.updateStateAndBroadcast(tabId, {
     isPaperStored: true,
     currentPaper: status.paper as ResearchPaper,
     hasExplanation: status.hasExplanation,

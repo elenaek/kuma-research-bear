@@ -20,7 +20,7 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
 
     // Update state to show chunking/summarization is starting
     if (tabId) {
-      const initialState = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         isChunking: true,
         chunkingProgress: '🐻 Kuma is reading through the research paper by sections... (Preparing chunks)',
         currentChunk: 0,
@@ -28,9 +28,6 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
         hasDetected: true,  // Mark detection as complete (since we're starting chunking)
         hasChunked: false,  // Reset chunking completion flag
       });
-
-      // Broadcast initial chunking state to all relevant tabs
-      await operationStateService.broadcastStateChange(initialState);
     }
 
     const { storePaper } = await import('../../utils/dbService.ts');
@@ -48,15 +45,12 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
             : '🐻 Kuma is organizing the research paper... (Preparing chunks)';
         }
 
-        const state = operationStateService.updateState(tabId, {
+        await operationStateService.updateStateAndBroadcast(tabId, {
           chunkingProgress: progressMessage,
           currentChunk: current,
           totalChunks: total,
           hasChunked: current === total,  // Mark as chunked when current === total
         });
-
-        // Broadcast chunking progress to all relevant tabs
-        await operationStateService.broadcastStateChange(state);
       }
     };
 
@@ -67,7 +61,7 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
       // Register paper with tab tracker
       tabPaperTracker.registerPaper(tabId, storedPaper);
 
-      const state = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         currentPaper: storedPaper,
         isPaperStored: true,
         isChunking: false,
@@ -80,12 +74,6 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
         isGeneratingEmbeddings: true,
         embeddingProgress: 'Kuma is learning the semantic meaning of the paper... (Initializing)',
       });
-
-      // Broadcast state change to all relevant tabs
-      await operationStateService.broadcastStateChange(state);
-
-      // Update icon to show "stored" state
-      await iconService.updateIconForTab(tabId, state);
     }
 
     // Generate embeddings in offscreen document (tracked operation)
@@ -101,15 +89,12 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
 
           // Update state to mark embeddings as complete
           if (tabId) {
-            const embeddingCompleteState = operationStateService.updateState(tabId, {
+            await operationStateService.updateStateAndBroadcast(tabId, {
               isGeneratingEmbeddings: false,
               embeddingProgress: '',
               hasEmbeddings: true,
               imageExplanationReady: true,  // Image explanations now available
             });
-
-            // Broadcast embedding completion to all relevant tabs
-            await operationStateService.broadcastStateChange(embeddingCompleteState);
 
             // Also send a dedicated EMBEDDINGS_COMPLETE message
             chrome.runtime.sendMessage({
@@ -124,14 +109,12 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
 
           // Even if embeddings fail, enable image explanations (they can still work with keyword search)
           if (tabId) {
-            const failState = operationStateService.updateState(tabId, {
+            await operationStateService.updateStateAndBroadcast(tabId, {
               isGeneratingEmbeddings: false,
               embeddingProgress: '',
               hasEmbeddings: false,  // Embeddings failed
               imageExplanationReady: true,  // But image explanations can still work
             });
-
-            await operationStateService.broadcastStateChange(failState);
           }
         }
       } catch (error) {
@@ -139,14 +122,12 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
 
         // On error, still enable image explanations
         if (tabId) {
-          const errorState = operationStateService.updateState(tabId, {
+          await operationStateService.updateStateAndBroadcast(tabId, {
             isGeneratingEmbeddings: false,
             embeddingProgress: '',
             hasEmbeddings: false,
             imageExplanationReady: true,
           });
-
-          await operationStateService.broadcastStateChange(errorState);
         }
       }
     })();
@@ -157,14 +138,12 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
 
     // Clear chunking state on error
     if (tabId) {
-      const state = operationStateService.updateState(tabId, {
+      await operationStateService.updateStateAndBroadcast(tabId, {
         isChunking: false,
         chunkingProgress: '',
         currentChunk: 0,
         totalChunks: 0,
       });
-
-      await operationStateService.broadcastStateChange(state);
     }
 
     return { success: false, error: String(dbError) };

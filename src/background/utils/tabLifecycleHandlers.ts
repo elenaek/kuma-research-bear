@@ -71,12 +71,8 @@ async function checkAndUpdatePaperStatus(tabId: number, url: string): Promise<vo
   const status = await paperStatusService.checkPaperStatus(url);
 
   if (status.isStored) {
-    // Update operation state with completion info
-    paperStatusService.updateOperationStateFromStoredPaper(tabId, status);
-
-    // Update icon to reflect stored paper
-    const state = operationStateService.getRawState(tabId)!;
-    await iconService.updateIconForTab(tabId, state);
+    // Update operation state with completion info (automatically updates icon)
+    await paperStatusService.updateOperationStateFromStoredPaper(tabId, status);
 
     console.log(`[TabLifecycle] ✓ Stored paper found for tab ${tabId}:`, {
       completionPercentage: status.completionPercentage,
