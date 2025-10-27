@@ -761,7 +761,7 @@ export const ChatBox = ({
             loopPurpose={LoopPurpose.QASection}
           />
           <span>
-            {embeddingProgress || 'Kuma is still digesting the information from this paper - answers may be limited until semantic search is ready'}
+            {embeddingProgress || 'Kuma is still digesting the information from this paper - answers may be limited until he\'s ready'}
           </span>
         </div>
 
@@ -874,7 +874,7 @@ export const ChatBox = ({
       {/* Embedding disclaimer above input */}
       <div class={`chatbox-input-disclaimer ${isGeneratingEmbeddings && !hasEmbeddings && activeTab?.type === 'paper' ? 'visible' : ''}`}>
         <AlertCircle size={14} />
-        <span>Kuma is still digesting the information from this paper - answers may be limited until semantic search is ready</span>
+        <span>Kuma is still digesting the information from this paper - answers may be limited until he's ready</span>
       </div>
 
       {/* Input area */}

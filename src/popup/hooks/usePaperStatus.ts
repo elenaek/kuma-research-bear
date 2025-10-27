@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
 import * as ChromeService from '../../services/ChromeService.ts';
 import { MessageType, ResearchPaper } from '../../types/index.ts';
+import { normalizeUrl } from '../../utils/urlUtils.ts';
 
 interface UsePaperStatusReturn {
   // State
@@ -37,8 +38,12 @@ export function usePaperStatus(currentTabUrl?: string): UsePaperStatusReturn {
 
         // Filter: Only accept broadcasts for current tab
         const paperUrl = state?.currentPaper?.url;
-        if (currentTabUrlRef.current && paperUrl && currentTabUrlRef.current !== paperUrl) {
-          return;
+        if (currentTabUrlRef.current && paperUrl) {
+          const normalizedCurrentUrl = normalizeUrl(currentTabUrlRef.current);
+          const normalizedPaperUrl = normalizeUrl(paperUrl);
+          if (normalizedCurrentUrl !== normalizedPaperUrl) {
+            return;
+          }
         }
 
         if (state?.currentPaper) {
