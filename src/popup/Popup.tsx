@@ -279,7 +279,7 @@ export function Popup() {
   const shouldAutoLoop = isOperationActive || isComplete;
 
   return (
-    <div class="w-90 max-h-80 bg-gradient-to-br from-gray-50 to-gray-100">
+    <div class="w-90 max-h-96 bg-gradient-to-br from-gray-50 to-gray-100">
       <div class="p-6">
         {/* Language Selector - Top Left Corner */}
         <div class="absolute p-2 top-0 left-0 hover:cursor-pointer">

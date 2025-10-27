@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChatMessage, ChatboxPosition, ChatTab } from '../../types/index.ts';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
 import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.tsx';
+import { AlertCircle } from 'lucide-preact';
 
 interface ChatBoxProps {
   // Multi-tab support (NEW)
@@ -752,19 +753,17 @@ export const ChatBox = ({
       {/* Messages area */}
       <div ref={messagesContainerRef} class="chatbox-messages">
         {/* Embedding generation indicator */}
-        {isGeneratingEmbeddings && !hasEmbeddings && activeTab?.type === 'paper' && (
-          <div class="chatbox-embedding-indicator">
-            <LottiePlayer
-              path={chrome.runtime.getURL('lotties/kuma-thinking.lottie')}
-              size={20}
-              autoStartLoop={true}
-              loopPurpose={LoopPurpose.QASection}
-            />
-            <span>
-              {embeddingProgress || 'Kuma is still digesting the information from this paper - answers may be limited until semantic search is ready'}
-            </span>
-          </div>
-        )}
+        <div class={`chatbox-embedding-indicator ${isGeneratingEmbeddings && !hasEmbeddings && activeTab?.type === 'paper' ? 'visible' : ''}`}>
+          <LottiePlayer
+            path={chrome.runtime.getURL('lotties/kuma-thinking-glasses.lottie')}
+            size={40}
+            autoStartLoop={true}
+            loopPurpose={LoopPurpose.QASection}
+          />
+          <span>
+            {embeddingProgress || 'Kuma is still digesting the information from this paper - answers may be limited until semantic search is ready'}
+          </span>
+        </div>
 
         {messages.length === 0 && !isStreaming && (
           <div class="chatbox-empty">
@@ -870,6 +869,12 @@ export const ChatBox = ({
         )}
 
         <div ref={messagesEndRef} />
+      </div>
+
+      {/* Embedding disclaimer above input */}
+      <div class={`chatbox-input-disclaimer ${isGeneratingEmbeddings && !hasEmbeddings && activeTab?.type === 'paper' ? 'visible' : ''}`}>
+        <AlertCircle size={14} />
+        <span>Kuma is still digesting the information from this paper - answers may be limited until semantic search is ready</span>
       </div>
 
       {/* Input area */}

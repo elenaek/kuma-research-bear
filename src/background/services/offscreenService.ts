@@ -62,7 +62,7 @@ export async function closeOffscreenDocument(): Promise<void> {
 export async function generateEmbeddingsOffscreen(
   paperId: string,
   paperUrl?: string
-): Promise<{ success: boolean; count?: number; error?: string }> {
+): Promise<{ success: boolean; count?: number; device?: 'webgpu' | 'wasm'; error?: string }> {
   try {
     // Ensure offscreen document exists
     await setupOffscreenDocument();
@@ -74,8 +74,9 @@ export async function generateEmbeddingsOffscreen(
     });
 
     if (response.success) {
-      console.log('[Offscreen] ✓ Generated', response.count, 'embeddings');
-      return { success: true, count: response.count };
+      const backendUsed = response.device === 'webgpu' ? 'WebGPU (GPU-accelerated)' : 'WASM (CPU)';
+      console.log(`[Offscreen] ✓ Generated ${response.count} embeddings using ${backendUsed}`);
+      return { success: true, count: response.count, device: response.device };
     } else {
       return { success: false, error: response.error };
     }

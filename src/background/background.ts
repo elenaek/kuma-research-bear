@@ -255,7 +255,11 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
       case MessageType.EMBEDDING_PROGRESS:
         // Handle embedding progress updates from offscreen document
         (async () => {
-          const { paperId, current, total } = message.payload;
+          const { paperId, current, total, device } = message.payload;
+
+          // Create progress message with backend indicator
+          const backendNote = device === 'webgpu' ? ' -⚡ WebGPU-accelerated' : '';
+          const progressMessage = `Kuma is reading the paper and learning the semantic meaning... (${current}/${total} embeddings${backendNote})`;
 
           // Find the tab(s) viewing this paper
           const paperUrl = message.payload.paperUrl;
@@ -267,7 +271,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
               const tabIds = tabPaperTracker.getTabsForPaperUrl(paper.url);
               for (const tabId of tabIds) {
                 const state = operationStateService.updateState(tabId, {
-                  embeddingProgress: `Kuma is learning the semantic meaning... (${current}/${total} embeddings)`,
+                  embeddingProgress: progressMessage,
                 });
                 await operationStateService.broadcastStateChange(state);
               }
@@ -276,7 +280,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
             const tabIds = tabPaperTracker.getTabsForPaperUrl(paperUrl);
             for (const tabId of tabIds) {
               const state = operationStateService.updateState(tabId, {
-                embeddingProgress: `Kuma is learning the semantic meaning... (${current}/${total} embeddings)`,
+                embeddingProgress: progressMessage,
               });
               await operationStateService.broadcastStateChange(state);
             }

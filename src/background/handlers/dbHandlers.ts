@@ -76,12 +76,16 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
         totalChunks: 0,
         hasChunked: true,  // Mark chunking as complete
         chatReady: true,  // Chat is now available (may use keyword search until embeddings ready)
+        imageExplanationReady: true,  // Image explanations now available (before embeddings complete)
         isGeneratingEmbeddings: true,
-        embeddingProgress: 'Kuma is learning the semantic meaning of the paper... (Generating embeddings)',
+        embeddingProgress: 'Kuma is learning the semantic meaning of the paper... (Initializing)',
       });
 
       // Broadcast state change to all relevant tabs
       await operationStateService.broadcastStateChange(state);
+
+      // Update icon to show "stored" state
+      await iconService.updateIconForTab(tabId, state);
     }
 
     // Generate embeddings in offscreen document (tracked operation)
@@ -92,7 +96,8 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
         const result = await generateEmbeddingsOffscreen(storedPaper.id, storedPaper.url);
 
         if (result.success) {
-          console.log('[DBHandlers] ✓ Generated', result.count, 'embeddings in offscreen document');
+          const backendUsed = result.device === 'webgpu' ? 'WebGPU (GPU-accelerated)' : 'WASM (CPU)';
+          console.log(`[DBHandlers] ✅ Generated ${result.count} embeddings using ${backendUsed}`);
 
           // Update state to mark embeddings as complete
           if (tabId) {

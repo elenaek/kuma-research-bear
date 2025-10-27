@@ -6,6 +6,7 @@ import {
   EMBEDDING_PREFIXES,
   DEFAULT_EMBEDDING_CONFIG,
   SimilarityScore,
+  getOptimalDtype,
 } from '../types/embedding.ts';
 
 /**
@@ -27,6 +28,7 @@ class EmbeddingService {
   private status: EmbeddingModelStatus = 'not-loaded';
   private config: EmbeddingModelConfig = DEFAULT_EMBEDDING_CONFIG;
   private loadPromise: Promise<void> | null = null;
+  private device: 'webgpu' | 'wasm' | null = null;  // Track which backend is being used
 
   /**
    * Check if Transformers.js and WebGPU/WASM are available
@@ -58,6 +60,7 @@ class EmbeddingService {
         available: true,
         status: this.status,
         modelConfig: this.config,
+        device: this.device ?? undefined,  // Include backend device if loaded
       };
     } catch (error) {
       console.error('[Embedding] Error checking availability:', error);
@@ -105,38 +108,87 @@ class EmbeddingService {
 
         this.tokenizer = await AutoTokenizer.from_pretrained(this.config.modelId);
 
-        // Try WebGPU first for GPU acceleration, fallback to WASM
-        let device = 'wasm';
+        // Detect and test WebGPU availability
+        let targetDevice: 'webgpu' | 'wasm' = 'wasm';
+
         try {
-          // Check if WebGPU is available
-          if (typeof navigator !== 'undefined' && 'gpu' in navigator) {
-            device = 'webgpu';
-            console.log('[Embedding] WebGPU detected, attempting GPU acceleration');
+          // Check if WebGPU API exists and actually works
+          if (typeof navigator !== 'undefined' && 'gpu' in navigator && navigator.gpu) {
+            console.log('[Embedding] WebGPU API detected, testing adapter...');
+            const adapter = await navigator.gpu.requestAdapter();
+
+            if (adapter) {
+              targetDevice = 'webgpu';
+              console.log('[Embedding] ✓ WebGPU adapter available, will attempt GPU acceleration');
+            } else {
+              console.log('[Embedding] WebGPU adapter request failed, using WASM backend');
+            }
           } else {
             console.log('[Embedding] WebGPU not available, using WASM backend');
           }
         } catch (e) {
-          console.log('[Embedding] Error detecting WebGPU, falling back to WASM');
+          console.log('[Embedding] Error testing WebGPU adapter, falling back to WASM:', e);
         }
 
+        // Select optimal dtype for the target device
+        const optimalDtype = getOptimalDtype(targetDevice);
+        console.log(`[Embedding] 📦 Loading model with ${optimalDtype} quantization for ${targetDevice.toUpperCase()}`);
+        console.log(`[Embedding] Model ID: ${this.config.modelId}`);
+
+        // Estimated model sizes: fp32 (~300MB) for WebGPU, q4 (~80MB) for WASM
+        const estimatedSize = optimalDtype === 'fp32' ? '~300MB' : '~80MB';
+        console.log(`[Embedding] Estimated download size: ${estimatedSize}`);
+
+        // Try loading with optimal settings for detected backend
         try {
+          console.log(`[Embedding] ⏳ Downloading and initializing model... (this may take a minute)`);
+
           this.model = await AutoModel.from_pretrained(this.config.modelId, {
-            dtype: this.config.dtype,
-            device: device,
+            dtype: optimalDtype,
+            device: targetDevice,
+            progress_callback: (progress: any) => {
+              // Log download progress
+              if (progress.status === 'download') {
+                const percent = progress.loaded && progress.total
+                  ? ((progress.loaded / progress.total) * 100).toFixed(1)
+                  : '?';
+                console.log(`[Embedding] 📥 Downloading ${progress.file}: ${percent}%`);
+              } else if (progress.status === 'done') {
+                console.log(`[Embedding] ✓ Downloaded ${progress.file}`);
+              }
+            },
           });
 
+          this.device = targetDevice;
           this.status = 'ready';
-          console.log(`[Embedding] ✓ Model loaded successfully with ${device.toUpperCase()} backend`);
+          console.log(`[Embedding] ✅ Model loaded successfully with ${targetDevice.toUpperCase()} backend (${optimalDtype})`);
+          console.log(`[Embedding] 🚀 Ready for inference!`);
         } catch (modelError) {
-          // If WebGPU fails, fallback to WASM
-          if (device === 'webgpu') {
-            console.warn('[Embedding] WebGPU failed, falling back to WASM:', modelError);
+          // If WebGPU fails, fallback to WASM with q4
+          if (targetDevice === 'webgpu') {
+            console.warn('[Embedding] ❌ WebGPU model loading failed, falling back to WASM:', modelError);
+
+            const wasmDtype = getOptimalDtype('wasm');
+            console.log(`[Embedding] 🔄 Retrying with WASM backend (${wasmDtype})...`);
+
             this.model = await AutoModel.from_pretrained(this.config.modelId, {
-              dtype: this.config.dtype,
+              dtype: wasmDtype, // q4 for WASM
               device: 'wasm',
+              progress_callback: (progress: any) => {
+                if (progress.status === 'download') {
+                  const percent = progress.loaded && progress.total
+                    ? ((progress.loaded / progress.total) * 100).toFixed(1)
+                    : '?';
+                  console.log(`[Embedding] 📥 Downloading ${progress.file}: ${percent}%`);
+                } else if (progress.status === 'done') {
+                  console.log(`[Embedding] ✓ Downloaded ${progress.file}`);
+                }
+              },
             });
+
+            this.device = 'wasm';
             this.status = 'ready';
-            console.log('[Embedding] ✓ Model loaded successfully with WASM backend (fallback)');
+            console.log(`[Embedding] ✅ Model loaded successfully with WASM backend (${wasmDtype}, fallback)`);
           } else {
             throw modelError;
           }
@@ -356,6 +408,7 @@ class EmbeddingService {
     this.tokenizer = null;
     this.status = 'not-loaded';
     this.loadPromise = null;
+    this.device = null;
     console.log('[Embedding] Model unloaded');
   }
 }

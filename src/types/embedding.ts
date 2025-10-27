@@ -61,6 +61,7 @@ export interface EmbeddingCapabilities {
   available: boolean;
   status: EmbeddingModelStatus;
   modelConfig?: EmbeddingModelConfig;
+  device?: 'webgpu' | 'wasm';  // Backend device being used
   error?: string;
 }
 
@@ -75,9 +76,19 @@ export const EMBEDDING_PREFIXES = {
 
 /**
  * Default embedding model configuration
+ * Uses q4 quantization for both WebGPU and WASM (~80MB model size)
  */
 export const DEFAULT_EMBEDDING_CONFIG: EmbeddingModelConfig = {
   modelId: 'onnx-community/embeddinggemma-300m-ONNX',
-  dtype: 'q4', // 80-100MB, good for browser use
+  dtype: 'q4', // 4-bit quantization for both backends
   dimensions: 256, // Balance between accuracy and storage
 };
+
+/**
+ * Get optimal dtype for a given backend
+ * WebGPU: fp32 (native GPU operations, ~300MB, better parallelization)
+ * WASM: q4 (optimized for CPU, ~80MB, fallback)
+ */
+export function getOptimalDtype(device: 'webgpu' | 'wasm'): 'fp32' | 'q8' | 'q4' {
+  return device === 'webgpu' ? 'fp32' : 'q4';
+}
