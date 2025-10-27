@@ -14,6 +14,7 @@ interface CompletionBadgesProps {
   onSummaryClick?: () => void;
   onAnalysisClick?: () => void;
   onGlossaryClick?: () => void;
+  disableInteraction?: boolean; // Prevents clicks during initial render
 }
 
 interface FeatureBadgeProps {
@@ -74,6 +75,7 @@ export function CompletionBadges({
   onSummaryClick,
   onAnalysisClick,
   onGlossaryClick,
+  disableInteraction = false,
 }: CompletionBadgesProps) {
   // All features can be triggered independently once paper is chunked
   const canTrigger = hasChunked;
@@ -117,7 +119,7 @@ export function CompletionBadges({
         name="Summary"
         completed={hasSummary}
         active={isGeneratingSummary}
-        onClick={canTrigger ? onSummaryClick : undefined}
+        onClick={canTrigger && !disableInteraction ? onSummaryClick : undefined}
         readyIdle={canTrigger && !hasSummary && !isGeneratingSummary}
         tooltip={summaryTooltip}
       />
@@ -125,7 +127,7 @@ export function CompletionBadges({
         name="Explanation"
         completed={hasExplanation}
         active={isExplaining}
-        onClick={canTrigger ? onExplanationClick : undefined}
+        onClick={canTrigger && !disableInteraction ? onExplanationClick : undefined}
         readyIdle={canTrigger && !hasExplanation && !isExplaining}
         tooltip={explanationTooltip}
       />
@@ -133,7 +135,7 @@ export function CompletionBadges({
         name="Analysis"
         completed={hasAnalysis}
         active={isAnalyzing}
-        onClick={canTrigger ? onAnalysisClick : undefined}
+        onClick={canTrigger && !disableInteraction ? onAnalysisClick : undefined}
         readyIdle={canTrigger && !hasAnalysis && !isAnalyzing}
         tooltip={analysisTooltip}
       />
@@ -141,7 +143,7 @@ export function CompletionBadges({
         name="Glossary"
         completed={hasGlossary}
         active={isGeneratingGlossary}
-        onClick={canTrigger ? onGlossaryClick : undefined}
+        onClick={canTrigger && !disableInteraction ? onGlossaryClick : undefined}
         readyIdle={canTrigger && !hasGlossary && !isGeneratingGlossary}
         tooltip={glossaryTooltip}
       />

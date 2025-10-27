@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'preact/hooks';
 import { Database, Trash2 } from 'lucide-preact';
 import type { ResearchPaper } from '../../types/index.ts';
 import { OperationBadges } from './OperationBadges.tsx';
@@ -61,6 +62,17 @@ export function PaperInfoCard({
   onDeletePaper,
   paperId,
 }: PaperInfoCardProps) {
+  const [isInitialRender, setIsInitialRender] = useState(true);
+
+  // Disable interaction for 300ms on mount to prevent accidental clicks
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsInitialRender(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <div class="card mb-4 bg-blue-50 border-blue-200">
       <div class="flex items-start justify-between gap-2 mb-2">
@@ -75,7 +87,8 @@ export function PaperInfoCard({
           {isPaperStored && paperId && onDeletePaper && (
             <button
               onClick={onDeletePaper}
-              class="p-1 text-red-600 hover:bg-red-50 rounded transition-colors hover:cursor-pointer"
+              disabled={isInitialRender}
+              class="p-1 text-red-600 hover:bg-red-50 rounded transition-colors hover:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               title="Delete this paper"
             >
               <Trash2 size={14} />
@@ -112,6 +125,7 @@ export function PaperInfoCard({
           onSummaryClick={onGenerateSummary}
           onAnalysisClick={onGenerateAnalysis}
           onGlossaryClick={onGenerateGlossary}
+          disableInteraction={isInitialRender}
         />
       )}
     </div>
