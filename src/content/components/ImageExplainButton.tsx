@@ -46,8 +46,8 @@ export const ImageExplainButton = ({
         e.stopPropagation();
         onClick();
       }}
-      title={hasExplanation ? 'Toggle explanation' : 'Explain this image'}
-      aria-label={hasExplanation ? 'Toggle image explanation' : 'Get AI explanation for this image'}
+      title={hasExplanation ? 'Toggle explanation' : 'Discuss this image with Kuma'}
+      aria-label={hasExplanation ? 'Toggle image explanation' : 'Discuss this image with Kuma'}
     >
       {hasExplanation ? (
         // Show thinking glasses bear (static, frame 1)

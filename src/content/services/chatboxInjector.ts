@@ -1007,7 +1007,7 @@ class ChatboxInjector {
     // Listen for paper changes and streaming messages
     chrome.runtime.onMessage.addListener((message) => {
       if (message.type === 'PAPER_CONTEXT_CHANGED') {
-        this.handlePaperContextChange(message.payload);
+        this.updatePaperContext(message.payload);
       } else if (message.type === 'CHAT_STREAM_CHUNK') {
         this.handlePaperStreamChunk(message.payload);
       } else if (message.type === 'CHAT_STREAM_END') {
@@ -1041,7 +1041,11 @@ class ChatboxInjector {
     this.render();
   }
 
-  private async handlePaperContextChange(paper: StoredPaper | null) {
+  /**
+   * Update the current paper context
+   * Public method to allow direct calls from content.ts
+   */
+  async updatePaperContext(paper: StoredPaper | null) {
     this.currentPaper = paper;
     await this.loadPaperChatHistory();
 
@@ -1202,7 +1206,7 @@ class ChatboxInjector {
   async openImageTab(
     imageUrl: string,
     imageBlob: Blob,
-    imageButtonElement: HTMLElement,
+    imageButtonElement: HTMLElement | null | undefined,
     title: string,
     isGeneratingExplanation: boolean = false
   ): Promise<void> {

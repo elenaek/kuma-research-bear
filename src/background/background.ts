@@ -28,6 +28,7 @@ const CONTEXT_MENU_ID = 'open-chat'; // Extension icon - chat menu
 const CONTEXT_MENU_PAGE_ID = 'chat-with-kuma-page'; // Page - chat menu
 const CONTEXT_MENU_DETECT_ID = 'detect-paper-page'; // Page - detect paper menu
 const CONTEXT_MENU_IMAGE_ID = 'discuss-image-with-kuma'; // Image - discuss image menu
+const CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID = 'toggle-image-buttons'; // Page - toggle image buttons
 
 // Track pending paper extractions (paperUrl → tabId)
 // Used to reconnect tabId after offscreen processing completes
@@ -43,6 +44,7 @@ chrome.runtime.onInstalled.addListener(async () => {
       enableAutoDetect: true,
       defaultExplanationLevel: 'simple',
       theme: 'auto',
+      showImageButtons: true,
     },
   });
 
@@ -86,6 +88,15 @@ chrome.runtime.onInstalled.addListener(async () => {
     title: 'Discuss this image with Kuma',
     contexts: ['image'],
     enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
+  });
+
+  // Create context menu for toggling image buttons
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID,
+    title: 'Show Image Explanation Buttons',
+    contexts: ['page'],
+    type: 'checkbox',
+    checked: true, // Default to checked
   });
 
   console.log('Context menus created');
@@ -428,6 +439,13 @@ export async function updateContextMenuState() {
     await chrome.contextMenus.update(CONTEXT_MENU_DETECT_ID, {
       enabled: paperNotStored,
     });
+
+    // Update image buttons toggle checkbox to match current setting
+    const { settings } = await chrome.storage.local.get('settings');
+    const showImageButtons = settings?.showImageButtons ?? true;
+    await chrome.contextMenus.update(CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID, {
+      checked: showImageButtons,
+    });
   } catch (error) {
     // Context menu might not exist yet, that's ok
     console.debug('[ContextMenu] Could not update menu state:', error);
@@ -479,6 +497,29 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         type: MessageType.CONTEXT_MENU_IMAGE_DISCUSS,
         payload: { imageUrl: info.srcUrl },
       });
+    }
+    // Handle "Show Image Explanation Buttons" toggle
+    else if (info.menuItemId === CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID) {
+      console.log('[ContextMenu] Toggle image buttons:', info.checked);
+      // Update setting
+      const { settings } = await chrome.storage.local.get('settings');
+      await chrome.storage.local.set({
+        settings: {
+          ...settings,
+          showImageButtons: info.checked,
+        },
+      });
+
+      // Broadcast change to all tabs
+      const tabs = await chrome.tabs.query({});
+      for (const tabItem of tabs) {
+        if (tabItem.id) {
+          chrome.tabs.sendMessage(tabItem.id, {
+            type: MessageType.IMAGE_BUTTONS_VISIBILITY_CHANGED,
+            payload: { showImageButtons: info.checked },
+          }).catch(() => {}); // Ignore errors for tabs without content script
+        }
+      }
     }
   } catch (error) {
     console.error('[ContextMenu] Error handling context menu click:', error);

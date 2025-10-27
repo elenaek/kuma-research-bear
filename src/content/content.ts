@@ -93,6 +93,11 @@ function setupMessageListener() {
             // imageExplanationHandler.initialize() will check if already initialized and skip if so
             await imageExplanationHandler.initialize(storedPaper);
             console.log('[Content] ✓ Image buttons initialized after embeddings complete');
+
+            // Update chatbox paper context directly
+            // This ensures chatbox.currentPaper is set for newly detected papers
+            await chatboxInjector.updatePaperContext(storedPaper);
+            console.log('[Content] ✓ Chatbox paper context updated');
           }
         }
       }
@@ -287,14 +292,15 @@ async function initializeImageButtonsForStoredPaper() {
   // Initialize text selection handler (depends on chatbox)
   await setupTextSelection();
 
-  // Wait for page to fully load, then restore chatbox tabs and initialize image buttons
-  // Both operations need images to be loaded
-  await chatboxInjector.restoreTabs();
-  console.log('[Content] ✓ Tabs restored');
-
   // BUG FIX: Initialize image buttons for already-chunked papers (e.g., after extension reload)
   // This waits for page load internally to ensure images are ready
+  // MUST run BEFORE restoreTabs() so image states exist for tab restoration
   await initializeImageButtonsForStoredPaper();
+  console.log('[Content] ✓ Image buttons initialized');
+
+  // Restore chatbox tabs (depends on image buttons being created first)
+  await chatboxInjector.restoreTabs();
+  console.log('[Content] ✓ Tabs restored');
 
   console.log('[Content] ✓ Content script initialized successfully');
 })();

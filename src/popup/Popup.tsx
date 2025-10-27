@@ -10,7 +10,9 @@ import { OperationBadges } from './components/OperationBadges.tsx';
 import { ActionButtons } from './components/ActionButtons.tsx';
 import { LottiePlayerHandle } from '../shared/components/LottiePlayer.tsx';
 import { LanguageDropdown } from './components/LanguageDropdown.tsx';
+import { ImageButtonsToggle } from './components/ImageButtonsToggle.tsx';
 import { normalizeUrl } from '../utils/urlUtils.ts';
+import { MessageType } from '../types/index.ts';
 
 export function Popup() {
   // Ref for Lottie animation control
@@ -29,6 +31,9 @@ export function Popup() {
   // Delete paper state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Image buttons toggle state
+  const [showImageButtons, setShowImageButtons] = useState(true);
 
   // Custom hooks
   const aiStatus = useAIStatus();
@@ -57,6 +62,20 @@ export function Popup() {
   // Check operation state on mount
   useEffect(() => {
     checkInitialState();
+  }, []);
+
+  // Load image buttons setting on mount
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const { settings } = await chrome.storage.local.get('settings');
+        const showButtons = settings?.showImageButtons ?? true;
+        setShowImageButtons(showButtons);
+      } catch (error) {
+        console.error('[Popup] Failed to load settings:', error);
+      }
+    }
+    loadSettings();
   }, []);
 
   // Listen for PAPER_DELETED messages
@@ -340,6 +359,35 @@ export function Popup() {
     setShowDeleteConfirm(false);
   }
 
+  async function handleToggleImageButtons() {
+    const newValue = !showImageButtons;
+    setShowImageButtons(newValue);
+
+    try {
+      // Update setting in storage
+      const { settings } = await chrome.storage.local.get('settings');
+      await chrome.storage.local.set({
+        settings: {
+          ...settings,
+          showImageButtons: newValue,
+        },
+      });
+
+      // Broadcast change to all tabs
+      const tabs = await chrome.tabs.query({});
+      for (const tab of tabs) {
+        if (tab.id) {
+          chrome.tabs.sendMessage(tab.id, {
+            type: MessageType.IMAGE_BUTTONS_VISIBILITY_CHANGED,
+            payload: { showImageButtons: newValue },
+          }).catch(() => {}); // Ignore errors for tabs without content script
+        }
+      }
+    } catch (error) {
+      console.error('[Popup] Failed to toggle image buttons:', error);
+    }
+  }
+
   // Determine if Lottie animation should auto-start looping
   const isOperationActive =
     operationState.isDetecting ||
@@ -380,6 +428,7 @@ export function Popup() {
           onReset={aiStatus.handleResetAI}
           paperReady={operationState.hasExplanation && operationState.hasSummary}
         />
+
 
         {/* Show operation badges early when operations are active but no paper yet */}
         {!paperStatus.paper && (operationState.isDetecting || operationState.isChunking || operationState.hasDetected || operationState.hasChunked || operationState.detectionFailed) && (
@@ -475,6 +524,12 @@ export function Popup() {
           onDetectPaper={handleDetectPaper}
           onOpenSidepanel={handleOpenSidepanel}
           onOpenChat={handleOpenChat}
+        />
+
+        {/* Image Buttons Toggle */}
+        <ImageButtonsToggle
+          showImageButtons={showImageButtons}
+          onToggle={handleToggleImageButtons}
         />
       </div>
     </div>

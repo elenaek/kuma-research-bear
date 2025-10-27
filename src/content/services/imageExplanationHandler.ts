@@ -31,6 +31,7 @@ class ImageExplanationHandler {
   private isInitialized = false;
   private multimodalAvailable = false;
   private currentPaper: any = null;
+  private showImageButtons = true; // Stores user setting for button visibility
 
   /**
    * Get image state by URL (used for tab restoration)
@@ -64,7 +65,17 @@ class ImageExplanationHandler {
       return;
     }
 
-    // Detect and setup images
+    // Load user setting for button visibility FIRST
+    try {
+      const { settings } = await chrome.storage.local.get('settings');
+      this.showImageButtons = settings?.showImageButtons ?? true;
+      console.log('[ImageExplain] Button visibility setting:', this.showImageButtons);
+    } catch (error) {
+      console.error('[ImageExplain] Error loading settings:', error);
+      this.showImageButtons = true; // Default to visible
+    }
+
+    // Detect and setup images (will render correctly based on showImageButtons)
     await this.setupImages();
 
     // Watch for dynamically added images
@@ -166,8 +177,8 @@ class ImageExplanationHandler {
       bubbleContainer,
       buttonRoot,
       bubbleShadowRoot,
-      transparencyEnabled: true, // Default to enabled
-      hasInteractedSinceOpen: false, // No interaction yet
+      transparencyEnabled: true,
+      hasInteractedSinceOpen: false,
     };
 
     this.imageStates.set(image.url, imageState);
@@ -284,24 +295,23 @@ class ImageExplanationHandler {
     try {
       const blob = await imageElementToBlob(imageState.element);
       const title = imageState.title || 'Image Explanation';
-      const buttonElement = imageState.buttonContainer;
+      const buttonElement = imageState.buttonContainer; // Can be null when buttons are hidden
       const hasExplanation = !!imageState.explanation;
 
-      if (buttonElement) {
-        // Open image tab with loading state if no explanation exists
-        await chatboxInjector.openImageTab(imageUrl, blob, buttonElement, title, !hasExplanation);
+      // Open image tab with loading state if no explanation exists
+      // buttonElement can be null - chatbox will use default positioning
+      await chatboxInjector.openImageTab(imageUrl, blob, buttonElement, title, !hasExplanation);
 
-        // Generate explanation if it doesn't exist
-        if (!hasExplanation) {
-          await this.generateExplanation(imageUrl);
-          // After generation completes, update the tab with explanation and title
-          if (imageState.explanation) {
-            await chatboxInjector.updateImageTabExplanation(imageUrl, imageState.explanation, imageState.title || undefined);
-          }
+      // Generate explanation if it doesn't exist
+      if (!hasExplanation) {
+        await this.generateExplanation(imageUrl);
+        // After generation completes, update the tab with explanation and title
+        if (imageState.explanation) {
+          await chatboxInjector.updateImageTabExplanation(imageUrl, imageState.explanation, imageState.title || undefined);
         }
-
-        console.log('[ImageExplain] ✓ Image discussion opened');
       }
+
+      console.log('[ImageExplain] ✓ Image discussion opened');
     } catch (error) {
       console.error('[ImageExplain] Error opening image discussion:', error);
     }
@@ -384,12 +394,32 @@ class ImageExplanationHandler {
       return;
     }
 
+    // Only render full button if setting is enabled
+    if (this.showImageButtons) {
+      render(
+        h(ImageExplainButton, {
+          visible: true,
+          hasExplanation: !!imageState.explanation,
+          isLoading: imageState.isLoading,
+          onClick: () => this.handleButtonClick(imageUrl),
+        }),
+        rootElement
+      );
+    } else {
+      this.renderMinimalPlaceholder(rootElement);
+    }
+  }
+
+  private renderMinimalPlaceholder(rootElement: HTMLElement) {
+    // Render a 1px invisible div - keeps element in DOM for compass arrow
     render(
-      h(ImageExplainButton, {
-        visible: true,
-        hasExplanation: !!imageState.explanation,
-        isLoading: imageState.isLoading,
-        onClick: () => this.handleButtonClick(imageUrl),
+      h('div', {
+        style: {
+          width: '1px',
+          height: '1px',
+          opacity: '0',
+          pointerEvents: 'none',
+        },
       }),
       rootElement
     );
@@ -696,6 +726,45 @@ class ImageExplanationHandler {
         font-size: 13px;
       }
     `;
+  }
+
+  /**
+   * Hide buttons by re-rendering as minimal placeholders
+   * Keeps DOM elements in place for compass arrow and tab restoration
+   */
+  hideButtons() {
+    console.log('[ImageExplain] Hiding image explanation buttons...');
+
+    // Update setting
+    this.showImageButtons = false;
+
+    // Re-render all buttons as minimal placeholders
+    for (const [url, state] of this.imageStates) {
+      if (state.buttonRoot) {
+        this.renderMinimalPlaceholder(state.buttonRoot);
+      }
+    }
+
+    console.log('[ImageExplain] ✓ Buttons hidden');
+  }
+
+  /**
+   * Show buttons by re-rendering as full buttons
+   */
+  showButtons() {
+    console.log('[ImageExplain] Showing image explanation buttons...');
+
+    // Update setting
+    this.showImageButtons = true;
+
+    // Re-render all placeholders as full buttons
+    for (const [url, state] of this.imageStates) {
+      if (state.buttonRoot) {
+        this.renderButton(url, state.buttonRoot);
+      }
+    }
+
+    console.log('[ImageExplain] ✓ Buttons shown');
   }
 
   destroy() {

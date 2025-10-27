@@ -772,7 +772,7 @@ export const ChatBox = ({
             <p class="text-sm opacity-50">
               {disabled
                 ? 'No paper loaded. Navigate to a research paper to start chatting.'
-                : 'Start a conversation about this paper!'}
+                : 'Start a conversation with Kuma about this paper!'}
             </p>
           </div>
         )}

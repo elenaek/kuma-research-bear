@@ -151,6 +151,19 @@ export function createMessageRouter(getCurrentPaper: () => ResearchPaper | null)
             }
             break;
 
+          case MessageType.IMAGE_BUTTONS_VISIBILITY_CHANGED:
+            // Handle image buttons visibility toggle
+            const { showImageButtons } = message.payload;
+            if (showImageButtons) {
+              // Show buttons for already-detected images
+              await imageExplanationHandler.showButtons();
+            } else {
+              // Hide buttons but preserve detection state
+              imageExplanationHandler.hideButtons();
+            }
+            sendResponse({ success: true });
+            break;
+
           default:
             sendResponse({ success: false, error: 'Unknown message type' });
         }
