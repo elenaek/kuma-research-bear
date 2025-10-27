@@ -23,9 +23,10 @@ import * as chatHandlers from './handlers/chatHandlers.ts';
 import { executeDetectAndExplainFlow } from './orchestrators/detectAndExplainOrchestrator.ts';
 import { inputQuotaService } from '../utils/inputQuotaService.ts';
 
-// Context menu IDs for opening chatbox
-const CONTEXT_MENU_ID = 'open-chat'; // Extension icon context menu
-const CONTEXT_MENU_PAGE_ID = 'chat-with-kuma-page'; // Page context menu
+// Context menu IDs
+const CONTEXT_MENU_ID = 'open-chat'; // Extension icon - chat menu
+const CONTEXT_MENU_PAGE_ID = 'chat-with-kuma-page'; // Page - chat menu
+const CONTEXT_MENU_DETECT_ID = 'detect-paper-page'; // Page - detect paper menu
 
 // Track pending paper extractions (paperUrl → tabId)
 // Used to reconnect tabId after offscreen processing completes
@@ -68,6 +69,14 @@ chrome.runtime.onInstalled.addListener(async () => {
     title: 'Chat with Kuma',
     contexts: ['page'],
     enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
+  });
+
+  // Create context menu for detecting paper from page right-click
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_DETECT_ID,
+    title: 'Detect Paper with Kuma',
+    contexts: ['page'],
+    enabled: true, // Initially enabled, will be disabled when paper is already stored
   });
 
   console.log('Context menus created');
@@ -349,21 +358,63 @@ async function isChatReady(tabId: number): Promise<boolean> {
 }
 
 /**
- * Update context menu state for the active tab
+ * Check if paper is NOT stored for a tab (inverse of isChatReady)
+ * Returns true when no paper is stored or paper is not yet chunked
+ * Also returns false (disables detect) when detection/chunking is in progress
  */
-async function updateContextMenuState() {
+async function isPaperNotStored(tabId: number): Promise<boolean> {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.url) return false;
+
+    // Check operation state by tab ID (works even before paper exists)
+    const state = operationStateService.getRawState(tabId);
+    if (state) {
+      // Paper is stored and ready - disable detect
+      if (state.chatReady) {
+        return false;
+      }
+
+      // Detection/chunking/embedding in progress - disable detect to prevent duplicate operations
+      if (state.isDetecting || state.isChunking || state.isGeneratingEmbeddings) {
+        return false;
+      }
+    }
+
+    // Check if paper exists in database
+    const paper = await dbHandlers.handleGetPaperByUrl({ url: tab.url });
+    const paperExists = !!(paper.success && paper.paper && paper.paper.chunkCount > 0);
+
+    return !paperExists; // Return true if paper doesn't exist or isn't chunked
+  } catch (error) {
+    console.error('[ContextMenu] Error checking paper storage status:', error);
+    return false; // Default to not showing detect menu on error
+  }
+}
+
+/**
+ * Update context menu state for the active tab
+ * Exported so operationStateService can call it when state changes
+ */
+export async function updateContextMenuState() {
   try {
     const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!activeTab || !activeTab.id) return;
 
     const chatReady = await isChatReady(activeTab.id);
+    const paperNotStored = await isPaperNotStored(activeTab.id);
 
-    // Update both context menus
+    // Update chat context menus (enabled when paper is stored and chunked)
     await chrome.contextMenus.update(CONTEXT_MENU_ID, {
       enabled: chatReady,
     });
     await chrome.contextMenus.update(CONTEXT_MENU_PAGE_ID, {
       enabled: chatReady,
+    });
+
+    // Update detect paper context menu (enabled when paper is NOT stored)
+    await chrome.contextMenus.update(CONTEXT_MENU_DETECT_ID, {
+      enabled: paperNotStored,
     });
   } catch (error) {
     // Context menu might not exist yet, that's ok
@@ -392,15 +443,24 @@ export async function updateContextMenuForPaper(paperUrl: string) {
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if ((info.menuItemId === CONTEXT_MENU_ID || info.menuItemId === CONTEXT_MENU_PAGE_ID) && tab?.id) {
-    try {
+  if (!tab?.id) return;
+
+  try {
+    // Handle "Chat with Kuma" menu items
+    if (info.menuItemId === CONTEXT_MENU_ID || info.menuItemId === CONTEXT_MENU_PAGE_ID) {
       // Send message to content script to toggle chatbox
       await chrome.tabs.sendMessage(tab.id, {
         type: MessageType.TOGGLE_CHATBOX,
       });
-    } catch (error) {
-      console.error('[ContextMenu] Error opening chatbox:', error);
     }
+    // Handle "Detect Paper with Kuma" menu item
+    else if (info.menuItemId === CONTEXT_MENU_DETECT_ID) {
+      console.log('[ContextMenu] Detect Paper triggered from context menu for tab', tab.id);
+      // Execute the detect and explain flow (same as popup button)
+      await executeDetectAndExplainFlow(tab.id);
+    }
+  } catch (error) {
+    console.error('[ContextMenu] Error handling context menu click:', error);
   }
 });
 

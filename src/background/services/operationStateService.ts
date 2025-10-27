@@ -1,6 +1,6 @@
 import { OperationState, MessageType } from '../../types/index.ts';
 import { tabPaperTracker } from './tabPaperTracker.ts';
-import { updateContextMenuForPaper } from '../background.ts';
+import { updateContextMenuForPaper, updateContextMenuState } from '../background.ts';
 import { normalizeUrl } from '../../utils/urlUtils.ts';
 import * as iconService from './iconService.ts';
 
@@ -175,6 +175,13 @@ export async function broadcastStateChange(state: OperationState): Promise<void>
 
       // Update context menu for this paper
       await updateContextMenuForPaper(state.currentPaper.url);
+    }
+
+    // IMPORTANT: Also update context menu if this state change is for the active tab
+    // This handles cases where detection/chunking starts before a paper exists
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (activeTab?.id === state.tabId) {
+      await updateContextMenuState();
     }
   } catch (error) {
     console.error('[OperationState] Error broadcasting state change:', error);

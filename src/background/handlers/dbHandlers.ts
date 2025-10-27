@@ -240,6 +240,20 @@ export async function handleDeletePaper(payload: any): Promise<any> {
         if (matchingTabs.length > 0) {
           console.log(`[DBHandlers] ✓ Icons updated for ${matchingTabs.length} tab(s)`);
         }
+
+        // Update context menus if active tab was viewing this paper
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTab && activeTab.url && normalizeUrl(activeTab.url) === normalizedDeletedUrl) {
+          // Paper deleted from active tab - update context menus
+          try {
+            await chrome.contextMenus.update('open-chat', { enabled: false });
+            await chrome.contextMenus.update('chat-with-kuma-page', { enabled: false });
+            await chrome.contextMenus.update('detect-paper-page', { enabled: true });
+            console.log('[DBHandlers] ✓ Context menus updated after paper deletion');
+          } catch (menuError) {
+            console.warn('[DBHandlers] Failed to update context menus:', menuError);
+          }
+        }
       } catch (iconError) {
         console.warn('[DBHandlers] Failed to update icons:', iconError);
         // Don't fail the deletion if icon update fails
