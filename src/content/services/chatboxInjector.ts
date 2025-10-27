@@ -1173,6 +1173,32 @@ class ChatboxInjector {
     }
   }
 
+  /**
+   * Handle paper deletion
+   * Closes chatbox and resets state when the current paper is deleted
+   */
+  async handlePaperDeletion() {
+    console.log('[Kuma Chat] Handling paper deletion, resetting state...');
+
+    // Hide the chatbox
+    this.cleanupCompassTracking();
+    this.settings.visible = false;
+
+    // Reset paper reference
+    this.currentPaper = null;
+
+    // Reset to default paper tab with empty state
+    await this.initializePaperTab();
+
+    // Save settings (clears saved image tabs from storage)
+    await this.saveSettings();
+
+    // Re-render
+    this.render();
+
+    console.log('[Kuma Chat] ✓ Chatbox reset after paper deletion');
+  }
+
   async openWithQuery(query: string) {
     // Set the initial input value
     this.initialInputValue = query;

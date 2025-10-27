@@ -63,12 +63,19 @@ function setupMessageListener() {
     if (message.type === 'PAPER_DELETED') {
       console.log('[Content] Paper deleted:', message.payload);
 
-      // If deleted paper URL matches current page, destroy image buttons
+      // If deleted paper URL matches current page, clean up everything
       const currentPageUrl = normalizeUrl(window.location.href);
       const deletedPaperUrl = normalizeUrl(message.payload.paperUrl);
       if (deletedPaperUrl === currentPageUrl) {
-        console.log('[Content] Current page paper was deleted, removing image buttons');
+        console.log('[Content] Current page paper was deleted, cleaning up...');
+
+        // Destroy image buttons
         imageExplanationHandler.destroy();
+
+        // Close chatbox and reset state
+        await chatboxInjector.handlePaperDeletion();
+
+        console.log('[Content] ✓ Cleanup complete');
       }
     }
 
