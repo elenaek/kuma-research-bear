@@ -785,7 +785,21 @@ export const ChatBox = ({
             <div class="chatbox-message-role">
               {msg.role === 'user' ? 'You' : 'Kuma'}
             </div>
-            <div class="chatbox-message-content"><MarkdownRenderer content={msg.content} /></div>
+            <div class="chatbox-message-content">
+              {msg.content === '___LOADING_EXPLANATION___' ? (
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+                  <LottiePlayer
+                    path={chrome.runtime.getURL('lotties/kuma-thinking-glasses.lottie')}
+                    size={60}
+                    autoStartLoop={true}
+                    loopPurpose={LoopPurpose.QASection}
+                  />
+                  <span style="font-size: 13px; color: #6b7280;">Kuma is analyzing the image...</span>
+                </div>
+              ) : (
+                <MarkdownRenderer content={msg.content} />
+              )}
+            </div>
             {msg.sources && msg.sources.length > 0 && (
               <div class="chatbox-message-sources">
                 <button
@@ -818,7 +832,7 @@ export const ChatBox = ({
               </div>
             )}
             {/* Regenerate button for first message in image tabs */}
-            {idx === 0 && msg.role === 'assistant' && activeTab?.type === 'image' && onRegenerateExplanation && (
+            {idx === 0 && msg.role === 'assistant' && msg.content !== '___LOADING_EXPLANATION___' && activeTab?.type === 'image' && onRegenerateExplanation && (
               <button
                 class="chatbox-regenerate-btn"
                 onClick={onRegenerateExplanation}

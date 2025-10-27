@@ -3,6 +3,7 @@ import { detectPaperWithAIOnly } from '../services/paperDetectionService.ts';
 import { storePaper } from '../services/paperStorageService.ts';
 import { aiService } from '../../utils/aiService.ts';
 import { chatboxInjector } from '../services/chatboxInjector.ts';
+import { imageExplanationHandler } from '../services/imageExplanationHandler.ts';
 
 /**
  * Message Handlers
@@ -138,6 +139,16 @@ export function createMessageRouter(getCurrentPaper: () => ResearchPaper | null)
               success: true,
               isOpen: chatboxInjector.settings.visible
             });
+            break;
+
+          case MessageType.CONTEXT_MENU_IMAGE_DISCUSS:
+            // Handle image context menu click
+            if (message.payload?.imageUrl) {
+              await imageExplanationHandler.handleContextMenuClick(message.payload.imageUrl);
+              sendResponse({ success: true });
+            } else {
+              sendResponse({ success: false, error: 'No image URL provided' });
+            }
             break;
 
           default:

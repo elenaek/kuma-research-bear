@@ -27,6 +27,7 @@ import { inputQuotaService } from '../utils/inputQuotaService.ts';
 const CONTEXT_MENU_ID = 'open-chat'; // Extension icon - chat menu
 const CONTEXT_MENU_PAGE_ID = 'chat-with-kuma-page'; // Page - chat menu
 const CONTEXT_MENU_DETECT_ID = 'detect-paper-page'; // Page - detect paper menu
+const CONTEXT_MENU_IMAGE_ID = 'discuss-image-with-kuma'; // Image - discuss image menu
 
 // Track pending paper extractions (paperUrl → tabId)
 // Used to reconnect tabId after offscreen processing completes
@@ -77,6 +78,14 @@ chrome.runtime.onInstalled.addListener(async () => {
     title: 'Detect Paper with Kuma',
     contexts: ['page'],
     enabled: true, // Initially enabled, will be disabled when paper is already stored
+  });
+
+  // Create context menu for discussing images
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_IMAGE_ID,
+    title: 'Discuss this image with Kuma',
+    contexts: ['image'],
+    enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
   });
 
   console.log('Context menus created');
@@ -411,6 +420,9 @@ export async function updateContextMenuState() {
     await chrome.contextMenus.update(CONTEXT_MENU_PAGE_ID, {
       enabled: chatReady,
     });
+    await chrome.contextMenus.update(CONTEXT_MENU_IMAGE_ID, {
+      enabled: chatReady,
+    });
 
     // Update detect paper context menu (enabled when paper is NOT stored)
     await chrome.contextMenus.update(CONTEXT_MENU_DETECT_ID, {
@@ -458,6 +470,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       console.log('[ContextMenu] Detect Paper triggered from context menu for tab', tab.id);
       // Execute the detect and explain flow (same as popup button)
       await executeDetectAndExplainFlow(tab.id);
+    }
+    // Handle "Discuss this image with Kuma" menu item
+    else if (info.menuItemId === CONTEXT_MENU_IMAGE_ID) {
+      console.log('[ContextMenu] Discuss image triggered for:', info.srcUrl);
+      // Send message to content script with image URL
+      await chrome.tabs.sendMessage(tab.id, {
+        type: MessageType.CONTEXT_MENU_IMAGE_DISCUSS,
+        payload: { imageUrl: info.srcUrl },
+      });
     }
   } catch (error) {
     console.error('[ContextMenu] Error handling context menu click:', error);

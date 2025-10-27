@@ -1203,7 +1203,8 @@ class ChatboxInjector {
     imageUrl: string,
     imageBlob: Blob,
     imageButtonElement: HTMLElement,
-    title: string
+    title: string,
+    isGeneratingExplanation: boolean = false
   ): Promise<void> {
     if (!this.currentPaper) {
       console.error('[Kuma Chat] No paper loaded, cannot open image tab');
@@ -1258,28 +1259,38 @@ class ChatboxInjector {
 
     // If no chat history exists, check for a stored explanation and seed it as the first message
     if (imageTab.messages.length === 0) {
-      try {
-        const response = await ChromeService.getImageExplanation(this.currentPaper.id, imageUrl);
-        if (response.success && response.explanation) {
-          // Ensure content is a string (defensive check for structured output issues)
-          let content: string;
-          if (typeof response.explanation.explanation === 'string') {
-            content = response.explanation.explanation;
-          } else {
-            console.warn('[Kuma Chat] explanation is not a string, stringifying:', typeof response.explanation.explanation);
-            content = JSON.stringify(response.explanation.explanation);
-          }
+      if (isGeneratingExplanation) {
+        // Add loading message with special marker
+        imageTab.messages.push({
+          role: 'assistant',
+          content: '___LOADING_EXPLANATION___',
+          timestamp: Date.now(),
+        });
+        console.log('[Kuma Chat] Added loading message for explanation generation');
+      } else {
+        try {
+          const response = await ChromeService.getImageExplanation(this.currentPaper.id, imageUrl);
+          if (response.success && response.explanation) {
+            // Ensure content is a string (defensive check for structured output issues)
+            let content: string;
+            if (typeof response.explanation.explanation === 'string') {
+              content = response.explanation.explanation;
+            } else {
+              console.warn('[Kuma Chat] explanation is not a string, stringifying:', typeof response.explanation.explanation);
+              content = JSON.stringify(response.explanation.explanation);
+            }
 
-          // Add the explanation as the first assistant message
-          imageTab.messages.push({
-            role: 'assistant',
-            content,
-            timestamp: Date.now(),
-          });
-          console.log('[Kuma Chat] Seeded initial explanation from cache');
+            // Add the explanation as the first assistant message
+            imageTab.messages.push({
+              role: 'assistant',
+              content,
+              timestamp: Date.now(),
+            });
+            console.log('[Kuma Chat] Seeded initial explanation from cache');
+          }
+        } catch (error) {
+          console.error('[Kuma Chat] Error loading initial explanation:', error);
         }
-      } catch (error) {
-        console.error('[Kuma Chat] Error loading initial explanation:', error);
       }
     }
 
@@ -1297,6 +1308,46 @@ class ChatboxInjector {
     this.render();
 
     console.log('[Kuma Chat] ✓ Image tab opened:', tabId);
+  }
+
+  /**
+   * Update image tab with generated explanation (replaces loading message)
+   */
+  async updateImageTabExplanation(imageUrl: string, explanation: string, title?: string): Promise<void> {
+    // Find the image tab by imageUrl
+    const imageTab = this.tabs.find(t => t.type === 'image' && t.imageUrl === imageUrl);
+
+    if (!imageTab) {
+      console.warn('[Kuma Chat] Image tab not found for URL:', imageUrl);
+      return;
+    }
+
+    // Check if the first message is a loading message
+    if (imageTab.messages.length > 0 && imageTab.messages[0].content === '___LOADING_EXPLANATION___') {
+      // Replace loading message with actual explanation
+      imageTab.messages[0] = {
+        role: 'assistant',
+        content: explanation,
+        timestamp: Date.now(),
+      };
+
+      // Update tab title if provided
+      if (title) {
+        imageTab.title = title;
+      }
+
+      // Save to database
+      if (this.currentPaper) {
+        await this.saveImageChatHistory(imageTab.id, this.currentPaper.id, imageUrl);
+      }
+
+      // Re-render to show the updated explanation and title
+      this.render();
+
+      console.log('[Kuma Chat] ✓ Updated image tab with generated explanation and title');
+    } else {
+      console.warn('[Kuma Chat] First message is not a loading message, skipping update');
+    }
   }
 
   /**

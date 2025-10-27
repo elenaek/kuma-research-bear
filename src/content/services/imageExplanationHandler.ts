@@ -212,8 +212,8 @@ class ImageExplanationHandler {
 
   private positionButton(img: HTMLImageElement, buttonContainer: HTMLDivElement) {
     const rect = img.getBoundingClientRect();
-    buttonContainer.style.left = `${rect.left - 56}px`; // 48px button + 8px gap
-    buttonContainer.style.top = `${rect.top}px`; // Align with top edge
+    buttonContainer.style.left = `${rect.left + 8}px`; // Left edge + padding
+    buttonContainer.style.top = `${rect.top + 8}px`; // Top edge + padding
   }
 
   private positionBubble(imageState: ImageState) {
@@ -254,33 +254,63 @@ class ImageExplanationHandler {
     }
   }
 
-  private async handleButtonClick(imageUrl: string) {
+  /**
+   * Handle context menu click for an image
+   * Called from content script message handler
+   */
+  async handleContextMenuClick(imageUrl: string) {
+    // Check if this image is in our detected images
+    const imageState = this.imageStates.get(imageUrl);
+    if (!imageState) {
+      console.log('[ImageExplain] Context menu clicked on non-detected image, ignoring');
+      return;
+    }
+
+    console.log('[ImageExplain] Context menu click for detected image:', imageUrl);
+    await this.openImageDiscussion(imageUrl);
+  }
+
+  /**
+   * Open image discussion (unified method for button and context menu)
+   */
+  private async openImageDiscussion(imageUrl: string) {
     const imageState = this.imageStates.get(imageUrl);
     if (!imageState) {
       return;
     }
 
-    console.log('[ImageExplain] Button clicked for:', imageUrl);
+    console.log('[ImageExplain] Opening image discussion for:', imageUrl);
 
-    // NEW: Open in multi-tab chatbox instead of bubble
-    // If explanation doesn't exist yet, generate it first
-    if (!imageState.explanation) {
-      await this.generateExplanation(imageUrl);
-    }
-
-    // Open image chat in chatbox (or switch to existing tab)
     try {
       const blob = await imageElementToBlob(imageState.element);
       const title = imageState.title || 'Image Explanation';
       const buttonElement = imageState.buttonContainer;
+      const hasExplanation = !!imageState.explanation;
 
       if (buttonElement) {
-        await chatboxInjector.openImageTab(imageUrl, blob, buttonElement, title);
-        console.log('[ImageExplain] ✓ Opened image tab in chatbox');
+        // Open image tab with loading state if no explanation exists
+        await chatboxInjector.openImageTab(imageUrl, blob, buttonElement, title, !hasExplanation);
+
+        // Generate explanation if it doesn't exist
+        if (!hasExplanation) {
+          await this.generateExplanation(imageUrl);
+          // After generation completes, update the tab with explanation and title
+          if (imageState.explanation) {
+            await chatboxInjector.updateImageTabExplanation(imageUrl, imageState.explanation, imageState.title || undefined);
+          }
+        }
+
+        console.log('[ImageExplain] ✓ Image discussion opened');
       }
     } catch (error) {
-      console.error('[ImageExplain] Error opening image tab:', error);
+      console.error('[ImageExplain] Error opening image discussion:', error);
     }
+  }
+
+  private async handleButtonClick(imageUrl: string) {
+    console.log('[ImageExplain] Button clicked for:', imageUrl);
+    // Use unified discussion opener
+    await this.openImageDiscussion(imageUrl);
   }
 
   private async generateExplanation(imageUrl: string) {
@@ -556,11 +586,13 @@ class ImageExplanationHandler {
         width: 48px;
         height: 48px;
         position: relative;
+        opacity: 0.6;
       }
 
       .image-explain-button:hover {
         transform: scale(1.15);
         filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+        opacity: 1.0;
       }
 
       .image-explain-button.has-explanation {
