@@ -200,6 +200,18 @@ export function Sidepanel() {
             const allPapers = await ChromeService.getAllPapers();
             paperNavigation.setAllPapers(allPapers);
 
+            // Re-sync the current paper's index after array update
+            // Papers are sorted by storedAt (newest first), so new papers change indices
+            // This prevents the navigation from jumping to a different paper
+            const currentPaperUrl = currentPaperUrlRef.current;
+            if (currentPaperUrl) {
+              const newIndex = allPapers.findIndex(p => normalizeUrl(p.url) === normalizeUrl(currentPaperUrl));
+              if (newIndex !== -1 && newIndex !== paperNavigation.currentPaperIndex) {
+                console.log('[Sidepanel] Re-syncing paper index after array update:', paperNavigation.currentPaperIndex, '→', newIndex);
+                paperNavigation.setCurrentPaperIndex(newIndex);
+              }
+            }
+
             // Handle transition when no paper is loaded but papers exist in database
             // This ensures the sidepanel auto-loads when going from 0→1 papers
             // Use ref to avoid stale closure bug (same pattern as isCurrentPaper check below)
