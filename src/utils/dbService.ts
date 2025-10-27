@@ -1,5 +1,6 @@
 import { ResearchPaper, StoredPaper, ContentChunk, ImageExplanation, ChatMessage, ConversationState } from '../types/index.ts';
 import { normalizeUrl } from './urlUtils.ts';
+import { getOutputLanguage } from './settingsService.ts';
 
 /**
  * IndexedDB Service for storing research papers locally
@@ -202,6 +203,9 @@ export async function storePaper(
       console.log(`[IndexedDB] Simple chunking: ${contentChunks.length} chunks created`);
     }
 
+    // Get user's preferred output language from settings
+    const outputLanguage = await getOutputLanguage();
+
     // Create stored paper object (hierarchical summary will be added after chunk storage)
     const storedPaper: StoredPaper = {
       ...paper,
@@ -213,9 +217,13 @@ export async function storePaper(
       lastAccessedAt: Date.now(),
       hierarchicalSummary: undefined,  // Will be generated after chunks are stored
       qaHistory: qaHistory || [],
-      metadata: preChunkedData?.metadata ? {
-        averageChunkSize: preChunkedData.metadata.averageChunkSize,
-      } : undefined,
+      metadata: {
+        ...paper.metadata,  // Preserve existing metadata (e.g., originalLanguage from detection)
+        outputLanguage: outputLanguage,  // Add user's preferred output language
+        ...(preChunkedData?.metadata ? {
+          averageChunkSize: preChunkedData.metadata.averageChunkSize,
+        } : {}),
+      },
     };
 
     // Store paper
