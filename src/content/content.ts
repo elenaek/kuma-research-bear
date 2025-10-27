@@ -37,7 +37,18 @@ async function init() {
     if (currentPaper) {
       console.log('[Content] ✓ Research paper detected on page load:', currentPaper.title);
     } else {
-      console.log('[Content] No research paper detected on this page');
+      // BUG FIX: If page detection failed, check IndexedDB for stored paper
+      // This handles extension reload and opening in new tab scenarios
+      console.log('[Content] No paper detected from page, checking IndexedDB...');
+      const { getPaperByUrl } = await import('../services/ChromeService.ts');
+      const storedPaper = await getPaperByUrl(window.location.href);
+
+      if (storedPaper) {
+        currentPaper = storedPaper;
+        console.log('[Content] ✓ Found stored paper in IndexedDB:', storedPaper.title);
+      } else {
+        console.log('[Content] No research paper found (page or IndexedDB)');
+      }
     }
   } catch (error) {
     console.error('[Content] Error during initialization:', error);
@@ -133,9 +144,134 @@ async function setupTextSelection() {
 }
 
 /**
- * Note: Image explanation handler is no longer initialized via a dedicated function
- * It will be initialized dynamically when imageExplanationReady becomes true
- * via the OPERATION_STATE_CHANGED message listener
+ * Wait for page to be fully loaded (including images)
+ */
+async function waitForPageReady(): Promise<void> {
+  // If document already loaded, resolve immediately
+  if (document.readyState === 'complete') {
+    return;
+  }
+
+  // Otherwise wait for load event
+  return new Promise((resolve) => {
+    window.addEventListener('load', () => resolve(), { once: true });
+  });
+}
+
+/**
+ * Wait for images in main content to be fully loaded with natural dimensions
+ * This ensures detectImages() won't filter them out due to 0 width/height
+ */
+async function waitForImagesToLoad(): Promise<void> {
+  console.log('[Content] Waiting for images to load...');
+
+  // Find main content area (same logic as imageDetectionService)
+  const MAIN_CONTENT_SELECTORS = [
+    'main', 'article', '[role="main"]', '.content', '.article-content',
+    '.paper-content', '#content', '#main', '.main-content',
+    '#abs', '.ltx_page_main', '.article-details', '.full-text',
+    '.article', '.highwire-article',
+  ];
+
+  let mainContent: HTMLElement | null = null;
+  for (const selector of MAIN_CONTENT_SELECTORS) {
+    const element = document.querySelector(selector);
+    if (element) {
+      mainContent = element as HTMLElement;
+      break;
+    }
+  }
+
+  if (!mainContent) {
+    mainContent = document.body;
+  }
+
+  // Get all images in main content
+  const images = Array.from(mainContent.querySelectorAll('img'));
+  console.log('[Content] Found', images.length, 'images to wait for');
+
+  if (images.length === 0) {
+    console.log('[Content] No images found, skipping wait');
+    return;
+  }
+
+  // Wait for each image to be loaded (with timeout)
+  const imagePromises = images.map((img) => {
+    return new Promise<void>((resolve) => {
+      // If image is already loaded with natural dimensions, resolve immediately
+      if (img.complete && img.naturalWidth > 0) {
+        resolve();
+        return;
+      }
+
+      // Set up timeout (5 seconds per image)
+      const timeout = setTimeout(() => {
+        console.log('[Content] Image load timeout:', img.src);
+        resolve(); // Resolve anyway to not block forever
+      }, 5000);
+
+      // Wait for load event
+      img.addEventListener('load', () => {
+        clearTimeout(timeout);
+        resolve();
+      }, { once: true });
+
+      // Handle errors
+      img.addEventListener('error', () => {
+        clearTimeout(timeout);
+        console.log('[Content] Image load error:', img.src);
+        resolve(); // Resolve anyway to continue
+      }, { once: true });
+    });
+  });
+
+  // Wait for all images (or timeouts)
+  await Promise.all(imagePromises);
+  console.log('[Content] ✓ All images loaded or timed out');
+}
+
+/**
+ * Initialize image explanation buttons for already-chunked papers
+ * This handles the case where extension is reloaded on a page with an existing paper
+ *
+ * IMPORTANT: Must be called AFTER page is fully loaded so images are ready
+ */
+async function initializeImageButtonsForStoredPaper() {
+  console.log('[Content] Checking if image buttons should be initialized for stored paper...');
+
+  // Wait for page to be fully loaded
+  await waitForPageReady();
+  console.log('[Content] Page fully loaded');
+
+  // CRITICAL: Wait for images to actually load their natural dimensions
+  // Without this, detectImages() will filter them out as "too small"
+  await waitForImagesToLoad();
+  console.log('[Content] Images fully loaded, proceeding with image button check');
+
+  // Check if we have a current paper
+  if (!currentPaper) {
+    console.log('[Content] No current paper, skipping image button initialization');
+    return;
+  }
+
+  // Fetch the stored paper from database
+  const { getPaperByUrl } = await import('../services/ChromeService.ts');
+  const storedPaper = await getPaperByUrl(currentPaper.url);
+
+  // If paper is stored and has chunks, initialize image buttons
+  if (storedPaper && storedPaper.chunkCount && storedPaper.chunkCount > 0) {
+    console.log('[Content] Paper already chunked, initializing image buttons');
+    await imageExplanationHandler.initialize(storedPaper);
+    console.log('[Content] ✓ Image buttons initialized for already-chunked paper');
+  } else {
+    console.log('[Content] Paper not yet chunked, image buttons will be initialized when chunking completes');
+  }
+}
+
+/**
+ * Note: Image explanation handler can be initialized in two ways:
+ * 1. For newly detected papers: via OPERATION_STATE_CHANGED message when imageExplanationReady becomes true
+ * 2. For already-chunked papers (e.g., after extension reload): via initializeImageButtonsForStoredPaper()
  */
 
 /**
@@ -157,13 +293,14 @@ async function setupTextSelection() {
   // Initialize text selection handler (depends on chatbox)
   await setupTextSelection();
 
-  // Note: Image explanation handler is no longer initialized on page load
-  // It will be initialized when imageExplanationReady becomes true (after embeddings complete)
-  // This happens via the OPERATION_STATE_CHANGED message listener
-
-  // Restore chatbox tabs AFTER page load
+  // Wait for page to fully load, then restore chatbox tabs and initialize image buttons
+  // Both operations need images to be loaded
   await chatboxInjector.restoreTabs();
   console.log('[Content] ✓ Tabs restored');
+
+  // BUG FIX: Initialize image buttons for already-chunked papers (e.g., after extension reload)
+  // This waits for page load internally to ensure images are ready
+  await initializeImageButtonsForStoredPaper();
 
   console.log('[Content] ✓ Content script initialized successfully');
 })();

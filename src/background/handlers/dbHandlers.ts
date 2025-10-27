@@ -248,13 +248,40 @@ export async function handleDeletePaper(payload: any): Promise<any> {
 
     // 4. Broadcast PAPER_DELETED message to notify all components
     if (deleted) {
+      // Send to extension components (popup, sidepanel, etc.)
       chrome.runtime.sendMessage({
         type: MessageType.PAPER_DELETED,
         payload: { paperUrl: deletedPaperUrl, paperId: payload.paperId },
       }).catch(() => {
         // No listeners, that's ok
       });
-      console.log('[DBHandlers] ✓ PAPER_DELETED broadcast sent');
+      console.log('[DBHandlers] ✓ PAPER_DELETED broadcast sent to extension');
+
+      // BUG FIX: Also send to content scripts in all tabs with matching URL
+      try {
+        const tabs = await chrome.tabs.query({});
+        const normalizedDeletedUrl = normalizeUrl(deletedPaperUrl);
+        const matchingTabs = tabs.filter(tab => tab.url && normalizeUrl(tab.url) === normalizedDeletedUrl);
+
+        for (const tab of matchingTabs) {
+          if (tab.id !== undefined) {
+            chrome.tabs.sendMessage(tab.id, {
+              type: MessageType.PAPER_DELETED,
+              payload: { paperUrl: deletedPaperUrl, paperId: payload.paperId },
+            }).catch(() => {
+              // Content script might not be loaded, that's ok
+            });
+            console.log(`[DBHandlers] ✓ PAPER_DELETED sent to content script in tab ${tab.id}`);
+          }
+        }
+
+        if (matchingTabs.length > 0) {
+          console.log(`[DBHandlers] ✓ PAPER_DELETED sent to ${matchingTabs.length} matching tab(s)`);
+        }
+      } catch (tabError) {
+        console.warn('[DBHandlers] Failed to send PAPER_DELETED to tabs:', tabError);
+        // Don't fail the deletion if tab messaging fails
+      }
     }
 
     return { success: deleted, cleanupSummary };
