@@ -26,29 +26,23 @@ function setCurrentPaper(paper: ResearchPaper | null): void {
 
 /**
  * Initialize content script
- * Auto-detect paper on page load
+ * Check for stored papers (no automatic detection)
  */
 async function init() {
   console.log('[Content] Initializing content script...');
 
   try {
-    currentPaper = await detectAndStorePaper();
+    // Only check IndexedDB for existing stored papers
+    // No automatic detection - users must press "Detect Paper" button
+    console.log('[Content] Checking IndexedDB for stored paper...');
+    const { getPaperByUrl } = await import('../services/ChromeService.ts');
+    const storedPaper = await getPaperByUrl(window.location.href);
 
-    if (currentPaper) {
-      console.log('[Content] ✓ Research paper detected on page load:', currentPaper.title);
+    if (storedPaper) {
+      currentPaper = storedPaper;
+      console.log('[Content] ✓ Found stored paper in IndexedDB:', storedPaper.title);
     } else {
-      // BUG FIX: If page detection failed, check IndexedDB for stored paper
-      // This handles extension reload and opening in new tab scenarios
-      console.log('[Content] No paper detected from page, checking IndexedDB...');
-      const { getPaperByUrl } = await import('../services/ChromeService.ts');
-      const storedPaper = await getPaperByUrl(window.location.href);
-
-      if (storedPaper) {
-        currentPaper = storedPaper;
-        console.log('[Content] ✓ Found stored paper in IndexedDB:', storedPaper.title);
-      } else {
-        console.log('[Content] No research paper found (page or IndexedDB)');
-      }
+      console.log('[Content] No stored paper found. Use "Detect Paper" button to add papers.');
     }
   } catch (error) {
     console.error('[Content] Error during initialization:', error);

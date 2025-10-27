@@ -1,14 +1,14 @@
 import { ResearchPaper } from '../../types/index.ts';
-import { detectAndStorePaper } from '../services/paperDetectionService.ts';
 
 /**
  * Mutation Handler
- * Handles MutationObserver setup for SPA paper detection
+ * Handles MutationObserver setup for SPA state management
  */
 
 /**
  * Create and configure MutationObserver for dynamic page changes
- * Re-detects papers when page content changes (useful for SPAs)
+ * Checks IndexedDB for stored papers when page content changes (useful for SPAs)
+ * Does NOT automatically detect or store new papers
  */
 export function createMutationObserver(
   getCurrentPaper: () => ResearchPaper | null,
@@ -19,20 +19,24 @@ export function createMutationObserver(
       mutation => mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0
     );
 
-    // Only re-detect if there's no current paper and the page changed significantly
+    // Only check IndexedDB if there's no current paper and the page changed significantly
     if (significantChange && !getCurrentPaper()) {
-      console.log('[MutationHandler] Significant page change detected, re-running paper detection...');
+      console.log('[MutationHandler] Significant page change detected, checking IndexedDB...');
 
-      // Use async detection
+      // Check IndexedDB for stored paper (no automatic detection)
       (async () => {
         try {
-          const paper = await detectAndStorePaper();
-          if (paper) {
-            setCurrentPaper(paper);
-            console.log('[MutationHandler] Paper detected after page mutation:', paper.title);
+          const { getPaperByUrl } = await import('../../services/ChromeService.ts');
+          const storedPaper = await getPaperByUrl(window.location.href);
+
+          if (storedPaper) {
+            setCurrentPaper(storedPaper);
+            console.log('[MutationHandler] Found stored paper after page mutation:', storedPaper.title);
+          } else {
+            console.log('[MutationHandler] No stored paper found for new page');
           }
         } catch (error) {
-          console.error('[MutationHandler] Error detecting paper after mutation:', error);
+          console.error('[MutationHandler] Error checking stored paper after mutation:', error);
         }
       })();
     }
