@@ -35,6 +35,7 @@ export enum MessageType {
   EMBEDDING_PROGRESS = 'EMBEDDING_PROGRESS', // Progress updates during embedding generation
   EMBEDDINGS_COMPLETE = 'EMBEDDINGS_COMPLETE', // Broadcast when embeddings generation completes
   SEMANTIC_SEARCH = 'SEMANTIC_SEARCH',
+  HYBRID_SEARCH = 'HYBRID_SEARCH', // Hybrid semantic + keyword search
   EXTRACT_PAPER_HTML = 'EXTRACT_PAPER_HTML', // Extract paper from HTML in offscreen
 
   // Chatbox operations

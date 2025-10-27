@@ -9,6 +9,7 @@
 import { MessageType } from '../types/index.ts';
 import { getPaperChunks } from '../utils/dbService.ts';
 import { embeddingService } from '../utils/embeddingService.ts';
+import { DEFAULT_HYBRID_CONFIG } from '../types/embedding.ts';
 
 console.log('[Offscreen] Offscreen document initialized');
 
@@ -229,6 +230,150 @@ async function searchSemantic(paperId: string, query: string, limit: number = 5)
 }
 
 /**
+ * Helper function to escape regex special characters
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Calculate keyword relevance score for a chunk
+ * Returns number of keyword occurrences
+ */
+function calculateKeywordScore(content: string, query: string): number {
+  const lowerContent = content.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const queryWords = lowerQuery.split(/\s+/);
+
+  let score = 0;
+  for (const word of queryWords) {
+    const escapedWord = escapeRegex(word);
+    const matches = (lowerContent.match(new RegExp(escapedWord, 'g')) || []).length;
+    score += matches;
+  }
+
+  return score;
+}
+
+/**
+ * Perform hybrid search combining semantic and keyword approaches
+ * Returns ranked chunk IDs based on weighted combination
+ *
+ * @param paperId - Paper ID to search within
+ * @param query - Search query
+ * @param limit - Maximum number of results
+ * @param alpha - Weight for semantic score (0-1), keyword gets (1-alpha). Default from config.
+ * @returns Ranked array of chunk IDs
+ */
+async function searchHybrid(
+  paperId: string,
+  query: string,
+  limit: number = 5,
+  alpha: number = DEFAULT_HYBRID_CONFIG.alpha
+): Promise<string[]> {
+  try {
+    // Get all chunks for the paper
+    const chunks = await getPaperChunks(paperId);
+
+    if (chunks.length === 0) {
+      return [];
+    }
+
+    // Check if chunks have embeddings
+    const hasEmbeddings = chunks.some(chunk => chunk.embedding !== undefined);
+
+    if (!hasEmbeddings) {
+      // Fall back to keyword-only search
+      console.log('[Offscreen] No embeddings, falling back to keyword search');
+      const keywordScores = chunks.map(chunk => ({
+        chunkId: chunk.id,
+        score: calculateKeywordScore(chunk.content, query)
+      }));
+
+      return keywordScores
+        .filter(s => s.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map(s => s.chunkId);
+    }
+
+    // Generate query embedding for semantic search
+    const queryEmbedding = await embeddingService.generateEmbedding(query, true);
+
+    // Filter chunks that have embeddings
+    const chunksWithEmbeddings = chunks.filter(c => c.embedding !== undefined);
+
+    if (chunksWithEmbeddings.length === 0) {
+      return [];
+    }
+
+    // STEP 1: Calculate semantic similarities (already normalized 0-1)
+    const documentEmbeddings = chunksWithEmbeddings.map(c => c.embedding!);
+    const chunkIds = chunksWithEmbeddings.map(c => c.id);
+
+    const semanticScores = embeddingService.calculateSimilarities(
+      queryEmbedding,
+      documentEmbeddings,
+      chunkIds,
+      chunks.length // Get all scores, we'll re-rank after combining
+    );
+
+    // Convert to map for easy lookup
+    const semanticScoreMap = new Map(semanticScores.map(s => [s.chunkId, s.score]));
+
+    // STEP 2: Calculate keyword scores for chunks with embeddings
+    const keywordScores = chunksWithEmbeddings.map(chunk => ({
+      chunkId: chunk.id,
+      score: calculateKeywordScore(chunk.content, query)
+    }));
+
+    // STEP 3: Normalize keyword scores to 0-1 range (min-max normalization)
+    const keywordScoreValues = keywordScores.map(s => s.score);
+    const maxKeywordScore = Math.max(...keywordScoreValues, 1); // Avoid division by zero
+    const minKeywordScore = Math.min(...keywordScoreValues, 0);
+    const keywordRange = maxKeywordScore - minKeywordScore || 1; // Avoid division by zero
+
+    const normalizedKeywordScores = keywordScores.map(s => ({
+      chunkId: s.chunkId,
+      score: keywordRange > 0 ? (s.score - minKeywordScore) / keywordRange : 0
+    }));
+
+    const keywordScoreMap = new Map(normalizedKeywordScores.map(s => [s.chunkId, s.score]));
+
+    // STEP 4: Combine scores with weighted formula
+    // hybrid_score = alpha * semantic_score + (1 - alpha) * keyword_score
+    const hybridScores = chunksWithEmbeddings.map(chunk => {
+      const semanticScore = semanticScoreMap.get(chunk.id) || 0;
+      const keywordScore = keywordScoreMap.get(chunk.id) || 0;
+      const hybridScore = alpha * semanticScore + (1 - alpha) * keywordScore;
+
+      return {
+        chunkId: chunk.id,
+        score: hybridScore,
+        semanticScore,
+        keywordScore
+      };
+    });
+
+    // STEP 5: Sort by hybrid score and return top results
+    const rankedResults = hybridScores
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit);
+
+    // Log top result for debugging
+    if (rankedResults.length > 0) {
+      const top = rankedResults[0];
+      console.log(`[Offscreen] Hybrid search top result - Total: ${top.score.toFixed(3)}, Semantic: ${top.semanticScore.toFixed(3)}, Keyword: ${top.keywordScore.toFixed(3)}`);
+    }
+
+    return rankedResults.map(r => r.chunkId);
+  } catch (error) {
+    console.error('[Offscreen] Error in hybrid search:', error);
+    return [];
+  }
+}
+
+/**
  * Extract paper from HTML and send to background for storage
  * Includes deduplication to avoid processing same paper multiple times
  *
@@ -364,6 +509,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true, chunkIds });
       } catch (error) {
         console.error('[Offscreen] Error in semantic search:', error);
+        sendResponse({ success: false, error: String(error), chunkIds: [] });
+      }
+    })();
+
+    return true; // Keep message channel open for async response
+  }
+
+  if (message.type === MessageType.HYBRID_SEARCH) {
+    const { paperId, query, limit, alpha } = message.payload;
+
+    // Perform hybrid search asynchronously
+    (async () => {
+      try {
+        const chunkIds = await searchHybrid(paperId, query, limit || 5, alpha);
+        sendResponse({ success: true, chunkIds });
+      } catch (error) {
+        console.error('[Offscreen] Error in hybrid search:', error);
         sendResponse({ success: false, error: String(error), chunkIds: [] });
       }
     })();

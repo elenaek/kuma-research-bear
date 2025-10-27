@@ -867,19 +867,20 @@ export async function getRelevantChunksByTopic(
 
 /**
  * Get relevant chunks using semantic search (EmbeddingGemma)
- * This function now just falls back to keyword search when called from background
+ * Now uses hybrid search (semantic + keyword) by default for better coverage
+ * Falls back to keyword-only search when embeddings are unavailable
  *
  * @param paperId - Paper ID
  * @param query - Search query
  * @param limit - Maximum number of chunks to return
- * @returns Array of relevant chunks sorted by similarity
+ * @returns Array of relevant chunks sorted by relevance score
  */
 export async function getRelevantChunksSemantic(
   paperId: string,
   query: string,
   limit: number = 5
 ): Promise<ContentChunk[]> {
-  console.log('[dbService] Semantic search requested for:', query);
+  console.log('[dbService] Search requested for:', query);
 
   try {
     // Check if chunks have embeddings
@@ -891,24 +892,47 @@ export async function getRelevantChunksSemantic(
       return await getRelevantChunks(paperId, query, limit);
     }
 
-    // Delegate to offscreen document for semantic search calculation
-    const { searchSemanticOffscreen } = await import('../background/services/offscreenService.ts');
-    const result = await searchSemanticOffscreen(paperId, query, limit);
+    // Import hybrid search config
+    const { DEFAULT_HYBRID_CONFIG } = await import('../types/embedding.ts');
 
-    if (result.success && result.chunkIds && result.chunkIds.length > 0) {
-      // Fetch the chunks in the ranked order
-      const rankedChunks = result.chunkIds
-        .map(chunkId => chunks.find(c => c.id === chunkId))
-        .filter(c => c !== undefined) as ContentChunk[];
+    // Delegate to offscreen document for search calculation
+    // Use hybrid search (semantic + keyword) by default for better coverage
+    if (DEFAULT_HYBRID_CONFIG.enabled) {
+      const { searchHybridOffscreen } = await import('../background/services/offscreenService.ts');
+      const result = await searchHybridOffscreen(paperId, query, limit, DEFAULT_HYBRID_CONFIG.alpha);
 
-      console.log('[dbService] ✓ Semantic search found', rankedChunks.length, 'chunks');
-      return rankedChunks;
+      if (result.success && result.chunkIds && result.chunkIds.length > 0) {
+        // Fetch the chunks in the ranked order
+        const rankedChunks = result.chunkIds
+          .map(chunkId => chunks.find(c => c.id === chunkId))
+          .filter(c => c !== undefined) as ContentChunk[];
+
+        console.log('[dbService] ✓ Hybrid search found', rankedChunks.length, 'chunks');
+        return rankedChunks;
+      } else {
+        console.log('[dbService] Hybrid search failed, falling back to keyword search');
+        return await getRelevantChunks(paperId, query, limit);
+      }
     } else {
-      console.log('[dbService] Semantic search failed, falling back to keyword search');
-      return await getRelevantChunks(paperId, query, limit);
+      // Hybrid disabled, use pure semantic search
+      const { searchSemanticOffscreen } = await import('../background/services/offscreenService.ts');
+      const result = await searchSemanticOffscreen(paperId, query, limit);
+
+      if (result.success && result.chunkIds && result.chunkIds.length > 0) {
+        // Fetch the chunks in the ranked order
+        const rankedChunks = result.chunkIds
+          .map(chunkId => chunks.find(c => c.id === chunkId))
+          .filter(c => c !== undefined) as ContentChunk[];
+
+        console.log('[dbService] ✓ Semantic search found', rankedChunks.length, 'chunks');
+        return rankedChunks;
+      } else {
+        console.log('[dbService] Semantic search failed, falling back to keyword search');
+        return await getRelevantChunks(paperId, query, limit);
+      }
     }
   } catch (error) {
-    console.error('[dbService] Error in semantic search, falling back to keyword search:', error);
+    console.error('[dbService] Error in search, falling back to keyword search:', error);
     return await getRelevantChunks(paperId, query, limit);
   }
 }

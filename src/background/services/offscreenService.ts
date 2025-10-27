@@ -117,6 +117,42 @@ export async function searchSemanticOffscreen(
 }
 
 /**
+ * Perform hybrid search (semantic + keyword) using the offscreen document
+ * Returns ranked chunk IDs based on weighted combination of scores
+ *
+ * @param paperId - Paper ID to search within
+ * @param query - Search query
+ * @param limit - Maximum number of results
+ * @param alpha - Weight for semantic score (0-1), keyword gets (1-alpha)
+ */
+export async function searchHybridOffscreen(
+  paperId: string,
+  query: string,
+  limit: number = 5,
+  alpha?: number
+): Promise<{ success: boolean; chunkIds?: string[]; error?: string }> {
+  try {
+    // Ensure offscreen document exists
+    await setupOffscreenDocument();
+
+    // Send message to offscreen document
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.HYBRID_SEARCH,
+      payload: { paperId, query, limit, alpha }
+    });
+
+    if (response.success && response.chunkIds) {
+      return { success: true, chunkIds: response.chunkIds };
+    } else {
+      return { success: false, chunkIds: [], error: response.error };
+    }
+  } catch (error) {
+    console.error('[Offscreen] Error in hybrid search:', error);
+    return { success: false, chunkIds: [], error: String(error) };
+  }
+}
+
+/**
  * Extract paper from HTML in offscreen document (fire-and-forget)
  * This triggers extraction in background, allowing user to navigate away
  *
