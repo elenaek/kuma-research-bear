@@ -304,17 +304,68 @@ export function Sidepanel() {
       }
     };
 
+    // Create paper deleted listener for PAPER_DELETED broadcasts
+    const paperDeletedListener = async (message: any) => {
+      if (message.type === MessageType.PAPER_DELETED) {
+        const deletedPaperUrl = message.payload?.paperUrl;
+        if (!deletedPaperUrl) return;
+
+        console.log('[Sidepanel] Paper deleted externally:', deletedPaperUrl);
+
+        // Clean up operation states for deleted paper
+        const normalizedDeletedUrl = normalizeUrl(deletedPaperUrl);
+        operationState.clearExplainingPaper(normalizedDeletedUrl);
+        operationState.clearSummaryGeneratingPaper(normalizedDeletedUrl);
+        operationState.clearAnalyzingPaper(normalizedDeletedUrl);
+        operationState.clearGlossaryGeneratingPaper(normalizedDeletedUrl);
+
+        // Refresh papers list from IndexedDB
+        const allPapers = await ChromeService.getAllPapers();
+        paperNavigation.setAllPapers(allPapers);
+
+        // Check if deleted paper was the current paper
+        const currentPaperUrl = currentPaperUrlRef.current;
+        if (currentPaperUrl && normalizeUrl(currentPaperUrl) === normalizedDeletedUrl) {
+          // Current paper was deleted
+          if (allPapers.length === 0) {
+            // No papers left - show empty state
+            setStoredPaper(null);
+            setViewState('empty');
+            setQaHistory([]);
+            setData(null);
+            setAnalysis(null);
+            setGlossary(null);
+          } else {
+            // Switch to another paper (first paper in the list)
+            console.log('[Sidepanel] Current paper deleted, switching to first paper');
+            await paperNavigation.switchToPaper(0, allPapers);
+          }
+        } else {
+          // Different paper was deleted, just re-sync the current paper's index
+          if (currentPaperUrl) {
+            const newIndex = allPapers.findIndex(p => normalizeUrl(p.url) === normalizeUrl(currentPaperUrl));
+            if (newIndex !== -1 && newIndex !== paperNavigation.currentPaperIndex) {
+              console.log('[Sidepanel] Re-syncing paper index after external deletion:', paperNavigation.currentPaperIndex, '→', newIndex);
+              paperNavigation.setCurrentPaperIndex(newIndex);
+            }
+          }
+        }
+      }
+    };
+
     // Register message listeners
     chrome.runtime.onMessage.addListener(messageListener);
     chrome.runtime.onMessage.addListener(navigationListener);
     chrome.runtime.onMessage.addListener(glossaryProgressListener);
     chrome.runtime.onMessage.addListener(analysisProgressListener);
+    chrome.runtime.onMessage.addListener(paperDeletedListener);
 
     return () => {
       chrome.runtime.onMessage.removeListener(messageListener);
       chrome.runtime.onMessage.removeListener(navigationListener);
       chrome.runtime.onMessage.removeListener(glossaryProgressListener);
       chrome.runtime.onMessage.removeListener(analysisProgressListener);
+      chrome.runtime.onMessage.removeListener(paperDeletedListener);
     };
   }, []);
 
