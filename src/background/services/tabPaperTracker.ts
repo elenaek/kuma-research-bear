@@ -128,6 +128,46 @@ class TabPaperTracker {
     this.paperToTabs.clear();
     this.paperIdToUrl.clear();
   }
+
+  /**
+   * Clear a paper from all tabs (used when deleting a paper)
+   * Removes all tab associations for a specific paper URL
+   */
+  clearPaperFromAllTabs(paperUrl: string): number {
+    const normalizedUrl = normalizeUrl(paperUrl);
+    const tabSet = this.paperToTabs.get(normalizedUrl);
+
+    if (!tabSet) {
+      console.log(`[TabPaperTracker] No tabs viewing paper ${normalizedUrl}`);
+      return 0;
+    }
+
+    const tabIds = Array.from(tabSet);
+
+    // Remove all tab -> paper mappings
+    for (const tabId of tabIds) {
+      this.tabToPaper.delete(tabId);
+    }
+
+    // Remove paper -> tabs mapping
+    this.paperToTabs.delete(normalizedUrl);
+
+    console.log(`[TabPaperTracker] Cleared paper ${normalizedUrl} from ${tabIds.length} tab(s):`, tabIds);
+    return tabIds.length;
+  }
+
+  /**
+   * Remove paper ID mapping (used when deleting a paper)
+   */
+  removePaperIdMapping(paperId: string): boolean {
+    const existed = this.paperIdToUrl.has(paperId);
+    if (existed) {
+      const paperUrl = this.paperIdToUrl.get(paperId);
+      this.paperIdToUrl.delete(paperId);
+      console.log(`[TabPaperTracker] Removed paper ID mapping: ${paperId} -> ${paperUrl}`);
+    }
+    return existed;
+  }
 }
 
 // Export singleton instance

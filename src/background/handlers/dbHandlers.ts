@@ -214,9 +214,9 @@ export async function handleDeletePaper(payload: any): Promise<any> {
       return { success: false, error: 'Paper not found' };
     }
 
-    // 1. Clean up all resources (AI sessions, requests, states) before deletion
+    // 1. Clean up all resources (AI sessions, requests, states, tab mappings, chat sessions) before deletion
     console.log('[DBHandlers] Cleaning up resources for paper:', deletedPaperUrl);
-    const cleanupSummary = await paperCleanupService.cleanupPaper(deletedPaperUrl);
+    const cleanupSummary = await paperCleanupService.cleanupPaper(deletedPaperUrl, undefined, payload.paperId);
     console.log('[DBHandlers] Cleanup summary:', cleanupSummary);
 
     // 2. Delete the paper from database
