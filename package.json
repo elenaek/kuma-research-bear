@@ -42,6 +42,7 @@
     "katex": "^0.16.11",
     "lucide-preact": "0.546.0",
     "marked": "16.4.0",
+    "okapibm25": "1.4.1",
     "pdfjs-dist": "5.4.296",
     "postcss": "8.5.6",
     "preact": "10.27.2",

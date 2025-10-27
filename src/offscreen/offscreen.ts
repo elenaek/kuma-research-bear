@@ -10,6 +10,7 @@ import { MessageType } from '../types/index.ts';
 import { getPaperChunks } from '../utils/dbService.ts';
 import { embeddingService } from '../utils/embeddingService.ts';
 import { DEFAULT_HYBRID_CONFIG } from '../types/embedding.ts';
+import BM25 from 'okapibm25';
 
 console.log('[Offscreen] Offscreen document initialized');
 
@@ -230,39 +231,58 @@ async function searchSemantic(paperId: string, query: string, limit: number = 5)
 }
 
 /**
- * Helper function to escape regex special characters
+ * Calculate BM25 scores for all chunks using the OkapiBM25 algorithm
+ * BM25 is a probabilistic ranking function that considers:
+ * - Term frequency with saturation (repeated terms have diminishing returns)
+ * - Inverse document frequency (rare terms weighted higher)
+ * - Document length normalization (fair comparison across chunk sizes)
+ *
+ * @param chunks - Array of chunks to score
+ * @param query - Search query
+ * @param k1 - Term frequency saturation parameter (default 1.5)
+ * @param b - Length normalization parameter (default 0.75)
+ * @returns Array of BM25 scores corresponding to input chunks
  */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
- * Calculate keyword relevance score for a chunk
- * Returns number of keyword occurrences
- */
-function calculateKeywordScore(content: string, query: string): number {
-  const lowerContent = content.toLowerCase();
-  const lowerQuery = query.toLowerCase();
-  const queryWords = lowerQuery.split(/\s+/);
-
-  let score = 0;
-  for (const word of queryWords) {
-    const escapedWord = escapeRegex(word);
-    const matches = (lowerContent.match(new RegExp(escapedWord, 'g')) || []).length;
-    score += matches;
+function calculateBM25Scores(
+  chunks: { content: string }[],
+  query: string,
+  k1: number = 1.5,
+  b: number = 0.75
+): number[] {
+  if (chunks.length === 0) {
+    return [];
   }
 
-  return score;
+  // Prepare documents and query for BM25
+  const documents = chunks.map(chunk => chunk.content);
+  const queryWords = query.toLowerCase().split(/\s+/).filter(word => word.length > 0);
+
+  if (queryWords.length === 0) {
+    return chunks.map(() => 0);
+  }
+
+  try {
+    // BM25 returns array of scores matching document order
+    const scores = BM25(documents, queryWords, { k1, b }) as number[];
+    return scores;
+  } catch (error) {
+    console.error('[Offscreen] Error calculating BM25 scores:', error);
+    return chunks.map(() => 0);
+  }
 }
 
 /**
- * Perform hybrid search combining semantic and keyword approaches
+ * Perform hybrid search combining semantic embeddings and BM25 lexical search
  * Returns ranked chunk IDs based on weighted combination
+ *
+ * Uses:
+ * - Semantic search: EmbeddingGemma cosine similarity (understanding)
+ * - BM25: Statistical ranking with TF-IDF and length normalization (exact terms)
  *
  * @param paperId - Paper ID to search within
  * @param query - Search query
  * @param limit - Maximum number of results
- * @param alpha - Weight for semantic score (0-1), keyword gets (1-alpha). Default from config.
+ * @param alpha - Weight for semantic score (0-1), BM25 gets (1-alpha). Default from config.
  * @returns Ranked array of chunk IDs
  */
 async function searchHybrid(
@@ -271,6 +291,7 @@ async function searchHybrid(
   limit: number = 5,
   alpha: number = DEFAULT_HYBRID_CONFIG.alpha
 ): Promise<string[]> {
+  const { k1, b } = DEFAULT_HYBRID_CONFIG.bm25;
   try {
     // Get all chunks for the paper
     const chunks = await getPaperChunks(paperId);
@@ -283,14 +304,16 @@ async function searchHybrid(
     const hasEmbeddings = chunks.some(chunk => chunk.embedding !== undefined);
 
     if (!hasEmbeddings) {
-      // Fall back to keyword-only search
-      console.log('[Offscreen] No embeddings, falling back to keyword search');
-      const keywordScores = chunks.map(chunk => ({
+      // Fall back to BM25-only search when embeddings unavailable
+      console.log('[Offscreen] No embeddings, falling back to BM25 search');
+      const bm25Scores = calculateBM25Scores(chunks, query, k1, b);
+
+      const scoredChunks = chunks.map((chunk, i) => ({
         chunkId: chunk.id,
-        score: calculateKeywordScore(chunk.content, query)
+        score: bm25Scores[i]
       }));
 
-      return keywordScores
+      return scoredChunks
         .filter(s => s.score > 0)
         .sort((a, b) => b.score - a.score)
         .slice(0, limit)
@@ -321,37 +344,34 @@ async function searchHybrid(
     // Convert to map for easy lookup
     const semanticScoreMap = new Map(semanticScores.map(s => [s.chunkId, s.score]));
 
-    // STEP 2: Calculate keyword scores for chunks with embeddings
-    const keywordScores = chunksWithEmbeddings.map(chunk => ({
-      chunkId: chunk.id,
-      score: calculateKeywordScore(chunk.content, query)
+    // STEP 2: Calculate BM25 scores for chunks with embeddings
+    const bm25Scores = calculateBM25Scores(chunksWithEmbeddings, query, k1, b);
+
+    // STEP 3: Normalize BM25 scores to 0-1 range (min-max normalization)
+    // BM25 scores can vary widely, so we normalize to match semantic scores (0-1)
+    const maxBM25 = Math.max(...bm25Scores, 1); // Avoid division by zero
+    const minBM25 = Math.min(...bm25Scores, 0);
+    const bm25Range = maxBM25 - minBM25 || 1;
+
+    const normalizedBM25Scores = bm25Scores.map((score, i) => ({
+      chunkId: chunksWithEmbeddings[i].id,
+      score: bm25Range > 0 ? (score - minBM25) / bm25Range : 0
     }));
 
-    // STEP 3: Normalize keyword scores to 0-1 range (min-max normalization)
-    const keywordScoreValues = keywordScores.map(s => s.score);
-    const maxKeywordScore = Math.max(...keywordScoreValues, 1); // Avoid division by zero
-    const minKeywordScore = Math.min(...keywordScoreValues, 0);
-    const keywordRange = maxKeywordScore - minKeywordScore || 1; // Avoid division by zero
-
-    const normalizedKeywordScores = keywordScores.map(s => ({
-      chunkId: s.chunkId,
-      score: keywordRange > 0 ? (s.score - minKeywordScore) / keywordRange : 0
-    }));
-
-    const keywordScoreMap = new Map(normalizedKeywordScores.map(s => [s.chunkId, s.score]));
+    const bm25ScoreMap = new Map(normalizedBM25Scores.map(s => [s.chunkId, s.score]));
 
     // STEP 4: Combine scores with weighted formula
-    // hybrid_score = alpha * semantic_score + (1 - alpha) * keyword_score
+    // hybrid_score = alpha * semantic_score + (1 - alpha) * bm25_score
     const hybridScores = chunksWithEmbeddings.map(chunk => {
       const semanticScore = semanticScoreMap.get(chunk.id) || 0;
-      const keywordScore = keywordScoreMap.get(chunk.id) || 0;
-      const hybridScore = alpha * semanticScore + (1 - alpha) * keywordScore;
+      const bm25Score = bm25ScoreMap.get(chunk.id) || 0;
+      const hybridScore = alpha * semanticScore + (1 - alpha) * bm25Score;
 
       return {
         chunkId: chunk.id,
         score: hybridScore,
         semanticScore,
-        keywordScore
+        bm25Score
       };
     });
 
@@ -363,7 +383,7 @@ async function searchHybrid(
     // Log top result for debugging
     if (rankedResults.length > 0) {
       const top = rankedResults[0];
-      console.log(`[Offscreen] Hybrid search top result - Total: ${top.score.toFixed(3)}, Semantic: ${top.semanticScore.toFixed(3)}, Keyword: ${top.keywordScore.toFixed(3)}`);
+      console.log(`[Offscreen] Hybrid search (BM25) top result - Total: ${top.score.toFixed(3)}, Semantic: ${top.semanticScore.toFixed(3)}, BM25: ${top.bm25Score.toFixed(3)}`);
     }
 
     return rankedResults.map(r => r.chunkId);

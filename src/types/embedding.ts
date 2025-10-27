@@ -86,32 +86,59 @@ export const DEFAULT_EMBEDDING_CONFIG: EmbeddingModelConfig = {
 
 /**
  * Hybrid search configuration
- * Combines semantic and keyword search for better coverage
+ * Combines semantic embeddings and BM25 lexical search for better coverage
  */
 export interface HybridSearchConfig {
   /**
-   * Whether to use hybrid search (semantic + keyword)
+   * Whether to use hybrid search (semantic + BM25)
    * If false, falls back to semantic-only search
    */
   enabled: boolean;
 
   /**
    * Weight for semantic search score (0-1)
-   * Keyword search gets (1 - alpha)
+   * BM25 search gets (1 - alpha)
    * Higher values favor semantic understanding
-   * Lower values favor exact keyword matches
-   * Default: 0.7 (70% semantic, 30% keyword)
+   * Lower values favor exact term matches
+   * Default: 0.7 (70% semantic, 30% BM25)
    */
   alpha: number;
+
+  /**
+   * BM25 algorithm parameters
+   */
+  bm25: {
+    /**
+     * Term frequency saturation parameter
+     * Controls how quickly term frequency plateaus
+     * Higher values = less saturation (repeated terms help more)
+     * Typical range: 1.2-2.0
+     * Default: 1.5 (standard value)
+     */
+    k1: number;
+
+    /**
+     * Length normalization parameter
+     * Controls impact of document length on scoring
+     * 0 = no normalization, 1 = full normalization
+     * Typical range: 0.5-0.9
+     * Default: 0.75 (standard value)
+     */
+    b: number;
+  };
 }
 
 /**
  * Default hybrid search configuration
- * Balanced approach favoring semantic understanding
+ * Balanced approach favoring semantic understanding with standard BM25 parameters
  */
 export const DEFAULT_HYBRID_CONFIG: HybridSearchConfig = {
   enabled: true,
-  alpha: 0.7, // 70% semantic, 30% keyword
+  alpha: 0.7, // 70% semantic, 30% BM25
+  bm25: {
+    k1: 1.5,  // Standard term frequency saturation
+    b: 0.75   // Standard length normalization
+  }
 };
 
 /**
