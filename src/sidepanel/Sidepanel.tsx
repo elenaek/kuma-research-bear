@@ -200,6 +200,23 @@ export function Sidepanel() {
             const allPapers = await ChromeService.getAllPapers();
             paperNavigation.setAllPapers(allPapers);
 
+            // Handle transition when no paper is loaded but papers exist in database
+            // This ensures the sidepanel auto-loads when going from 0→1 papers
+            // Use ref to avoid stale closure bug (same pattern as isCurrentPaper check below)
+            if (allPapers.length > 0 && currentPaperUrlRef.current === null) {
+              console.log('[Sidepanel] No current paper but papers exist, auto-loading first paper');
+              const newPaper = allPapers.find(p => normalizeUrl(p.url) === normalizeUrl(paperUrl));
+              if (newPaper) {
+                const paperIndex = allPapers.findIndex(p => p.id === newPaper.id);
+                if (paperIndex !== -1) {
+                  console.log('[Sidepanel] Auto-switching to newly added paper at index:', paperIndex);
+                  await paperNavigation.switchToPaper(paperIndex, allPapers);
+                }
+                // Paper has been loaded via navigation system, no need to check isCurrentPaper below
+                return;
+              }
+            }
+
             // If this is the currently viewed paper, update display states
             // Call setState functions sequentially (not nested) to avoid timing issues
             // Use ref to avoid stale closure bug
