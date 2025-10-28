@@ -53,7 +53,7 @@ export function AnalysisSection(props: AnalysisSectionProps) {
     return (
       <div class="card">
         <div class="flex flex-col items-center justify-center gap-4 py-12">
-          <LottiePlayer path="/lotties/kuma-thinking-glasses.lottie" className="mx-auto mb-1" autoStartLoop={true} size={100} loopPurpose={LoopPurpose.SIDEPANEL} />
+          <LottiePlayer path="/lotties/kuma-reading.lottie" className="mx-auto mb-1" autoStartLoop={true} size={140} loopPurpose={LoopPurpose.QASection} />
           <div class="text-center">
             <p class="text-base font-medium text-gray-900 mb-2">{progressMessage}</p>
             <p class="text-sm text-gray-600">
