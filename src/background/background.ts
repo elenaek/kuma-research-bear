@@ -31,6 +31,7 @@ const CONTEXT_MENU_PAGE_ID = 'chat-with-kuma-page'; // Page - chat menu
 const CONTEXT_MENU_DETECT_ID = 'detect-paper-page'; // Page - detect paper menu
 const CONTEXT_MENU_IMAGE_ID = 'discuss-image-with-kuma'; // Image - discuss image menu
 const CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID = 'toggle-image-buttons'; // Page - toggle image buttons
+const CONTEXT_MENU_SIDEPANEL_ID = 'open-sidepanel-page'; // Page - open sidepanel menu
 
 // Track pending paper extractions (paperUrl → tabId)
 // Used to reconnect tabId after offscreen processing completes
@@ -102,6 +103,14 @@ chrome.runtime.onInstalled.addListener(async () => {
     contexts: ['page'],
     type: 'checkbox',
     checked: true, // Default to checked
+  });
+
+  // Create context menu for opening sidepanel
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_SIDEPANEL_ID,
+    title: 'Open Sidepanel',
+    contexts: ['page'],
+    enabled: true, // Always enabled
   });
 
   console.log('Context menus created');
@@ -464,6 +473,12 @@ export async function updateContextMenuState() {
     await chrome.contextMenus.update(CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID, {
       checked: showImageButtons,
     });
+
+    // Update sidepanel menu with dynamic title
+    await chrome.contextMenus.update(CONTEXT_MENU_SIDEPANEL_ID, {
+      title: chatReady ? 'Open Paper in Sidepanel' : 'Open Sidepanel',
+      enabled: true, // Always enabled
+    });
   } catch (error) {
     // Context menu might not exist yet, that's ok
     console.debug('[ContextMenu] Could not update menu state:', error);
@@ -532,6 +547,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
           }).catch(() => {}); // Ignore errors for tabs without content script
         }
       }
+    }
+    // Handle "Open Sidepanel" / "Open Paper in Sidepanel" menu item
+    else if (info.menuItemId === CONTEXT_MENU_SIDEPANEL_ID) {
+      console.log('[ContextMenu] Open sidepanel triggered from context menu for tab', tab.id);
+
+      // Always open sidepanel FIRST (preserves user gesture)
+      await chrome.sidePanel.open({ tabId: tab.id });
+
+      // THEN check if we should navigate
+      const chatReady = await isChatReady(tab.id);
+      if (chatReady && tab.url) {
+        await chrome.runtime.sendMessage({
+          type: MessageType.NAVIGATE_TO_PAPER,
+          payload: { url: tab.url },
+        });
+      }
+      // Otherwise, sidepanel shows default view (0th index paper)
     }
   } catch (error) {
     console.error('[ContextMenu] Error handling context menu click:', error);
