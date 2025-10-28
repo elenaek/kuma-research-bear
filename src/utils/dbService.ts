@@ -252,20 +252,32 @@ export async function storePaper(
       request.onerror = () => reject(new Error('Failed to store paper'));
     });
 
-    // Store chunks (instant - no progress tracking needed)
-    const chunkTransaction = db.transaction([CHUNKS_STORE], 'readwrite');
-    const chunkStore = chunkTransaction.objectStore(CHUNKS_STORE);
+    // Store chunks in batches to prevent UI blocking
+    const BATCH_SIZE = 20; // Process 20 chunks per transaction
 
-    for (let i = 0; i < contentChunks.length; i++) {
-      const chunk = contentChunks[i];
-      chunkStore.put(chunk);  // Queue all puts
+    for (let batchStart = 0; batchStart < contentChunks.length; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, contentChunks.length);
+
+      // Create transaction for this batch
+      const chunkTransaction = db.transaction([CHUNKS_STORE], 'readwrite');
+      const chunkStore = chunkTransaction.objectStore(CHUNKS_STORE);
+
+      // Store chunks in this batch
+      for (let i = batchStart; i < batchEnd; i++) {
+        chunkStore.put(contentChunks[i]);
+      }
+
+      // Wait for this batch transaction to complete
+      await new Promise<void>((resolve, reject) => {
+        chunkTransaction.oncomplete = () => resolve();
+        chunkTransaction.onerror = () => reject(new Error('Failed to store chunks'));
+      });
+
+      // Yield to event loop between batches to prevent UI freezing
+      if (batchEnd < contentChunks.length) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
     }
-
-    // Wait for transaction to complete
-    await new Promise<void>((resolve, reject) => {
-      chunkTransaction.oncomplete = () => resolve();
-      chunkTransaction.onerror = () => reject(new Error('Failed to store chunks'));
-    });
 
     console.log(`✓ Stored paper: ${paper.title} (${contentChunks.length} chunks)`);
 
@@ -631,6 +643,7 @@ export async function updatePaperExplanation(
 /**
  * Update chunk embeddings for a paper
  * Used by offscreen document after generating embeddings
+ * Uses batched transactions to prevent UI blocking
  */
 export async function updateChunkEmbeddings(paperId: string, embeddings: Float32Array[]): Promise<void> {
   const db = await initDB();
@@ -643,20 +656,33 @@ export async function updateChunkEmbeddings(paperId: string, embeddings: Float32
       throw new Error(`Chunk count mismatch: ${chunks.length} chunks vs ${embeddings.length} embeddings`);
     }
 
-    // Update chunks with embeddings
-    const transaction = db.transaction([CHUNKS_STORE], 'readwrite');
-    const store = transaction.objectStore(CHUNKS_STORE);
+    // Update chunks with embeddings in batches to prevent UI blocking
+    const BATCH_SIZE = 20; // Process 20 chunks per transaction
 
-    for (let i = 0; i < chunks.length; i++) {
-      chunks[i].embedding = embeddings[i];
-      store.put(chunks[i]);
+    for (let batchStart = 0; batchStart < chunks.length; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, chunks.length);
+
+      // Create transaction for this batch
+      const transaction = db.transaction([CHUNKS_STORE], 'readwrite');
+      const store = transaction.objectStore(CHUNKS_STORE);
+
+      // Update chunks in this batch
+      for (let i = batchStart; i < batchEnd; i++) {
+        chunks[i].embedding = embeddings[i];
+        store.put(chunks[i]);
+      }
+
+      // Wait for this batch transaction to complete
+      await new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(new Error('Failed to update chunks with embeddings'));
+      });
+
+      // Yield to event loop between batches to prevent UI freezing
+      if (batchEnd < chunks.length) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
     }
-
-    // Wait for transaction to complete
-    await new Promise<void>((resolve, reject) => {
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(new Error('Failed to update chunks with embeddings'));
-    });
 
     console.log(`✓ Updated ${embeddings.length} chunks with embeddings for paper: ${paperId}`);
     db.close();

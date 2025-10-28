@@ -106,32 +106,44 @@ async function generateEmbeddingsForPaper(
       return null;
     }
 
-    // Generate embeddings one at a time to avoid memory issues
+    // Generate embeddings in batches for better performance
     const embeddings: Float32Array[] = [];
     const startTime = performance.now();
-    let lastLogTime = startTime;
+    let lastProgressTime = startTime;
+    const BATCH_SIZE = 10; // Process 10 chunks at a time
+    const PROGRESS_THROTTLE_MS = 500; // Throttle progress updates to max 1 per 500ms
+    const WASM_DELAY_MS = 200; // Reduced from 500ms
 
-    for (let i = 0; i < chunks.length; i++) {
-      const embedding = await embeddingService.generateEmbedding(chunks[i].content, false);
-      embeddings.push(embedding);
+    for (let batchStart = 0; batchStart < chunks.length; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, chunks.length);
+      const batchChunks = chunks.slice(batchStart, batchEnd);
 
-      // Send progress update every 10 embeddings or at 25%, 50%, 75%, 100%
-      const current = i + 1;
-      const shouldUpdate = current % 10 === 0 ||
-                          current === Math.floor(chunks.length * 0.25) ||
-                          current === Math.floor(chunks.length * 0.50) ||
-                          current === Math.floor(chunks.length * 0.75) ||
-                          current === chunks.length;
+      // Generate embeddings for batch
+      const batchTexts = batchChunks.map(chunk => chunk.content);
+      const batchEmbeddings = await embeddingService.generateEmbeddingsBatch(batchTexts, false);
+      embeddings.push(...batchEmbeddings);
+
+      const current = embeddings.length;
+
+      // Throttled progress updates (max 1 per 500ms) or at key milestones
+      const now = performance.now();
+      const timeSinceLastProgress = now - lastProgressTime;
+      const isMilestone = current === Math.floor(chunks.length * 0.25) ||
+                         current === Math.floor(chunks.length * 0.50) ||
+                         current === Math.floor(chunks.length * 0.75) ||
+                         current === chunks.length;
+      const shouldUpdate = (timeSinceLastProgress >= PROGRESS_THROTTLE_MS) || isMilestone;
 
       if (shouldUpdate) {
+        lastProgressTime = now;
+
         // Calculate performance metrics
-        const now = performance.now();
         const elapsed = (now - startTime) / 1000; // seconds
         const embeddingsPerSecond = (current / elapsed).toFixed(2);
         const avgTimePerEmbedding = (elapsed / current * 1000).toFixed(0); // ms
 
         // Log performance every 10% progress
-        if (current % Math.max(1, Math.floor(chunks.length * 0.1)) === 0) {
+        if (current % Math.max(1, Math.floor(chunks.length * 0.1)) === 0 || isMilestone) {
           console.log(`[Offscreen] ⚡ Performance: ${embeddingsPerSecond} emb/s (${avgTimePerEmbedding}ms per embedding) using ${device.toUpperCase()}`);
         }
 
@@ -149,10 +161,16 @@ async function generateEmbeddingsForPaper(
         });
       }
 
-      // Small delay only for WASM backend to allow memory cleanup
-      // WebGPU can handle continuous processing without delay
-      if (i < chunks.length - 1 && device === 'wasm') {
-        await new Promise(resolve => setTimeout(resolve, 500));
+      // Yield to browser event loop after each batch to prevent UI freezing
+      if (batchEnd < chunks.length) {
+        // Small delay for WASM backend to allow memory cleanup
+        // WebGPU can handle continuous processing with just a microtask yield
+        if (device === 'wasm') {
+          await new Promise(resolve => setTimeout(resolve, WASM_DELAY_MS));
+        } else {
+          // For WebGPU, just yield to event loop without artificial delay
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
       }
     }
 

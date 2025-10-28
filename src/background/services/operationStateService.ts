@@ -161,17 +161,20 @@ export async function broadcastStateChange(state: OperationState): Promise<void>
     if (state.currentPaper?.url) {
       const tabIds = tabPaperTracker.getTabsForPaperUrl(state.currentPaper.url);
 
-      for (const tabId of tabIds) {
-        try {
-          await chrome.tabs.sendMessage(tabId, {
-            type: MessageType.OPERATION_STATE_CHANGED,
-            payload: { state },
-          });
-        } catch (error) {
-          // Tab might have been closed or content script not ready
-          console.debug(`[OperationState] Could not send to tab ${tabId}:`, error);
-        }
-      }
+      // Send messages to all tabs in parallel for better performance
+      await Promise.all(
+        tabIds.map(async (tabId) => {
+          try {
+            await chrome.tabs.sendMessage(tabId, {
+              type: MessageType.OPERATION_STATE_CHANGED,
+              payload: { state },
+            });
+          } catch (error) {
+            // Tab might have been closed or content script not ready
+            console.debug(`[OperationState] Could not send to tab ${tabId}:`, error);
+          }
+        })
+      );
 
       // Update context menu for this paper
       await updateContextMenuForPaper(state.currentPaper.url);
