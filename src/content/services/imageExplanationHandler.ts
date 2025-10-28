@@ -1,6 +1,5 @@
 import { h, render } from 'preact';
 import { ImageExplainButton } from '../components/ImageExplainButton.tsx';
-// import { ImageExplanationBubble } from '../components/ImageExplanationBubble.tsx'; // DEPRECATED: Now using multi-tab chatbox
 import { detectImages, imageElementToBlob, watchForNewImages, DetectedImage } from './imageDetectionService.ts';
 import * as ChromeService from '../../services/ChromeService.ts';
 import { aiService } from '../../utils/aiService.ts';
@@ -12,13 +11,8 @@ interface ImageState {
   title: string | null;
   explanation: string | null;
   isLoading: boolean;
-  bubbleVisible: boolean;
   buttonContainer: HTMLDivElement | null;
-  bubbleContainer: HTMLDivElement | null;
   buttonRoot: HTMLElement | null;
-  bubbleShadowRoot: ShadowRoot | null;
-  transparencyEnabled: boolean;
-  hasInteractedSinceOpen: boolean;
 }
 
 /**
@@ -146,25 +140,6 @@ class ImageExplanationHandler {
     buttonRoot.style.cssText = 'pointer-events: auto;';
     shadowRoot.appendChild(buttonRoot);
 
-    // Create bubble container
-    const bubbleContainer = document.createElement('div');
-    bubbleContainer.className = 'kuma-image-bubble-container';
-    bubbleContainer.style.cssText = `
-      position: fixed;
-      z-index: 2147483644;
-      pointer-events: none;
-    `;
-
-    // Add shadow DOM for bubble
-    const bubbleShadowRoot = bubbleContainer.attachShadow({ mode: 'open' });
-    const bubbleStyleSheet = document.createElement('style');
-    bubbleStyleSheet.textContent = styles;
-    bubbleShadowRoot.appendChild(bubbleStyleSheet);
-
-    const bubbleRoot = document.createElement('div');
-    bubbleRoot.style.cssText = 'pointer-events: auto;';
-    bubbleShadowRoot.appendChild(bubbleRoot);
-
     // Initialize image state
     const imageState: ImageState = {
       element: image.element,
@@ -172,13 +147,8 @@ class ImageExplanationHandler {
       title: null,
       explanation: null,
       isLoading: false,
-      bubbleVisible: false,
       buttonContainer,
-      bubbleContainer,
       buttonRoot,
-      bubbleShadowRoot,
-      transparencyEnabled: true,
-      hasInteractedSinceOpen: false,
     };
 
     this.imageStates.set(image.url, imageState);
@@ -188,7 +158,6 @@ class ImageExplanationHandler {
 
     // Append to body
     document.body.appendChild(buttonContainer);
-    document.body.appendChild(bubbleContainer);
 
     // Check for cached explanation
     await this.loadCachedExplanation(imageState);
@@ -199,25 +168,9 @@ class ImageExplanationHandler {
     // Re-position on scroll or resize
     window.addEventListener('scroll', () => {
       this.positionButton(image.element, buttonContainer);
-      const state = this.imageStates.get(image.url);
-      if (state) {
-        this.positionBubble(state);
-        // Re-render bubble to update compass arrow direction
-        if (state.bubbleVisible) {
-          this.renderBubble(image.url);
-        }
-      }
     }, true);
     window.addEventListener('resize', () => {
       this.positionButton(image.element, buttonContainer);
-      const state = this.imageStates.get(image.url);
-      if (state) {
-        this.positionBubble(state);
-        // Re-render bubble to update compass arrow direction
-        if (state.bubbleVisible) {
-          this.renderBubble(image.url);
-        }
-      }
     });
   }
 
@@ -225,23 +178,6 @@ class ImageExplanationHandler {
     const rect = img.getBoundingClientRect();
     buttonContainer.style.left = `${rect.left + 8}px`; // Left edge + padding
     buttonContainer.style.top = `${rect.top + 8}px`; // Top edge + padding
-  }
-
-  private positionBubble(imageState: ImageState) {
-    if (!imageState.buttonContainer || !imageState.bubbleContainer) {
-      return;
-    }
-
-    const buttonRect = imageState.buttonContainer.getBoundingClientRect();
-    const imageRect = imageState.element.getBoundingClientRect();
-
-    // Position to the right of the button
-    imageState.bubbleContainer.style.left = `${buttonRect.right + 10}px`;
-    imageState.bubbleContainer.style.top = `${buttonRect.top}px`;
-
-    // Max width: either 600px or remaining space to edge of screen
-    const maxWidth = Math.min(600, window.innerWidth - buttonRect.right - 20);
-    imageState.bubbleContainer.style.maxWidth = `${maxWidth}px`;
   }
 
   private async loadCachedExplanation(imageState: ImageState) {
@@ -372,20 +308,7 @@ class ImageExplanationHandler {
       imageState.isLoading = false;
       // NOTE: No longer showing bubble here - using multi-tab chatbox instead
       this.renderButton(imageUrl, imageState.buttonRoot!);
-      // this.renderBubble(imageUrl); // DEPRECATED: Bubble no longer used
     }
-  }
-
-  private getButtonCenterPosition(imageState: ImageState): { x: number; y: number } {
-    if (!imageState.buttonContainer) {
-      return { x: 0, y: 0 };
-    }
-
-    const rect = imageState.buttonContainer.getBoundingClientRect();
-    return {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-    };
   }
 
   private renderButton(imageUrl: string, rootElement: HTMLElement) {
@@ -423,75 +346,6 @@ class ImageExplanationHandler {
       }),
       rootElement
     );
-  }
-
-  private renderBubble(imageUrl: string) {
-    const imageState = this.imageStates.get(imageUrl);
-    if (!imageState || !imageState.bubbleContainer) {
-      return;
-    }
-
-    // Calculate initial position
-    const initialPosition = this.calculateBubblePosition(imageState);
-
-    // Get button center position for compass arrow
-    const buttonPosition = this.getButtonCenterPosition(imageState);
-
-    const bubbleRoot = imageState.bubbleShadowRoot?.querySelector('div');
-    if (!bubbleRoot) {
-      return;
-    }
-
-    render(
-      h(ImageExplanationBubble, {
-        title: imageState.title || 'Image Explanation',
-        explanation: imageState.explanation || '',
-        visible: imageState.bubbleVisible,
-        initialPosition,
-        transparencyEnabled: imageState.transparencyEnabled,
-        hasInteractedSinceOpen: imageState.hasInteractedSinceOpen,
-        isLoading: imageState.isLoading,
-        buttonPosition,
-        onClose: () => {
-          imageState.bubbleVisible = false;
-          this.renderBubble(imageUrl);
-        },
-        onToggleTransparency: () => this.handleToggleTransparency(imageUrl),
-        onFirstInteraction: () => this.handleFirstInteraction(imageUrl),
-        onRegenerate: () => this.handleRegenerate(imageUrl),
-        onPositionChange: () => this.handleBubblePositionChange(imageUrl),
-      }),
-      bubbleRoot as HTMLElement
-    );
-  }
-
-  private handleToggleTransparency(imageUrl: string) {
-    const imageState = this.imageStates.get(imageUrl);
-    if (!imageState) {
-      return;
-    }
-
-    console.log('[ImageExplain] Toggling transparency for:', imageUrl);
-    imageState.transparencyEnabled = !imageState.transparencyEnabled;
-    this.renderBubble(imageUrl);
-  }
-
-  private handleFirstInteraction(imageUrl: string) {
-    const imageState = this.imageStates.get(imageUrl);
-    if (!imageState) {
-      return;
-    }
-
-    if (!imageState.hasInteractedSinceOpen) {
-      console.log('[ImageExplain] First interaction for:', imageUrl);
-      imageState.hasInteractedSinceOpen = true;
-      this.renderBubble(imageUrl);
-    }
-  }
-
-  private handleBubblePositionChange(imageUrl: string) {
-    // Re-render bubble to recalculate button position for accurate arrow direction
-    this.renderBubble(imageUrl);
   }
 
   /**
@@ -550,42 +404,6 @@ class ImageExplanationHandler {
   private async handleRegenerate(imageUrl: string) {
     await this.regenerateExplanation(imageUrl);
     // Deprecated: bubbles no longer used, kept for backwards compatibility
-  }
-
-  private calculateBubblePosition(imageState: ImageState): { x: number; y: number; width: number; height: number } {
-    if (!imageState.buttonContainer) {
-      return { x: 100, y: 100, width: 400, height: 300 };
-    }
-
-    const buttonRect = imageState.buttonContainer.getBoundingClientRect();
-
-    // Position to the right of the button
-    let x = buttonRect.right + 10;
-    let y = buttonRect.top;
-
-    // Default size
-    let width = 400;
-    let height = 300;
-
-    // Ensure bubble fits within viewport
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-
-    // Adjust x if bubble would go off-screen
-    if (x + width > viewportWidth) {
-      x = viewportWidth - width - 10;
-    }
-
-    // Adjust y if bubble would go off-screen
-    if (y + height > viewportHeight) {
-      y = viewportHeight - height - 10;
-    }
-
-    // Ensure minimum position
-    x = Math.max(10, x);
-    y = Math.max(10, y);
-
-    return { x, y, width, height };
   }
 
   private async loadStyles(): Promise<string> {
@@ -770,13 +588,10 @@ class ImageExplanationHandler {
   destroy() {
     console.log('[ImageExplain] Destroying image explanation handler...');
 
-    // Remove all containers
+    // Remove all button containers
     for (const [url, state] of this.imageStates) {
       if (state.buttonContainer && state.buttonContainer.parentNode) {
         state.buttonContainer.parentNode.removeChild(state.buttonContainer);
-      }
-      if (state.bubbleContainer && state.bubbleContainer.parentNode) {
-        state.bubbleContainer.parentNode.removeChild(state.bubbleContainer);
       }
     }
 

@@ -1004,11 +1004,9 @@ class ChatboxInjector {
   }
 
   private setupContextListener() {
-    // Listen for paper changes and streaming messages
+    // Listen for streaming messages and operation state changes
     chrome.runtime.onMessage.addListener((message) => {
-      if (message.type === 'PAPER_CONTEXT_CHANGED') {
-        this.updatePaperContext(message.payload);
-      } else if (message.type === 'CHAT_STREAM_CHUNK') {
+      if (message.type === 'CHAT_STREAM_CHUNK') {
         this.handlePaperStreamChunk(message.payload);
       } else if (message.type === 'CHAT_STREAM_END') {
         this.handlePaperStreamEnd(message.payload);
@@ -1888,16 +1886,6 @@ class ChatboxInjector {
     } catch (error) {
       console.error('[Kuma Chat] Error rendering chatbox:', error);
     }
-  }
-
-  async clearHistory() {
-    // This method is probably not used, but update it anyway
-    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
-    if (activeTab) {
-      activeTab.messages = [];
-    }
-    await this.handleClearMessages();
-    this.render();
   }
 
   destroy() {
