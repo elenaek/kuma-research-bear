@@ -7,12 +7,14 @@ import { getOutputLanguage } from './settingsService.ts';
  * Enables offline access and RAG-based Q&A functionality
  */
 
-const DB_NAME = 'KumaResearchBearDB';
-const DB_VERSION = 4;
-const PAPERS_STORE = 'papers';
-const CHUNKS_STORE = 'chunks';
-const IMAGE_EXPLANATIONS_STORE = 'imageExplanations';
-const IMAGE_CHATS_STORE = 'imageChats';
+export const DB_NAME = 'KumaResearchBearDB';
+export const DB_VERSION = 5;
+export const PAPERS_STORE = 'papers';
+export const CHUNKS_STORE = 'chunks';
+export const IMAGE_EXPLANATIONS_STORE = 'imageExplanations';
+export const IMAGE_CHATS_STORE = 'imageChats';
+export const CITATIONS_STORE = 'citations';
+export const CITATIONS_SETTINGS_STORE = 'citationsSettings';
 
 /**
  * Image chat entry stored in IndexedDB
@@ -30,7 +32,7 @@ export interface ImageChatEntry {
 /**
  * Initialize IndexedDB
  */
-function initDB(): Promise<IDBDatabase> {
+export function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
@@ -101,7 +103,22 @@ function initDB(): Promise<IDBDatabase> {
         console.log('✓ Created image chats store (DB_VERSION 4)');
       }
 
-      console.log('✓ IndexedDB initialized with stores:', PAPERS_STORE, CHUNKS_STORE, IMAGE_EXPLANATIONS_STORE, IMAGE_CHATS_STORE);
+      // Create citations store (DB_VERSION 5)
+      if (!db.objectStoreNames.contains(CITATIONS_STORE)) {
+        const citationsStore = db.createObjectStore(CITATIONS_STORE, { keyPath: 'id' });
+        citationsStore.createIndex('paperId', 'paperId', { unique: false });
+        citationsStore.createIndex('addedAt', 'addedAt', { unique: false });
+        citationsStore.createIndex('customOrder', 'customOrder', { unique: false });
+        console.log('✓ Created citations store (DB_VERSION 5)');
+      }
+
+      // Create citations settings store (DB_VERSION 5)
+      if (!db.objectStoreNames.contains(CITATIONS_SETTINGS_STORE)) {
+        db.createObjectStore(CITATIONS_SETTINGS_STORE, { keyPath: 'id' });
+        console.log('✓ Created citations settings store (DB_VERSION 5)');
+      }
+
+      console.log('✓ IndexedDB initialized with stores:', PAPERS_STORE, CHUNKS_STORE, IMAGE_EXPLANATIONS_STORE, IMAGE_CHATS_STORE, CITATIONS_STORE, CITATIONS_SETTINGS_STORE);
     };
   });
 }

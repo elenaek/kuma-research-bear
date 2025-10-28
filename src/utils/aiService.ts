@@ -1167,6 +1167,83 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
   }
 
   /**
+   * Enhance paper metadata for citations
+   * Extracts missing citation metadata (publish date, journal, volume/issue) using AI
+   */
+  async enhanceMetadataForCitation(
+    paper: any,
+    contextId: string = 'citation-enhancement'
+  ): Promise<any> {
+    console.log('[AI] Enhancing metadata for citation:', paper.title);
+
+    const capabilities = await this.checkAvailability();
+
+    if (capabilities.availability !== 'available') {
+      console.log('⚠️ AI not available for metadata enhancement');
+      return null;
+    }
+
+    const systemPrompt = `You are a research paper citation assistant.
+Extract missing citation metadata and return it as valid JSON.
+Only extract information that can be inferred from the given data.`;
+
+    // Build context from available metadata
+    const context = `
+Paper title: ${paper.title}
+Authors: ${paper.authors?.join(', ') || 'Unknown'}
+URL: ${paper.url}
+Source: ${paper.source}
+DOI: ${paper.metadata?.doi || 'Unknown'}
+arXiv ID: ${paper.metadata?.arxivId || 'Unknown'}
+PubMed ID: ${paper.metadata?.pmid || 'Unknown'}
+Current metadata: ${JSON.stringify(paper.metadata || {})}
+`;
+
+    const input = `Extract or infer the missing citation metadata for this research paper and return ONLY valid JSON with this structure:
+{
+  "publishDate": "YYYY-MM-DD or YYYY (if known/inferable, else null)",
+  "journal": "journal name or conference name (if known, else null)",
+  "venue": "publication venue (if different from journal, else null)",
+  "volume": "volume number (if known, else null)",
+  "issue": "issue number (if known, else null)",
+  "pageRange": "page range like '123-145' (if known, else null)"
+}
+
+Paper information:
+${context}
+
+Return ONLY the JSON object, no other text. If you cannot determine a field, use null.`;
+
+    try {
+      const response = await this.prompt(input, systemPrompt, undefined, contextId);
+
+      // Parse JSON from response
+      let jsonStr = response.trim();
+
+      // Remove markdown code blocks if present
+      if (jsonStr.startsWith('```')) {
+        jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      }
+
+      const enhanced = JSON.parse(jsonStr);
+
+      console.log('✓ Enhanced metadata:', enhanced);
+
+      return {
+        ...enhanced,
+        metadataEnhanced: true,
+        enhancedAt: Date.now(),
+      };
+    } catch (error) {
+      console.error('Error enhancing metadata:', error);
+      return {
+        metadataEnhanced: true,
+        enhancedAt: Date.now(),
+      };
+    }
+  }
+
+  /**
    * Estimate token count for text
    * Rough estimation: 1 token ≈ 4 characters
    */

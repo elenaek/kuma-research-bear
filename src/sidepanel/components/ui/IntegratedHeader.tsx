@@ -19,6 +19,10 @@ interface IntegratedHeaderProps {
   currentIndex: number;
   currentPaperTitle?: string;
 
+  // Top-level tab state
+  topLevelTab: 'papers' | 'citations';
+  onTopLevelTabChange: (tab: 'papers' | 'citations') => void;
+
   // Status
   isCheckingStorage?: boolean;
   statusText?: string;
@@ -60,6 +64,8 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
     papers,
     currentIndex,
     currentPaperTitle,
+    topLevelTab,
+    onTopLevelTabChange,
     isCheckingStorage = false,
     statusText,
     onPrevious,
@@ -130,8 +136,36 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
         </div>
       </div>
 
-      {/* Navigation Row (wide screens, when papers exist) */}
-      {hasPapers && (
+      {/* Top-Level Tabs Row */}
+      <div class="px-responsive border-t border-gray-100">
+        <div class="flex items-center gap-1 pt-2 pb-2">
+          <button
+            onClick={() => onTopLevelTabChange('papers')}
+            class={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all hover:cursor-pointer ${
+              topLevelTab === 'papers'
+                ? 'bg-white text-blue-600 border border-gray-200 border-b-0 shadow-sm relative z-10'
+                : 'bg-gray-50 text-gray-600 border border-transparent hover:bg-gray-100 hover:text-gray-900 hover:shadow-sm'
+            }`}
+            style={topLevelTab === 'papers' ? 'margin-bottom: -1px;' : ''}
+          >
+            Papers
+          </button>
+          <button
+            onClick={() => onTopLevelTabChange('citations')}
+            class={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all hover:cursor-pointer ${
+              topLevelTab === 'citations'
+                ? 'bg-white text-blue-600 border border-gray-200 border-b-0 shadow-sm relative z-10'
+                : 'bg-gray-50 text-gray-600 border border-transparent hover:bg-gray-100 hover:text-gray-900 hover:shadow-sm'
+            }`}
+            style={topLevelTab === 'citations' ? 'margin-bottom: -1px;' : ''}
+          >
+            Citations
+          </button>
+        </div>
+      </div>
+
+      {/* Navigation Row (wide screens, when papers exist and Papers tab is active) */}
+      {hasPapers && topLevelTab === 'papers' && (
         <div class="px-responsive pb-2.5 hide-on-narrow">
           <div class="flex items-center gap-2">
             {/* Navigation controls (only show if multiple papers) */}
@@ -271,8 +305,8 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
         </div>
       )}
 
-      {/* Mobile Menu Dropdown */}
-      {showMobileMenu && (
+      {/* Mobile Menu Dropdown (only in Papers tab) */}
+      {showMobileMenu && topLevelTab === 'papers' && (
         <div class="hide-on-wide" ref={mobileMenuRef}>
           <div class="px-responsive pb-3 border-t border-gray-200 bg-gray-50 animate-scale-in">
             <div class="py-3 space-y-3">
@@ -386,8 +420,8 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
         </div>
       )}
 
-      {/* Delete Current Confirmation */}
-      {showDeleteConfirm && (
+      {/* Delete Current Confirmation (only in Papers tab) */}
+      {showDeleteConfirm && topLevelTab === 'papers' && (
         <div class="px-responsive pb-3 border-t border-gray-200 bg-red-50">
           <div class="py-3">
             <p class="text-sm font-semibold text-red-900 mb-2">
@@ -416,8 +450,8 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
         </div>
       )}
 
-      {/* Delete All Confirmation */}
-      {showDeleteAllConfirm && (
+      {/* Delete All Confirmation (only in Papers tab) */}
+      {showDeleteAllConfirm && topLevelTab === 'papers' && (
         <div class="px-responsive pb-3 border-t border-gray-200 bg-red-50">
           <div class="py-3">
             <p class="text-sm font-semibold text-red-900 mb-2">

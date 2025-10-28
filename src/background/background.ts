@@ -20,6 +20,7 @@ import * as aiHandlers from './handlers/aiHandlers.ts';
 import * as stateHandlers from './handlers/stateHandlers.ts';
 import * as uiHandlers from './handlers/uiHandlers.ts';
 import * as chatHandlers from './handlers/chatHandlers.ts';
+import * as citationHandlers from './handlers/citationHandlers.ts';
 import { executeDetectAndExplainFlow } from './orchestrators/detectAndExplainOrchestrator.ts';
 import { inputQuotaService } from '../utils/inputQuotaService.ts';
 
@@ -279,6 +280,19 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
       case MessageType.GET_IMAGE_EXPLANATIONS_BY_PAPER:
         sendResponse(await dbHandlers.handleGetImageExplanationsByPaper(message.payload));
+        break;
+
+      // Citation Operations
+      case 'ADD_CITATION':
+        sendResponse(await citationHandlers.handleAddCitation(message.payload));
+        break;
+
+      case 'GET_ALL_CITATIONS':
+        sendResponse(await citationHandlers.handleGetAllCitations());
+        break;
+
+      case 'DELETE_CITATION':
+        sendResponse(await citationHandlers.handleDeleteCitation(message.payload));
         break;
 
       // State Operations

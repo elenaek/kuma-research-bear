@@ -15,6 +15,7 @@ import { GlossarySection } from './components/GlossarySection.tsx';
 import { ExplanationSection } from './components/ExplanationSection.tsx';
 import { SummarySection } from './components/SummarySection.tsx';
 import { OriginalPaperTab } from './components/OriginalPaperTab.tsx';
+import { CitationsSection } from './components/CitationsSection.tsx';
 import { OperationBanner } from './components/ui/OperationBanner.tsx';
 import { TabButton } from './components/ui/TabButton.tsx';
 import { TabDropdown } from './components/ui/TabDropdown.tsx';
@@ -32,6 +33,7 @@ import * as StorageService from '../services/StorageService.ts';
 
 type ViewState = 'loading' | 'empty' | 'content' | 'stored-only';
 type TabType = 'summary' | 'explanation' | 'qa' | 'analysis' | 'glossary' | 'original';
+type TopLevelTab = 'papers' | 'citations';
 
 interface ExplanationData {
   paper: ResearchPaper;
@@ -42,6 +44,7 @@ interface ExplanationData {
 export function Sidepanel() {
   // State - define first so hooks can reference them
   const [viewState, setViewState] = useState<ViewState>('loading');
+  const [topLevelTab, setTopLevelTab] = useState<TopLevelTab>('papers');
   const [activeTab, setActiveTab] = useState<TabType>('summary');
   const [data, setData] = useState<ExplanationData | null>(null);
   const [copied, setCopied] = useState(false);
@@ -1145,6 +1148,8 @@ Source: ${paper.url}
         currentIndex={paperNavigation.currentPaperIndex}
         currentPaperTitle={storedPaper?.title}
         subtitle="A bear that helps you understand research papers"
+        topLevelTab={topLevelTab}
+        onTopLevelTabChange={setTopLevelTab}
         onPrevious={handlePrevPaper}
         onNext={handleNextPaper}
         onSelect={(index) => switchToPaper(index)}
@@ -1180,12 +1185,22 @@ Source: ${paper.url}
           )}
 
 
-          {/* Paper Info Card */}
-          <PaperInfoCard paper={data?.paper || null} storedPaper={storedPaper} />
+          {/* Citations Tab Content */}
+          {topLevelTab === 'citations' && (
+            <div class="tab-content space-y-4">
+              <CitationsSection />
+            </div>
+          )}
 
-          {/* Tabs */}
-          {/* Dropdown for narrow screens */}
-          <>
+          {/* Papers Tab Content */}
+          {topLevelTab === 'papers' && (
+            <>
+              {/* Paper Info Card */}
+              <PaperInfoCard paper={data?.paper || null} storedPaper={storedPaper} />
+
+              {/* Tabs */}
+              {/* Dropdown for narrow screens */}
+              <>
             <div class="mb-4 hide-on-wide text-center">
                 <TabDropdown
                   tabs={[
@@ -1246,6 +1261,7 @@ Source: ${paper.url}
               {/* Horizontal tabs for wide screens */}
               <div class="mb-4 border-b border-gray-200 -mx-responsive hide-on-narrow">
                 <div class="flex gap-1 overflow-x-auto px-responsive scrollbar-hide" style="scrollbar-width: none; -ms-overflow-style: none;">
+                  {/* Paper-Specific Tabs */}
                   <TabButton
                     active={activeTab === 'summary'}
                     onClick={() => setActiveTab('summary')}
@@ -1364,27 +1380,29 @@ Source: ${paper.url}
               {/* Actions */}
               <div class="flex gap-3 mt-6">
                 <LoadingButton
-                  onClick={handleCopy}
-                  loading={false}
-                  variant="secondary"
-                  className="flex-1"
-                >
-                  <Copy size={16} />
-                  {copied ? 'Copied!' : 'Copy Explanation'}
-                </LoadingButton>
+                    onClick={handleCopy}
+                    loading={false}
+                    variant="secondary"
+                    className="flex-1"
+                  >
+                    <Copy size={16} />
+                    {copied ? 'Copied!' : 'Copy Explanation'}
+                  </LoadingButton>
 
-                <LoadingButton
-                  onClick={handleRegenerate}
-                  loading={isRegenerating}
-                  loadingText="Regenerating..."
-                  variant="secondary"
-                  className="flex-1"
-                >
-                  <RefreshCw size={16} />
-                  Regenerate
-                </LoadingButton>
+                  <LoadingButton
+                    onClick={handleRegenerate}
+                    loading={isRegenerating}
+                    loadingText="Regenerating..."
+                    variant="secondary"
+                    className="flex-1"
+                  >
+                    <RefreshCw size={16} />
+                    Regenerate
+                  </LoadingButton>
               </div>
             </>
+            </>
+          )}
         </div>
       </div>
     </div>

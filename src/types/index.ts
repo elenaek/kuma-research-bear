@@ -458,6 +458,44 @@ export interface SessionMetadata {
   needsSummarization: boolean; // Flag when >= 80% usage
 }
 
+// Citation types
+export type CitationFormat = 'apa' | 'mla' | 'chicago' | 'ieee';
+
+export interface Citation {
+  id: string; // Unique citation ID
+  paperId: string; // Reference to the paper
+  paperTitle: string;
+  authors: string[];
+  publishDate?: string; // YYYY-MM-DD
+  journal?: string;
+  venue?: string;
+  doi?: string;
+  url: string;
+  source: 'arxiv' | 'pubmed' | 'biorxiv' | 'scholar' | 'ssrn' | 'ai-extracted' | 'other' | 'pdf';
+  selectedText: string; // The quoted text
+  pageNumber?: string | number; // Page number or section name
+  section?: string; // Section heading where quote appears
+  addedAt: number; // Timestamp
+  customOrder?: number; // For manual reordering (overrides alphabetical)
+}
+
+export interface EnhancedPaperMetadata {
+  publishDate?: string;
+  journal?: string;
+  venue?: string;
+  volume?: string;
+  issue?: string;
+  pageRange?: string; // e.g., "123-145"
+  metadataEnhanced: boolean; // Flag indicating AI enhancement was attempted
+  enhancedAt?: number; // Timestamp of enhancement
+}
+
+export interface CitationsStore {
+  citations: Citation[];
+  selectedFormat: CitationFormat;
+  lastModified: number;
+}
+
 export interface ChatboxPosition {
   x: number;
   y: number;

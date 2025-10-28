@@ -1,6 +1,8 @@
 import { h, render } from 'preact';
-import { AskKumaButton } from '../components/AskKumaButton.tsx';
+import { SelectionToolbar } from '../components/SelectionToolbar.tsx';
 import * as ChromeService from '../../services/ChromeService.ts';
+import { generateCitation } from '../../utils/citationGenerator.ts';
+import { showSuccessToast, showErrorToast } from '../../utils/toast.ts';
 
 const MIN_SELECTION_LENGTH = 3;
 const BUTTON_OFFSET_X = 10;
@@ -75,48 +77,71 @@ class TextSelectionHandler {
 
   private async loadStyles(): Promise<string> {
     try {
-      const cssUrl = chrome.runtime.getURL('src/content/styles/askKumaButton.css');
+      const cssUrl = chrome.runtime.getURL('src/content/styles/selectionToolbar.css');
       const response = await fetch(cssUrl);
       if (response.ok) {
         return await response.text();
       }
       throw new Error(`Failed to fetch CSS: ${response.status}`);
     } catch (error) {
-      console.warn('[Ask Kuma] Failed to load external CSS, using inline styles:', error);
+      console.warn('[Selection Toolbar] Failed to load external CSS, using inline styles:', error);
       return this.getInlineStyles();
     }
   }
 
   private getInlineStyles(): string {
     return `
-      .ask-kuma-button {
+      .selection-toolbar {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         background: linear-gradient(135deg, oklch(37.9% 0.146 265.522) 0%, oklch(42.4% 0.199 265.638) 100%);
-        color: white;
         border: none;
-        border-radius: 8px;
-        padding: 10px 18px;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
+        border-radius: 10px;
+        padding: 6px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.1);
-        transition: all 0.2s ease;
         animation: fadeInUp 0.2s ease-out;
         user-select: none;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .toolbar-button {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
         white-space: nowrap;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
+        font-family: inherit;
       }
 
-      .ask-kuma-button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25), 0 3px 6px rgba(0, 0, 0, 0.15);
+      .toolbar-button:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: translateY(-1px);
       }
 
-      .ask-kuma-button:active {
+      .toolbar-button:active {
         transform: translateY(0);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        background: rgba(255, 255, 255, 0.15);
+      }
+
+      .toolbar-button svg {
+        flex-shrink: 0;
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+      }
+
+      .toolbar-divider {
+        width: 1px;
+        height: 20px;
+        background: rgba(255, 255, 255, 0.2);
+        margin: 0 2px;
       }
 
       @keyframes fadeInUp {
@@ -291,6 +316,67 @@ class TextSelectionHandler {
     window.getSelection()?.removeAllRanges();
   }
 
+  private async handleAddCitation() {
+    console.log('[Citation] Add citation clicked');
+    const selectedText = this.selectionState.text;
+
+    if (!selectedText) {
+      console.log('[Citation] No selected text');
+      return;
+    }
+
+    try {
+      // Get current paper
+      const currentUrl = window.location.href;
+      const paper = await ChromeService.getPaperFromDBByUrl(currentUrl);
+
+      if (!paper) {
+        console.error('[Citation] No paper found for current URL');
+        showErrorToast('Paper not found. Please store the paper first.');
+        return;
+      }
+
+      console.log('[Citation] Generating citation for paper:', paper.title);
+
+      // Show loading toast (info type)
+      showSuccessToast('Generating citation...', 1500);
+
+      // Generate citation (includes AI enhancement if needed)
+      const citation = await generateCitation(selectedText, paper);
+
+      console.log('[Citation] Citation generated, sending to background for storage...');
+
+      // Send to background service worker for storage
+      chrome.runtime.sendMessage({
+        type: 'ADD_CITATION',
+        payload: { citation: citation },
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('[Citation] Error sending to background:', chrome.runtime.lastError);
+          showErrorToast('Failed to add citation. Please try again.');
+          return;
+        }
+
+        if (response && response.success) {
+          console.log('[Citation] ✓ Citation added successfully via background');
+          showSuccessToast('Citation added successfully!');
+        } else {
+          console.error('[Citation] Background failed to add citation');
+          showErrorToast('Failed to add citation. Please try again.');
+        }
+      });
+    } catch (error) {
+      console.error('[Citation] Error adding citation:', error);
+      showErrorToast('Failed to add citation. Please try again.');
+    }
+
+    // Hide the toolbar after clicking
+    this.hideButton();
+
+    // Keep selection visible for reference
+    // User might want to see what they cited
+  }
+
   private render() {
     if (!this.shadowRoot || !this.isInitialized) {
       return;
@@ -302,11 +388,12 @@ class TextSelectionHandler {
     }
 
     render(
-      h(AskKumaButton, {
+      h(SelectionToolbar, {
         x: this.selectionState.x,
         y: this.selectionState.y,
         visible: this.selectionState.visible,
-        onClick: this.handleButtonClick.bind(this),
+        onAskKuma: this.handleButtonClick.bind(this),
+        onAddCitation: this.handleAddCitation.bind(this),
       }),
       rootElement
     );
