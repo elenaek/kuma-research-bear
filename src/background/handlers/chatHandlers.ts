@@ -1,4 +1,4 @@
-import { MessageType, ChatMessage, ConversationState } from '../../types/index.ts';
+import { MessageType, ChatMessage, ConversationState, SourceInfo } from '../../types/index.ts';
 import { getPaperByUrl, getRelevantChunksSemantic, updatePaper } from '../../utils/dbService.ts';
 import { aiService } from '../../utils/aiService.ts';
 import { getOptimalRAGChunkCount } from '../../utils/adaptiveRAGService.ts';
@@ -178,7 +178,7 @@ async function sendChatChunk(tabId: number, chunk: string): Promise<void> {
 /**
  * Send chat stream end message to content script
  */
-async function sendChatEnd(tabId: number, fullMessage: string, sources?: string[]): Promise<void> {
+async function sendChatEnd(tabId: number, fullMessage: string, sources?: string[], sourceInfo?: SourceInfo[]): Promise<void> {
   try {
     // Validate tab exists before sending
     if (!await isTabValid(tabId)) {
@@ -188,7 +188,7 @@ async function sendChatEnd(tabId: number, fullMessage: string, sources?: string[
 
     await chrome.tabs.sendMessage(tabId, {
       type: MessageType.CHAT_STREAM_END,
-      payload: { fullMessage, sources },
+      payload: { fullMessage, sources, sourceInfo },
     });
   } catch (error) {
     console.error('[ChatHandlers] Error sending chat end to tab:', error);
@@ -399,12 +399,45 @@ async function processAndStreamResponse(
       parentSection: chunk.parentSection,
       paragraphIndex: chunk.paragraphIndex,
       sentenceGroupIndex: chunk.sentenceGroupIndex,
+      cssSelector: chunk.cssSelector,
+      elementId: chunk.elementId,
+      xPath: chunk.xPath,
+      startChar: chunk.startChar,
+      endChar: chunk.endChar,
     }));
 
     // Sort chunks by document order (index) for better context
     contextChunks.sort((a, b) => a.index - b.index);
 
     const sources = Array.from(new Set(contextChunks.map(c => c.section)));
+
+    // Build sourceInfo mapping for scroll-to-source functionality
+    // Maps source text to selector information from chunks
+    const sourceInfoMap = new Map<string, SourceInfo>();
+
+    for (const chunk of contextChunks) {
+      // Build hierarchical citation path (same as in context string)
+      const hierarchy = chunk.parentSection
+        ? `${chunk.parentSection} > ${chunk.section}`
+        : chunk.section;
+
+      // Build source text (section only, no paragraph numbers)
+      const sourceText = `Section: ${hierarchy}`;
+
+      // Map all sources that have section info (not just ones with CSS selectors)
+      // Text search fallback can find any section heading
+      if (chunk.section && !sourceInfoMap.has(sourceText)) {
+        sourceInfoMap.set(sourceText, {
+          text: sourceText,
+          cssSelector: chunk.cssSelector,
+          elementId: chunk.elementId,
+          xPath: chunk.xPath,
+          sectionHeading: chunk.section,
+          startChar: chunk.startChar,
+          endChar: chunk.endChar,
+        });
+      }
+    }
 
     // Build context string with position and natural boundary hierarchy
     const contextString = contextChunks
@@ -736,8 +769,19 @@ User question: ${message}`;
       extractedSources = [];
     }
 
+    // Map extracted sources to sourceInfo for scroll-to-source functionality
+    const sourceInfoArray: SourceInfo[] = extractedSources
+      .map(sourceText => {
+        // Normalize by stripping paragraph numbers: "Section: Methods > P 3" → "Section: Methods"
+        const normalized = sourceText.replace(/\s*>\s*P\s+\d+(\s*>\s*Sentences)?$/, '');
+        return sourceInfoMap.get(normalized);
+      })
+      .filter((info): info is SourceInfo => info !== undefined);
+
+    console.log('[ChatHandlers] Mapped sourceInfo:', sourceInfoArray.length, 'out of', extractedSources.length);
+
     // Send end signal with final answer and sources
-    await sendChatEnd(tabId, answer.trim(), extractedSources);
+    await sendChatEnd(tabId, answer.trim(), extractedSources, sourceInfoArray);
 
     // Post-stream processing: token tracking and summarization
     // Wrapped in try-catch to prevent failures from affecting the successful stream
@@ -756,7 +800,7 @@ User question: ${message}`;
           const newChatHistory: ChatMessage[] = [
             ...chatHistory,
             { role: 'user', content: message, timestamp: Date.now() },
-            { role: 'assistant', content: answer.trim(), timestamp: Date.now(), sources: extractedSources }
+            { role: 'assistant', content: answer.trim(), timestamp: Date.now(), sources: extractedSources, sourceInfo: sourceInfoArray }
           ];
 
           // Determine which messages to summarize (all except last 6)
@@ -1109,12 +1153,45 @@ async function processAndStreamImageChatResponse(
       parentSection: chunk.parentSection,
       paragraphIndex: chunk.paragraphIndex,
       sentenceGroupIndex: chunk.sentenceGroupIndex,
+      cssSelector: chunk.cssSelector,
+      elementId: chunk.elementId,
+      xPath: chunk.xPath,
+      startChar: chunk.startChar,
+      endChar: chunk.endChar,
     }));
 
     // Sort chunks by document order (index) for better context
     contextChunks.sort((a, b) => a.index - b.index);
 
     const sources = Array.from(new Set(contextChunks.map(c => c.section)));
+
+    // Build sourceInfo mapping for scroll-to-source functionality
+    // Maps source text to selector information from chunks
+    const sourceInfoMap = new Map<string, SourceInfo>();
+
+    for (const chunk of contextChunks) {
+      // Build hierarchical citation path (same as in context string)
+      const hierarchy = chunk.parentSection
+        ? `${chunk.parentSection} > ${chunk.section}`
+        : chunk.section;
+
+      // Build source text (section only, no paragraph numbers)
+      const sourceText = `Section: ${hierarchy}`;
+
+      // Map all sources that have section info (not just ones with CSS selectors)
+      // Text search fallback can find any section heading
+      if (chunk.section && !sourceInfoMap.has(sourceText)) {
+        sourceInfoMap.set(sourceText, {
+          text: sourceText,
+          cssSelector: chunk.cssSelector,
+          elementId: chunk.elementId,
+          xPath: chunk.xPath,
+          sectionHeading: chunk.section,
+          startChar: chunk.startChar,
+          endChar: chunk.endChar,
+        });
+      }
+    }
 
     // Build context string with position and natural boundary hierarchy
     const contextString = contextChunks
@@ -1474,8 +1551,19 @@ User question: ${message}`;
       extractedSources = [];
     }
 
+    // Map extracted sources to sourceInfo for scroll-to-source functionality
+    const sourceInfoArray: SourceInfo[] = extractedSources
+      .map(sourceText => {
+        // Normalize by stripping paragraph numbers: "Section: Methods > P 3" → "Section: Methods"
+        const normalized = sourceText.replace(/\s*>\s*P\s+\d+(\s*>\s*Sentences)?$/, '');
+        return sourceInfoMap.get(normalized);
+      })
+      .filter((info): info is SourceInfo => info !== undefined);
+
+    console.log('[ImageChatHandlers] Mapped sourceInfo:', sourceInfoArray.length, 'out of', extractedSources.length);
+
     // Send end signal with final answer and sources
-    await sendImageChatEnd(tabId, answer.trim(), extractedSources);
+    await sendImageChatEnd(tabId, answer.trim(), extractedSources, sourceInfoArray);
 
     // Post-stream processing: save history and check for summarization
     try {
@@ -1483,7 +1571,7 @@ User question: ${message}`;
       const newChatHistory = [
         ...imageChatHistory,
         { role: 'user' as const, content: message, timestamp: Date.now() },
-        { role: 'assistant' as const, content: answer.trim(), timestamp: Date.now(), sources: extractedSources }
+        { role: 'assistant' as const, content: answer.trim(), timestamp: Date.now(), sources: extractedSources, sourceInfo: sourceInfoArray }
       ];
 
       // Save to IndexedDB
@@ -1585,7 +1673,7 @@ async function sendImageChatChunk(tabId: number, chunk: string): Promise<void> {
 /**
  * Send image chat stream end to content script
  */
-async function sendImageChatEnd(tabId: number, fullMessage: string, sources?: string[]): Promise<void> {
+async function sendImageChatEnd(tabId: number, fullMessage: string, sources?: string[], sourceInfo?: SourceInfo[]): Promise<void> {
   try {
     if (!await isTabValid(tabId)) {
       console.warn('[ImageChatHandlers] Tab', tabId, 'no longer exists, skipping stream end');
@@ -1594,7 +1682,7 @@ async function sendImageChatEnd(tabId: number, fullMessage: string, sources?: st
 
     await chrome.tabs.sendMessage(tabId, {
       type: MessageType.IMAGE_CHAT_STREAM_END,
-      payload: { fullMessage, sources },
+      payload: { fullMessage, sources, sourceInfo },
     });
   } catch (error) {
     console.error('[ImageChatHandlers] Error sending image chat end:', error);

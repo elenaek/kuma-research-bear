@@ -1,6 +1,6 @@
 import { h } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
-import { ChatMessage, ChatboxPosition, ChatTab } from '../../types/index.ts';
+import { ChatMessage, ChatboxPosition, ChatTab, SourceInfo } from '../../types/index.ts';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
 import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.tsx';
 import { AlertCircle } from 'lucide-preact';
@@ -149,6 +149,106 @@ export const ChatBox = ({
       }
       return newSet;
     });
+  };
+
+  // Scroll to source on the page with highlight effect (hybrid approach with fallback)
+  const handleScrollToSource = (sourceInfo: SourceInfo | undefined) => {
+    if (!sourceInfo) return;
+
+    let element: Element | null = null;
+
+    // Try 1: CSS selector
+    if (sourceInfo.cssSelector) {
+      try {
+        element = document.querySelector(sourceInfo.cssSelector);
+        console.log('[ScrollToSource] CSS selector found element:', !!element);
+      } catch (e) {
+        console.warn('[ScrollToSource] Invalid CSS selector:', sourceInfo.cssSelector, e);
+      }
+    }
+
+    // Try 2: Element ID (direct lookup)
+    if (!element && sourceInfo.elementId) {
+      element = document.getElementById(sourceInfo.elementId);
+      console.log('[ScrollToSource] Element ID found element:', !!element);
+    }
+
+    // Try 3: XPath
+    if (!element && sourceInfo.xPath) {
+      try {
+        const xpathResult = document.evaluate(
+          sourceInfo.xPath,
+          document,
+          null,
+          XPathResult.FIRST_ORDERED_NODE_TYPE,
+          null
+        );
+        element = xpathResult.singleNodeValue as Element | null;
+        console.log('[ScrollToSource] XPath found element:', !!element);
+      } catch (e) {
+        console.warn('[ScrollToSource] Invalid XPath:', sourceInfo.xPath, e);
+      }
+    }
+
+    // Try 4: Text search fallback (search for section heading text)
+    if (!element && sourceInfo.sectionHeading) {
+      console.log('[ScrollToSource] Falling back to text search for:', sourceInfo.sectionHeading);
+      element = findElementByText(sourceInfo.sectionHeading);
+      console.log('[ScrollToSource] Text search found element:', !!element);
+    }
+
+    // If we found an element, scroll to it and highlight
+    if (element && element instanceof HTMLElement) {
+      // Scroll into view
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'center'
+      });
+
+      // Apply highlight effect (same as image scroll)
+      const originalOutline = element.style.outline;
+      const originalOutlineOffset = element.style.outlineOffset;
+
+      element.style.outline = '3px solid #60a5fa';
+      element.style.outlineOffset = '2px';
+
+      setTimeout(() => {
+        element!.style.outline = originalOutline;
+        element!.style.outlineOffset = originalOutlineOffset;
+      }, 2000);
+
+      console.log('[ScrollToSource] Successfully scrolled to and highlighted element');
+    } else {
+      console.log('[ScrollToSource] Could not find element for source:', sourceInfo.text);
+    }
+  };
+
+  // Helper function to find an element by text content (for fallback)
+  const findElementByText = (text: string): HTMLElement | null => {
+    // Search through all headings first (most likely to be section headings)
+    const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    for (const heading of Array.from(headings)) {
+      if (heading.textContent?.trim() === text.trim()) {
+        return heading as HTMLElement;
+      }
+    }
+
+    // If not found in headings, search all text nodes (slower but more thorough)
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      if (node.textContent?.trim() === text.trim()) {
+        return node.parentElement;
+      }
+    }
+
+    return null;
   };
 
   // Auto-scroll to bottom when new messages arrive (only if already near bottom)
@@ -838,11 +938,26 @@ export const ChatBox = ({
                 </button>
                 {expandedSources.has(idx) && (
                   <ul class="chatbox-sources-list">
-                    {msg.sources.map((source, sourceIdx) => (
-                      <li key={sourceIdx} class="chatbox-sources-item">
-                        {source}
-                      </li>
-                    ))}
+                    {msg.sources.map((source, sourceIdx) => {
+                      // Normalize source text by stripping paragraph numbers for lookup
+                      // E.g., "Section: I Introduction > P 2" → "Section: I Introduction"
+                      const normalizedSource = source.replace(/\s*>\s*P\s+\d+(\s*>\s*Sentences)?$/, '');
+                      const sourceInfo = msg.sourceInfo?.find(info => info.text === normalizedSource);
+                      // Make clickable if we have ANY way to locate the source (CSS selector, ID, XPath, or section heading for text search)
+                      const isClickable = sourceInfo?.cssSelector || sourceInfo?.elementId || sourceInfo?.xPath || sourceInfo?.sectionHeading;
+
+                      return (
+                        <li
+                          key={sourceIdx}
+                          class={`chatbox-sources-item ${isClickable ? 'clickable' : ''}`}
+                          onClick={isClickable ? () => handleScrollToSource(sourceInfo) : undefined}
+                          style={isClickable ? { cursor: 'pointer' } : {}}
+                          title={isClickable ? 'Click to scroll to this section' : undefined}
+                        >
+                          {source}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>

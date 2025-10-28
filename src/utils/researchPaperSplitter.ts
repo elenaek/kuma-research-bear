@@ -11,6 +11,102 @@ export interface PaperSection {
   content: string;          // Text content for this section
   startIndex: number;       // Character position in full document
   endIndex: number;         // End position in full document
+  cssSelector?: string;     // CSS selector to locate the heading element
+  elementId?: string;       // Element ID if available
+  xPath?: string;           // XPath selector as fallback
+}
+
+/**
+ * Generate a CSS selector for an element
+ * Prioritizes ID, then uses tag name + classes + nth-child
+ */
+function generateCSSSelector(element: HTMLElement): string {
+  // If element has an ID, use that (most reliable)
+  if (element.id) {
+    return `#${element.id}`;
+  }
+
+  // Build selector using tag name, classes, and position
+  const tag = element.tagName.toLowerCase();
+  const classes = element.className ? `.${element.className.trim().split(/\s+/).join('.')}` : '';
+
+  // Get nth-child position
+  let nth = 1;
+  let sibling = element.previousElementSibling;
+  while (sibling) {
+    if (sibling.tagName === element.tagName) {
+      nth++;
+    }
+    sibling = sibling.previousElementSibling;
+  }
+
+  // Build selector path up to a stable parent (with ID or main content)
+  const parts: string[] = [];
+  let current: HTMLElement | null = element;
+  let depth = 0;
+  const maxDepth = 5; // Limit depth to avoid overly long selectors
+
+  while (current && depth < maxDepth) {
+    const currentTag = current.tagName.toLowerCase();
+    const currentClasses = current.className ? `.${current.className.trim().split(/\s+/).join('.')}` : '';
+
+    if (current.id) {
+      parts.unshift(`#${current.id}`);
+      break; // Stop at first element with ID
+    }
+
+    // Calculate nth-child for this element
+    let currentNth = 1;
+    let currentSibling = current.previousElementSibling;
+    while (currentSibling) {
+      if (currentSibling.tagName === current.tagName) {
+        currentNth++;
+      }
+      currentSibling = currentSibling.previousElementSibling;
+    }
+
+    parts.unshift(`${currentTag}${currentClasses}:nth-child(${currentNth})`);
+
+    current = current.parentElement;
+    depth++;
+  }
+
+  return parts.join(' > ');
+}
+
+/**
+ * Generate XPath for an element (fallback option)
+ */
+function generateXPath(element: HTMLElement): string {
+  if (element.id) {
+    return `//*[@id="${element.id}"]`;
+  }
+
+  const parts: string[] = [];
+  let current: HTMLElement | null = element;
+
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    let index = 1;
+    let sibling = current.previousElementSibling;
+
+    while (sibling) {
+      if (sibling.tagName === current.tagName) {
+        index++;
+      }
+      sibling = sibling.previousElementSibling;
+    }
+
+    const tagName = current.tagName.toLowerCase();
+    parts.unshift(`${tagName}[${index}]`);
+
+    if (current.id) {
+      break;
+    }
+
+    current = current.parentElement;
+  }
+
+  return `/${parts.join('/')}`;
 }
 
 /**
@@ -117,6 +213,11 @@ function extractSectionRecursive(
   const startIndex = startCharIndex;
   const endIndex = startCharIndex + content.length;
 
+  // Generate selectors for scroll-to-source functionality
+  const cssSelector = generateCSSSelector(headingElement as HTMLElement);
+  const elementId = headingElement.id || undefined;
+  const xPath = generateXPath(headingElement as HTMLElement);
+
   sections.push({
     heading,
     level,
@@ -124,6 +225,9 @@ function extractSectionRecursive(
     content: content.trim(),
     startIndex,
     endIndex,
+    cssSelector,
+    elementId,
+    xPath,
   });
 
   let currentCharIndex = endIndex;
@@ -240,6 +344,11 @@ export async function extractHTMLSections(doc?: Document): Promise<PaperSection[
       const endIndex = currentCharIndex + content.length;
       currentCharIndex = endIndex;
 
+      // Generate selectors for scroll-to-source functionality
+      const cssSelector = generateCSSSelector(headingElement);
+      const elementId = headingElement.id || undefined;
+      const xPath = generateXPath(headingElement);
+
       sections.push({
         heading,
         level,
@@ -247,6 +356,9 @@ export async function extractHTMLSections(doc?: Document): Promise<PaperSection[
         content: content.trim(),
         startIndex,
         endIndex,
+        cssSelector,
+        elementId,
+        xPath,
       });
     }
 

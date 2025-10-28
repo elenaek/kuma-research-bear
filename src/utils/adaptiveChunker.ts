@@ -116,7 +116,7 @@ function chunkSection(
   maxChunkSize: number,
   startGlobalIndex: number
 ): ContentChunk[] {
-  const { heading, level, parentHeading, content, startIndex } = section;
+  const { heading, level, parentHeading, content, startIndex, cssSelector, elementId, xPath } = section;
 
   // ALWAYS chunk by paragraphs (natural document boundaries)
   const paragraphs = extractParagraphs(content);
@@ -147,6 +147,9 @@ function chunkSection(
         endChar: chunkStartChar + paragraph.length,
         tokenCount: Math.ceil(paragraph.length / 4),
         paragraphIndex: i, // Track paragraph number within section
+        cssSelector, // CSS selector from section for scroll-to-source
+        elementId, // Element ID from section
+        xPath, // XPath from section
       });
 
       currentChunkIndex++;
@@ -182,6 +185,9 @@ function chunkSection(
             tokenCount: Math.ceil(currentSentenceGroup.length / 4),
             paragraphIndex: i,
             sentenceGroupIndex: Math.floor(j / 3), // Approximate sentence group number
+            cssSelector, // CSS selector from section for scroll-to-source
+            elementId, // Element ID from section
+            xPath, // XPath from section
           });
 
           currentChunkIndex++;
@@ -212,6 +218,9 @@ function chunkSection(
           tokenCount: Math.ceil(currentSentenceGroup.length / 4),
           paragraphIndex: i,
           sentenceGroupIndex: Math.floor(sentences.length / 3),
+          cssSelector, // CSS selector from section for scroll-to-source
+          elementId, // Element ID from section
+          xPath, // XPath from section
         });
 
         currentChunkIndex++;

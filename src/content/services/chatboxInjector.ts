@@ -1,6 +1,6 @@
 import { h, render } from 'preact';
 import { ChatBox } from '../components/ChatBox.tsx';
-import { ChatMessage, ChatboxSettings, ChatboxPosition, StoredPaper, ChatTab, ConversationState } from '../../types/index.ts';
+import { ChatMessage, ChatboxSettings, ChatboxPosition, StoredPaper, ChatTab, ConversationState, SourceInfo } from '../../types/index.ts';
 import * as ChromeService from '../../services/ChromeService.ts';
 import { imageExplanationHandler } from './imageExplanationHandler.ts';
 
@@ -1073,7 +1073,7 @@ class ChatboxInjector {
   /**
    * Handle paper chat stream end
    */
-  private handlePaperStreamEnd(data: { fullMessage: string; sources?: string[] }) {
+  private handlePaperStreamEnd(data: { fullMessage: string; sources?: string[]; sourceInfo?: SourceInfo[] }) {
     const paperTab = this.tabs.find(t => t.id === 'paper');
     if (!paperTab) return;
 
@@ -1085,6 +1085,7 @@ class ChatboxInjector {
       content: data.fullMessage,
       timestamp: Date.now(),
       sources: data.sources,
+      sourceInfo: data.sourceInfo,
     };
 
     paperTab.messages.push(assistantMessage);
@@ -1112,7 +1113,7 @@ class ChatboxInjector {
   /**
    * Handle image chat stream end (route to correct tab)
    */
-  private handleImageStreamEnd(data: { fullMessage: string; sources?: string[] }) {
+  private handleImageStreamEnd(data: { fullMessage: string; sources?: string[]; sourceInfo?: SourceInfo[] }) {
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
     if (!activeTab || activeTab.type !== 'image') return;
 
@@ -1124,6 +1125,7 @@ class ChatboxInjector {
       content: data.fullMessage,
       timestamp: Date.now(),
       sources: data.sources,
+      sourceInfo: data.sourceInfo,
     };
 
     activeTab.messages.push(assistantMessage);

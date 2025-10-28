@@ -320,6 +320,17 @@
   line-height: 1.5;
 }
 
+.chatbox-sources-item.clickable {
+  color: #2563eb;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.chatbox-sources-item.clickable:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
 .chatbox-sources-item::before {
   content: '•';
   position: absolute;

@@ -332,6 +332,9 @@ export interface ContentChunk {
   tokenCount: number;
   embedding?: Float32Array; // Semantic embedding vector for RAG (256-768 dimensions)
   terms?: string[]; // Technical terms/acronyms extracted from this chunk by LLM (5-10 per chunk)
+  cssSelector?: string; // CSS selector to locate the section heading element on the page
+  elementId?: string; // Element ID if available for direct targeting
+  xPath?: string; // XPath selector as fallback option
 }
 
 // Image explanation types
@@ -421,11 +424,22 @@ export interface QAHistoryItem extends QuestionAnswer {
 }
 
 // Chat types
+export interface SourceInfo {
+  text: string; // Display text (e.g., "Section: Methods > Data Collection > P 3")
+  cssSelector?: string; // CSS selector to locate the source element
+  elementId?: string; // Element ID for direct targeting
+  xPath?: string; // XPath selector as fallback
+  sectionHeading?: string; // Section heading text for text search fallback
+  startChar?: number; // Character position for text search fallback
+  endChar?: number; // Character position for text search fallback
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
-  sources?: string[]; // Sources for assistant messages
+  sources?: string[]; // Sources for assistant messages (display text)
+  sourceInfo?: SourceInfo[]; // Enriched source data with selectors for scroll-to-source
 }
 
 // Image chat message (extends ChatMessage with optional image blob)
