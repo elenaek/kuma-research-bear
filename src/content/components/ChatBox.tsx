@@ -797,7 +797,23 @@ export const ChatBox = ({
                   <span style="font-size: 13px; color: #6b7280;">Kuma is analyzing the image...</span>
                 </div>
               ) : (
-                <MarkdownRenderer content={msg.content} />
+                <>
+                  {/* Show thumbnail for first message in image tabs */}
+                  {idx === 0 && msg.role === 'assistant' && activeTab?.type === 'image' && activeTab?.imageUrl && (
+                    <img
+                      src={activeTab.imageUrl}
+                      alt="Explained image"
+                      class="chatbox-image-thumbnail"
+                      title="Click to scroll to this image in the page"
+                      onClick={onScrollToImage}
+                      onError={(e) => {
+                        // Hide image if it fails to load
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  )}
+                  <MarkdownRenderer content={msg.content} />
+                </>
               )}
             </div>
             {msg.sources && msg.sources.length > 0 && (
