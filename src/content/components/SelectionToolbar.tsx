@@ -64,7 +64,7 @@ export const SelectionToolbar = ({ x, y, visible, onAskKuma, onAddCitation }: Se
       >
         <LottiePlayer
           path={chrome.runtime.getURL('lotties/kuma-qanda.lottie')}
-          size={24}
+          size={32}
           autoplay={true}
           loop={true}
           loopPurpose={LoopPurpose.QASection}
@@ -88,7 +88,7 @@ export const SelectionToolbar = ({ x, y, visible, onAskKuma, onAddCitation }: Se
         }}
         title="Add citation for this selection"
       >
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg width="32" height="32" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path
             d="M7 4.5C7 4.22386 7.22386 4 7.5 4H12.5C12.7761 4 13 4.22386 13 4.5C13 4.77614 12.7761 5 12.5 5H7.5C7.22386 5 7 4.77614 7 4.5Z"
             fill="currentColor"
