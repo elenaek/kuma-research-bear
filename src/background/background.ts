@@ -59,6 +59,14 @@ chrome.runtime.onInstalled.addListener(async () => {
     console.error('[Background] Failed to initialize inputQuota:', error);
   }
 
+  // Create context menu for detecting paper from page right-click
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_DETECT_ID,
+    title: 'Detect Paper with Kuma',
+    contexts: ['page'],
+    enabled: true, // Initially enabled, will be disabled when paper is already stored
+  });
+
   // Create context menu for opening chatbox from extension icon
   chrome.contextMenus.create({
     id: CONTEXT_MENU_ID,
@@ -75,13 +83,6 @@ chrome.runtime.onInstalled.addListener(async () => {
     enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
   });
 
-  // Create context menu for detecting paper from page right-click
-  chrome.contextMenus.create({
-    id: CONTEXT_MENU_DETECT_ID,
-    title: 'Detect Paper with Kuma',
-    contexts: ['page'],
-    enabled: true, // Initially enabled, will be disabled when paper is already stored
-  });
 
   // Create context menu for discussing images
   chrome.contextMenus.create({
@@ -438,6 +439,11 @@ export async function updateContextMenuState() {
     const chatReady = await isChatReady(activeTab.id);
     const paperNotStored = await isPaperNotStored(activeTab.id);
 
+    // Update detect paper context menu (enabled when paper is NOT stored)
+    await chrome.contextMenus.update(CONTEXT_MENU_DETECT_ID, {
+      enabled: paperNotStored,
+    });
+
     // Update chat context menus (enabled when paper is stored and chunked)
     await chrome.contextMenus.update(CONTEXT_MENU_ID, {
       enabled: chatReady,
@@ -449,10 +455,6 @@ export async function updateContextMenuState() {
       enabled: chatReady,
     });
 
-    // Update detect paper context menu (enabled when paper is NOT stored)
-    await chrome.contextMenus.update(CONTEXT_MENU_DETECT_ID, {
-      enabled: paperNotStored,
-    });
 
     // Update image buttons toggle checkbox to match current setting
     const { settings } = await chrome.storage.local.get('settings');

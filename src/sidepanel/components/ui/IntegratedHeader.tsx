@@ -141,9 +141,9 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
         <div class="flex items-center gap-1 pt-2 pb-2">
           <button
             onClick={() => onTopLevelTabChange('papers')}
-            class={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all hover:cursor-pointer ${
+            class={`px-2 py-2 text-sm font-medium rounded-t-lg transition-all hover:cursor-pointer ${
               topLevelTab === 'papers'
-                ? 'bg-white text-blue-600 border border-gray-200 border-b-0 shadow-sm relative z-10'
+                ? 'bg-white text-green-800 border border-gray-200 border-b-0 shadow-sm relative z-10'
                 : 'bg-gray-50 text-gray-600 border border-transparent hover:bg-gray-100 hover:text-gray-900 hover:shadow-sm'
             }`}
             style={topLevelTab === 'papers' ? 'margin-bottom: -1px;' : ''}
@@ -152,9 +152,9 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
           </button>
           <button
             onClick={() => onTopLevelTabChange('citations')}
-            class={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all hover:cursor-pointer ${
+            class={`px-2 py-2 text-sm font-medium rounded-t-lg transition-all hover:cursor-pointer ${
               topLevelTab === 'citations'
-                ? 'bg-white text-blue-600 border border-gray-200 border-b-0 shadow-sm relative z-10'
+                ? 'bg-white text-green-800 border border-gray-200 border-b-0 shadow-sm relative z-10'
                 : 'bg-gray-50 text-gray-600 border border-transparent hover:bg-gray-100 hover:text-gray-900 hover:shadow-sm'
             }`}
             style={topLevelTab === 'citations' ? 'margin-bottom: -1px;' : ''}

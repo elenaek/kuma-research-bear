@@ -22,7 +22,7 @@ export function TabButton(props: TabButtonProps) {
       onClick={onClick}
       class={`px-3 sm:px-4 py-2 font-medium border-b-2 flex items-center gap-1 sm:gap-2 relative overflow-hidden whitespace-nowrap text-sm sm:text-base ${
         active
-          ? 'border-blue-600 text-blue-600'
+          ? 'border-green-800 text-green-800'
           : 'border-transparent text-gray-600 hover:text-gray-800 hover:bg-gray-50'
       } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       style={{
@@ -37,7 +37,7 @@ export function TabButton(props: TabButtonProps) {
       {/* Animated underline */}
       {active && (
         <div
-          class="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 animate-slide-in-right"
+          class="absolute bottom-0 left-0 right-0 h-0.5 bg-green-700 animate-slide-in-right"
           style={{ borderBottom: 'none' }}
         />
       )}
