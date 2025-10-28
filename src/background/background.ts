@@ -33,6 +33,15 @@ const CONTEXT_MENU_IMAGE_ID = 'discuss-image-with-kuma'; // Image - discuss imag
 const CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID = 'toggle-image-buttons'; // Page - toggle image buttons
 const CONTEXT_MENU_SIDEPANEL_ID = 'open-sidepanel-page'; // Page - open sidepanel menu
 
+// Context menu section headers (disabled items for visual organization)
+const CONTEXT_MENU_HEADER_SYSTEM_ID = 'header-system';
+const CONTEXT_MENU_HEADER_ACTIONS_ID = 'header-actions';
+const CONTEXT_MENU_HEADER_SETTINGS_ID = 'header-settings';
+
+// Context menu separators
+const CONTEXT_MENU_SEPARATOR_1_ID = 'separator-system-actions';
+const CONTEXT_MENU_SEPARATOR_2_ID = 'separator-actions-settings';
+
 // Track pending paper extractions (paperUrl → tabId)
 // Used to reconnect tabId after offscreen processing completes
 const pendingExtractions = new Map<string, number>();
@@ -63,7 +72,19 @@ chrome.runtime.onInstalled.addListener(async () => {
     console.error('[Background] Failed to initialize inputQuota:', error);
   }
 
-  // Create context menu for detecting paper from page right-click
+  // ========================================
+  // CONTEXT MENU: SYSTEM SECTION
+  // ========================================
+
+  // System section header
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_HEADER_SYSTEM_ID,
+    title: '────────── System ──────────',
+    contexts: ['page'],
+    enabled: false, // Disabled = non-clickable header
+  });
+
+  // Detect paper from page right-click
   chrome.contextMenus.create({
     id: CONTEXT_MENU_DETECT_ID,
     title: 'Detect Paper with Kuma',
@@ -71,7 +92,34 @@ chrome.runtime.onInstalled.addListener(async () => {
     enabled: true, // Initially enabled, will be disabled when paper is already stored
   });
 
-  // Create context menu for opening chatbox from extension icon
+  // Open sidepanel
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_SIDEPANEL_ID,
+    title: 'Open Sidepanel',
+    contexts: ['page'],
+    enabled: true, // Always enabled
+  });
+
+  // Separator between System and Actions
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_SEPARATOR_1_ID,
+    type: 'separator',
+    contexts: ['page'],
+  });
+
+  // ========================================
+  // CONTEXT MENU: ACTIONS SECTION
+  // ========================================
+
+  // Actions section header
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_HEADER_ACTIONS_ID,
+    title: '────────── Actions ──────────',
+    contexts: ['page'],
+    enabled: false, // Disabled = non-clickable header
+  });
+
+  // Chat with Kuma from extension icon
   chrome.contextMenus.create({
     id: CONTEXT_MENU_ID,
     title: 'Chat with Kuma',
@@ -79,7 +127,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
   });
 
-  // Create context menu for opening chatbox from page right-click
+  // Chat with Kuma from page right-click
   chrome.contextMenus.create({
     id: CONTEXT_MENU_PAGE_ID,
     title: 'Chat with Kuma',
@@ -87,8 +135,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
   });
 
-
-  // Create context menu for discussing images
+  // Discuss images with Kuma
   chrome.contextMenus.create({
     id: CONTEXT_MENU_IMAGE_ID,
     title: 'Discuss this image with Kuma',
@@ -96,21 +143,32 @@ chrome.runtime.onInstalled.addListener(async () => {
     enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
   });
 
-  // Create context menu for toggling image buttons
+  // Separator between Actions and Settings
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_SEPARATOR_2_ID,
+    type: 'separator',
+    contexts: ['page'],
+  });
+
+  // ========================================
+  // CONTEXT MENU: SETTINGS SECTION
+  // ========================================
+
+  // Settings section header
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_HEADER_SETTINGS_ID,
+    title: '────────── Settings ──────────',
+    contexts: ['page'],
+    enabled: false, // Disabled = non-clickable header
+  });
+
+  // Toggle image explanation buttons
   chrome.contextMenus.create({
     id: CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID,
     title: 'Show Image Explanation Buttons',
     contexts: ['page'],
     type: 'checkbox',
     checked: true, // Default to checked
-  });
-
-  // Create context menu for opening sidepanel
-  chrome.contextMenus.create({
-    id: CONTEXT_MENU_SIDEPANEL_ID,
-    title: 'Open Sidepanel',
-    contexts: ['page'],
-    enabled: true, // Always enabled
   });
 
   console.log('Context menus created');
