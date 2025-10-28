@@ -553,6 +553,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // Keep message channel open for async response
   }
 
+  if (message.type === MessageType.PRELOAD_EMBEDDINGS) {
+    // Preload embedding model during initialization
+    (async () => {
+      try {
+        console.log('[Offscreen] Preloading embedding model...');
+        await embeddingService.loadModel();
+        console.log('[Offscreen] Embedding model preloaded successfully');
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error('[Offscreen] Error preloading embeddings:', error);
+        sendResponse({ success: false, error: String(error) });
+      }
+    })();
+
+    return true; // Keep message channel open for async response
+  }
+
   if (message.type === MessageType.EXTRACT_PAPER_HTML) {
     const { paperHtml, paperUrl, paper } = message.payload;
 

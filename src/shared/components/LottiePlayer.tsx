@@ -237,6 +237,15 @@ export const LottiePlayer = forwardRef<LottiePlayerHandle, LottiePlayerProps>(
 
     // Handle autoStartLoop prop (for popup bear)
     useEffect(() => {
+      // Reset hasPlayedOnce when path changes to allow new animation to play
+      if(
+        path === '/lotties/kuma-sleeping.lottie' || 
+        path === '/lotties/kuma-sleeping-shaking-zzz.lottie' || 
+        path === '/lotties/kuma-sleeping-shaking-nozzz.lottie'
+      ) {
+        hasPlayedOnceRef.current = false;
+      }
+
       if (autoStartLoop && !hasPlayedOnceRef.current && animationRef.current && loopPurpose) {
         const animation = animationRef.current;
 
@@ -269,7 +278,7 @@ export const LottiePlayer = forwardRef<LottiePlayerHandle, LottiePlayerProps>(
 
         startLoop();
       }
-    }, [autoStartLoop, loopPurpose]);
+    }, [autoStartLoop, loopPurpose, path]);
 
     return (
       <canvas

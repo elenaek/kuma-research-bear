@@ -515,7 +515,11 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
    * Creates a fresh session for each operation
    * Converts deprecated systemPrompt to initialPrompts format
    */
-  async getOrCreateSession(contextId: string, options?: AISessionOptions): Promise<AILanguageModelSession> {
+  async getOrCreateSession(
+    contextId: string,
+    options?: AISessionOptions,
+    onDownloadProgress?: (progress: number) => void
+  ): Promise<AILanguageModelSession> {
     // Always create a new session - simpler and more reliable
     try {
       if (typeof LanguageModel === 'undefined') {
@@ -525,7 +529,7 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
       console.log(`[AI] Creating new session for context: ${contextId}`);
 
       // Convert systemPrompt to initialPrompts if present (new API format)
-      let sessionOptions = options;
+      let sessionOptions: any = options;
       if (options?.systemPrompt) {
         sessionOptions = {
           ...options,
@@ -538,6 +542,20 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
         };
         // Remove deprecated systemPrompt field
         delete sessionOptions.systemPrompt;
+      }
+
+      // Add monitor callback for download progress if provided
+      if (onDownloadProgress) {
+        sessionOptions = {
+          ...sessionOptions,
+          monitor(m: any) {
+            m.addEventListener('downloadprogress', (e: any) => {
+              const progress = e.loaded || 0; // 0 to 1
+              console.log(`[AI] GeminiNano download progress: ${(progress * 100).toFixed(1)}%`);
+              onDownloadProgress(progress);
+            });
+          }
+        };
       }
 
       const session = await LanguageModel.create(sessionOptions);
@@ -579,10 +597,10 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
    * Legacy method - creates a session without context (for backward compatibility)
    * @deprecated Use getOrCreateSession instead
    */
-  async createSession(options?: AISessionOptions): Promise<boolean> {
+  async createSession(options?: AISessionOptions, onDownloadProgress?: (progress: number) => void): Promise<boolean> {
     try {
       // Use a default context for legacy calls
-      await this.getOrCreateSession('default', options);
+      await this.getOrCreateSession('default', options, onDownloadProgress);
       return true;
     } catch (error) {
       console.error('Error creating AI session:', error);
@@ -1277,12 +1295,61 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
       }
 
       // Try to create a session (triggers download if needed)
+      // Add download progress tracking
       const created = await this.createSession({
         systemPrompt: 'You are a helpful research assistant.',
+      }, (progress) => {
+        // Broadcast GeminiNano download progress (0-1 range)
+        // Map to 0-80% of combined progress
+        const combinedProgress = progress * 80;
+
+        chrome.runtime.sendMessage({
+          type: 'MODEL_DOWNLOAD_PROGRESS',
+          payload: {
+            model: 'gemini',
+            progress: progress * 100, // 0-100%
+            combinedProgress: combinedProgress, // 0-80%
+          },
+        }).catch(() => {
+          // No listeners, that's ok
+        });
       });
 
       if (created) {
-        console.log('✓ AI initialized successfully!');
+        console.log('✓ GeminiNano initialized successfully!');
+
+        // Now download embedding model (sequential - after GeminiNano completes)
+        // We trigger this via the offscreen document since embeddings need DOM access
+        try {
+          console.log('[AI] Starting embedding model download...');
+
+          // Broadcast that embedding download is starting
+          chrome.runtime.sendMessage({
+            type: 'MODEL_DOWNLOAD_PROGRESS',
+            payload: {
+              model: 'embedding',
+              progress: 0,
+              combinedProgress: 80, // Starting at 80%
+            },
+          }).catch(() => {});
+
+          // Ensure offscreen document exists, then trigger embedding model download
+          // The offscreen document will handle the actual download and broadcast progress
+          const { setupOffscreenDocument } = await import('../background/services/offscreenService.ts');
+          await setupOffscreenDocument();
+
+          await chrome.runtime.sendMessage({
+            type: 'PRELOAD_EMBEDDINGS',
+          }).catch((error) => {
+            console.warn('[AI] Could not trigger embedding preload:', error);
+          });
+
+          console.log('✓ Embedding model download triggered');
+        } catch (embeddingError) {
+          console.warn('[AI] Embedding model download trigger failed (non-critical):', embeddingError);
+          // Don't fail initialization if embedding download fails
+        }
+
         return {
           success: true,
           message: 'AI initialized successfully!',

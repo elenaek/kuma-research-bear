@@ -552,6 +552,8 @@ export interface AIStatusResponse {
   success: boolean;
   error?: string;
   capabilities?: AICapabilities;
+  downloadProgress?: number;
+  currentDownloadingModel?: 'gemini' | 'embedding' | null;
 }
 
 /**
@@ -568,7 +570,12 @@ export async function checkAIStatus(): Promise<AIStatusResponse> {
     if (response) {
       const capabilities = response.capabilities || { availability: 'no' };
       console.log('[ChromeService] AI status retrieved:', capabilities.availability);
-      return { success: true, capabilities };
+      return {
+        success: true,
+        capabilities,
+        downloadProgress: response.downloadProgress,
+        currentDownloadingModel: response.currentDownloadingModel
+      };
     } else {
       console.error('[ChromeService] Failed to check AI status');
       return { success: false, error: 'No response from background' };

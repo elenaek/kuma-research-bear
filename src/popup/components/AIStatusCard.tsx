@@ -1,5 +1,5 @@
 import { Loader, PawPrint, RefreshCw } from 'lucide-preact';
-import type { AIStatus } from '../hooks/useAIStatus.ts';
+import type { AIStatus, DownloadingModel } from '../hooks/useAIStatus.ts';
 import type { AIAvailability } from '../../types/index.ts';
 
 interface AIStatusCardProps {
@@ -15,6 +15,8 @@ interface AIStatusCardProps {
   isChunking: boolean;
   detectionStatus: string | null;
   paperReady?: boolean;
+  downloadProgress: number; // 0-100 (combined progress)
+  currentDownloadingModel: DownloadingModel;
   onInitialize: () => void;
   onReset: () => void;
 }
@@ -36,6 +38,8 @@ export function AIStatusCard({
   isChunking,
   detectionStatus,
   paperReady = false,
+  downloadProgress,
+  currentDownloadingModel,
   onInitialize,
   onReset,
 }: AIStatusCardProps) {
@@ -98,22 +102,43 @@ export function AIStatusCard({
         </button>
       )}
 
-      {/* Downloading Status - Shows whether user initiated or reopened during download */}
+      {/* Downloading Status - Shows real progress for both GeminiNano and Embedding models */}
       {aiStatus === 'downloading' && (
         <div class="mt-3">
           <div class="flex items-center gap-2 text-sm text-gray-700 mb-2">
             <Loader size={16} class="animate-spin" />
-            <span class="font-medium">Downloading Gemini Nano model...</span>
+            <span class="font-medium">
+              {currentDownloadingModel === 'gemini'
+                ? 'Downloading Gemini Nano model...'
+                : currentDownloadingModel === 'embedding'
+                ? 'Downloading Embedding model...'
+                : 'Downloading AI models...'}
+            </span>
           </div>
 
-          {/* Animated Progress Bar */}
+          {/* Real Progress Bar */}
           <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-            <div class="h-full bg-gradient-to-r from-blue-500 to-purple-500 animate-pulse-progress"></div>
+            <div
+              class="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300"
+              style={{ width: `${Math.max(0, Math.min(100, downloadProgress))}%` }}
+            ></div>
           </div>
 
-          <p class="text-xs text-gray-500 mt-2">
-            This may take a few minutes (~1.5-2GB download)
-          </p>
+          {/* Progress percentage and model-specific info */}
+          <div class="flex justify-between items-center mt-2">
+            <p class="text-xs text-gray-500">
+              {currentDownloadingModel === 'gemini'
+                ? '~1.5-2GB download'
+                : currentDownloadingModel === 'embedding'
+                ? '~80-300MB download'
+                : 'Downloading...'}
+            </p>
+            <p class="text-xs font-medium text-gray-700">
+              {downloadProgress > 0 ? downloadProgress.toFixed(0) + '%' : (
+                <span class="flex items-center gap-2">Loading Progress... <Loader size={12} class="animate-spin" /></span>
+              )}
+            </p>
+          </div>
 
           {/* Info about closing popup */}
           <p class="text-xs text-gray-400 mt-1 italic">

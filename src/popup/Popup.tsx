@@ -3,12 +3,13 @@ import * as ChromeService from '../services/ChromeService.ts';
 import { useAIStatus } from './hooks/useAIStatus.ts';
 import { useOperationState } from './hooks/useOperationState.ts';
 import { usePaperStatus } from './hooks/usePaperStatus.ts';
+import { InitHeader } from './components/InitHeader.tsx';
 import { Header } from './components/Header.tsx';
 import { AIStatusCard } from './components/AIStatusCard.tsx';
 import { PaperInfoCard } from './components/PaperInfoCard.tsx';
 import { OperationBadges } from './components/OperationBadges.tsx';
 import { ActionButtons } from './components/ActionButtons.tsx';
-import { LottiePlayerHandle } from '../shared/components/LottiePlayer.tsx';
+import { LoopPurpose, LottiePlayer, LottiePlayerHandle } from '../shared/components/LottiePlayer.tsx';
 import { LanguageDropdown } from './components/LanguageDropdown.tsx';
 import { ImageButtonsToggle } from './components/ImageButtonsToggle.tsx';
 import { normalizeUrl } from '../utils/urlUtils.ts';
@@ -390,8 +391,30 @@ export function Popup() {
     operationState.isAnalyzing ||
     operationState.isGeneratingGlossary;
 
-  const isComplete = operationState.completionPercentage === 100;
+  const isComplete = operationState.hasChunked;
   const shouldAutoLoop = isOperationActive || isComplete;
+
+  // Determine which lottie to show based on AI status and download progress
+  let lottiePath = '/lotties/kuma-research-bear.lottie'; // Default
+
+  if (aiStatus.aiStatus === 'needsInit') {
+    // Show sleeping bear when model needs initialization
+    lottiePath = '/lotties/kuma-sleeping.lottie';
+  } 
+  else if (aiStatus.aiStatus === 'downloading') {
+    // Show different animations based on which model is downloading
+    if (aiStatus.currentDownloadingModel === 'gemini') {
+      // GeminiNano downloading (0-80%)
+      lottiePath = '/lotties/kuma-sleeping-shaking-zzz.lottie';
+    } else if (aiStatus.currentDownloadingModel === 'embedding') {
+      // Embedding downloading (80-100%)
+      lottiePath = '/lotties/kuma-sleeping-shaking-nozzz.lottie';
+    } else {
+      // Fallback during download (shouldn't happen but just in case)
+      lottiePath = '/lotties/kuma-sleeping-shaking-zzz.lottie';
+    }
+  }
+  // Otherwise use default kuma-research-bear.lottie
 
   return (
     <div class="w-90 max-h-96 bg-gradient-to-br from-gray-50 to-gray-100">
@@ -402,7 +425,11 @@ export function Popup() {
         </div>
 
         {/* Header */}
-        <Header ref={lottieRef} autoStartLoop={shouldAutoLoop} />
+        {aiStatus.aiStatus !== 'ready' ? (
+          <InitHeader ref={lottieRef} autoStartLoop={false} lottiePath={lottiePath} />
+        ) : (
+          <Header ref={lottieRef} autoStartLoop={shouldAutoLoop} />
+        )}
 
         {/* AI Status Card */}
         <AIStatusCard
@@ -418,6 +445,8 @@ export function Popup() {
           isGeneratingGlossary={operationState.isGeneratingGlossary}
           isChunking={operationState.isChunking}
           detectionStatus={operationState.detectionStatus}
+          downloadProgress={aiStatus.downloadProgress}
+          currentDownloadingModel={aiStatus.currentDownloadingModel}
           onInitialize={aiStatus.handleInitializeAI}
           onReset={aiStatus.handleResetAI}
           paperReady={operationState.hasExplanation && operationState.hasSummary}

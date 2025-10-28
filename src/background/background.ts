@@ -25,6 +25,58 @@ import { executeDetectAndExplainFlow } from './orchestrators/detectAndExplainOrc
 import { inputQuotaService } from '../utils/inputQuotaService.ts';
 import { getShowImageButtons, setShowImageButtons } from '../utils/settingsService.ts';
 
+// Download progress state storage (for popup state reinitialization)
+// Uses chrome.storage.local to persist across service worker restarts
+const STORAGE_KEY_DOWNLOAD_PROGRESS = 'downloadProgress';
+const STORAGE_KEY_DOWNLOADING_MODEL = 'downloadingModel';
+
+// Getter for download progress state (exported for handlers)
+export async function getDownloadProgressState() {
+  try {
+    const result = await chrome.storage.local.get([
+      STORAGE_KEY_DOWNLOAD_PROGRESS,
+      STORAGE_KEY_DOWNLOADING_MODEL
+    ]);
+
+    return {
+      downloadProgress: result[STORAGE_KEY_DOWNLOAD_PROGRESS] || 0,
+      currentDownloadingModel: result[STORAGE_KEY_DOWNLOADING_MODEL] || null
+    };
+  } catch (error) {
+    console.error('[Background] Failed to read download progress from storage:', error);
+    return {
+      downloadProgress: 0,
+      currentDownloadingModel: null
+    };
+  }
+}
+
+// Setter for download progress state
+async function setDownloadProgressState(progress: number, model: 'gemini' | 'embedding' | null) {
+  try {
+    await chrome.storage.local.set({
+      [STORAGE_KEY_DOWNLOAD_PROGRESS]: progress,
+      [STORAGE_KEY_DOWNLOADING_MODEL]: model
+    });
+    console.log(`[Background] Stored progress: ${progress.toFixed(1)}% (${model})`);
+  } catch (error) {
+    console.error('[Background] Failed to store download progress:', error);
+  }
+}
+
+// Clear progress when download completes
+async function clearDownloadProgressState() {
+  try {
+    await chrome.storage.local.remove([
+      STORAGE_KEY_DOWNLOAD_PROGRESS,
+      STORAGE_KEY_DOWNLOADING_MODEL
+    ]);
+    console.log('[Background] Cleared download progress state');
+  } catch (error) {
+    console.error('[Background] Failed to clear download progress:', error);
+  }
+}
+
 // Context menu IDs
 const CONTEXT_MENU_ID = 'open-chat'; // Extension icon - chat menu
 const CONTEXT_MENU_PAGE_ID = 'chat-with-kuma-page'; // Page - chat menu
@@ -200,6 +252,32 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
       case MessageType.RESET_AI:
         sendResponse(await aiHandlers.handleResetAI());
+        break;
+
+      case MessageType.MODEL_DOWNLOAD_PROGRESS:
+        // Store download progress state for popup reinitialization
+        if (message.payload) {
+          const model = message.payload.model || null;
+          const progress = message.payload.combinedProgress || 0;
+
+          // Store in chrome.storage for persistence across service worker restarts
+          await setDownloadProgressState(progress, model);
+
+          // Clear progress when download completes
+          if (progress >= 100) {
+            console.log('[Background] Download complete, clearing progress state');
+            await clearDownloadProgressState();
+          }
+        }
+        // No response needed - this is a broadcast message
+        break;
+
+      case MessageType.PRELOAD_EMBEDDINGS:
+        // This message is intended for the offscreen document
+        // The offscreen document has a handler for this (offscreen.ts:556-571)
+        // Background script acknowledges receipt so the message doesn't fail
+        // The offscreen listener will handle the actual preload
+        // No response needed from background - let offscreen handle it
         break;
 
       case MessageType.EXPLAIN_PAPER:

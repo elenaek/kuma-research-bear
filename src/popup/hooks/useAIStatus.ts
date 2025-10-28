@@ -3,6 +3,7 @@ import * as ChromeService from '../../services/ChromeService.ts';
 import type { AIAvailability } from '../../types/index.ts';
 
 export type AIStatus = 'checking' | 'ready' | 'needsInit' | 'downloading' | 'error';
+export type DownloadingModel = 'gemini' | 'embedding' | null;
 
 interface UseAIStatusReturn {
   // State
@@ -11,6 +12,9 @@ interface UseAIStatusReturn {
   statusMessage: string;
   isInitializing: boolean;
   isResetting: boolean;
+  isInitialLoad: boolean;
+  downloadProgress: number; // 0-100 (combined progress)
+  currentDownloadingModel: DownloadingModel;
 
   // Actions
   checkAIStatus: () => Promise<void>;
@@ -28,39 +32,64 @@ export function useAIStatus(): UseAIStatusReturn {
   const [statusMessage, setStatusMessage] = useState('Checking AI availability...');
   const [isInitializing, setIsInitializing] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
-  const [pollInterval, setPollInterval] = useState<number | null>(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  // Initialize download progress from sessionStorage cache for immediate render
+  const [downloadProgress, setDownloadProgress] = useState<number>(() => {
+    try {
+      const cached = sessionStorage.getItem('kuma_download_progress');
+      return cached ? parseFloat(cached) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const [currentDownloadingModel, setCurrentDownloadingModel] = useState<DownloadingModel>(() => {
+    try {
+      const cached = sessionStorage.getItem('kuma_downloading_model');
+      return (cached || null) as DownloadingModel;
+    } catch {
+      return null;
+    }
+  });
 
   // Check AI status on mount
   useEffect(() => {
     checkAIStatus();
   }, []);
 
-  // Continuous polling when in downloading state
+  // Listen for download progress messages
   useEffect(() => {
-    // Start polling if we're in downloading state and not already polling
-    if (aiStatus === 'downloading' && !pollInterval) {
-      console.log('[useAIStatus] Starting download progress polling...');
-      const interval = window.setInterval(async () => {
-        await checkAIStatus();
-      }, 2000); // Poll every 2 seconds
+    const handleMessage = (message: any) => {
+      if (message.type === 'MODEL_DOWNLOAD_PROGRESS') {
+        const { model, combinedProgress } = message.payload;
+        console.log(`[useAIStatus] Download progress: ${model} - ${combinedProgress.toFixed(1)}%`);
 
-      setPollInterval(interval);
-    }
+        setCurrentDownloadingModel(model);
+        setDownloadProgress(combinedProgress);
 
-    // Stop polling if no longer downloading
-    if (aiStatus !== 'downloading' && pollInterval) {
-      console.log('[useAIStatus] Stopping download progress polling');
-      clearInterval(pollInterval);
-      setPollInterval(null);
-    }
+        // Cache to sessionStorage for immediate access on next popup open
+        try {
+          sessionStorage.setItem('kuma_download_progress', combinedProgress.toString());
+          sessionStorage.setItem('kuma_downloading_model', model || '');
+        } catch (error) {
+          console.warn('[useAIStatus] Failed to cache progress in listener:', error);
+        }
 
-    // Cleanup on unmount
-    return () => {
-      if (pollInterval) {
-        clearInterval(pollInterval);
+        // Update status to downloading if we receive progress updates
+        // Use functional update to avoid dependency on aiStatus
+        setAiStatus((currentStatus) =>
+          currentStatus !== 'downloading' ? 'downloading' : currentStatus
+        );
       }
     };
-  }, [aiStatus, pollInterval]);
+
+    chrome.runtime.onMessage.addListener(handleMessage);
+
+    return () => {
+      chrome.runtime.onMessage.removeListener(handleMessage);
+    };
+  }, []); // Empty dependency array - listener never recreated
 
   async function checkAIStatus() {
     try {
@@ -68,6 +97,26 @@ export function useAIStatus(): UseAIStatusReturn {
 
       const availability = response.capabilities?.availability || 'no';
       setAiAvailability(availability);
+
+      // Initialize download progress from response (for popup reinitialization)
+      if (response.downloadProgress !== undefined) {
+        setDownloadProgress(response.downloadProgress);
+        // Cache to sessionStorage for immediate access on next popup open
+        try {
+          sessionStorage.setItem('kuma_download_progress', response.downloadProgress.toString());
+        } catch (error) {
+          console.warn('[useAIStatus] Failed to cache download progress:', error);
+        }
+      }
+      if (response.currentDownloadingModel !== undefined) {
+        setCurrentDownloadingModel(response.currentDownloadingModel);
+        // Cache to sessionStorage for immediate access on next popup open
+        try {
+          sessionStorage.setItem('kuma_downloading_model', response.currentDownloadingModel || '');
+        } catch (error) {
+          console.warn('[useAIStatus] Failed to cache downloading model:', error);
+        }
+      }
 
       if (availability === 'available') {
         setAiStatus('ready');
@@ -77,7 +126,7 @@ export function useAIStatus(): UseAIStatusReturn {
         setStatusMessage('Kuma needs to be woken up');
       } else if (availability === 'downloading') {
         setAiStatus('downloading');
-        setStatusMessage('Kuma loading in...');
+        setStatusMessage('Waking Kuma up...');
       } else if (availability === 'unavailable') {
         setAiStatus('error');
         setStatusMessage('Kuma fell asleep again. (Crashed - needs reset)');
@@ -85,51 +134,46 @@ export function useAIStatus(): UseAIStatusReturn {
         setAiStatus('error');
         setStatusMessage('Kuma is missing from his cave. (Not available on this device)');
       }
+
+      // Mark initial load as complete after first status check
+      setIsInitialLoad(false);
     } catch (error) {
       setAiStatus('error');
       setStatusMessage('Error checking Kuma\'s status');
       console.error('[useAIStatus] Status check failed:', error);
+      // Even on error, mark initial load as complete
+      setIsInitialLoad(false);
     }
   }
 
   async function handleInitializeAI() {
-    let localPollInterval: number | null = null;
-
     try {
       setIsInitializing(true);
       setStatusMessage('Preparing to wake Kuma...');
 
-      // Start aggressive polling during initialization to detect download state
-      console.log('[useAIStatus] Starting aggressive polling during initialization');
-      localPollInterval = window.setInterval(async () => {
-        await checkAIStatus();
-      }, 1000); // Poll every 1 second during active initialization
-
       // Trigger initialization (this blocks until complete)
-      const response = await ChromeService.initializeAI();
+      // Progress updates will come via the message listener
+      const initPromise = ChromeService.initializeAI();
 
-      // Clear local polling (global polling will continue if still downloading)
-      if (localPollInterval) {
-        clearInterval(localPollInterval);
-        localPollInterval = null;
-      }
+      // Immediately check status to catch download state
+      await checkAIStatus();
+
+      // Wait for initialization to complete
+      const response = await initPromise;
 
       // Final status check
       await checkAIStatus();
 
       if (response.success) {
-        alert('Kuma is here! You can now use all features.');
+        // alert('Kuma is here! You can now use all features.');
       } else {
-        alert(`Kuma didn't come. (Failed to initialize AI: ${response.error})`);
+        alert(`Kuma couldn't wake up. (Failed to initialize AI: ${response.error})`);
       }
     } catch (error) {
       console.error('[useAIStatus] Initialization failed:', error);
       alert(`Kuma didn't come. (Failed to initialize AI. Please try again.)`);
       setStatusMessage('Kuma didn\'t come. (Initialization failed)');
     } finally {
-      if (localPollInterval) {
-        clearInterval(localPollInterval);
-      }
       setIsInitializing(false);
     }
   }
@@ -164,6 +208,9 @@ export function useAIStatus(): UseAIStatusReturn {
     statusMessage,
     isInitializing,
     isResetting,
+    isInitialLoad,
+    downloadProgress,
+    currentDownloadingModel,
     checkAIStatus,
     handleInitializeAI,
     handleResetAI,

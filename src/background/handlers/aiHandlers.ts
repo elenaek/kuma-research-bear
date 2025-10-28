@@ -28,14 +28,37 @@ function broadcastStateChange(state: any): void {
  */
 export async function handleAIStatus(): Promise<any> {
   const capabilities = await aiService.checkAvailability();
-  return { available: capabilities.available, capabilities };
+
+  // Include download progress state for popup reinitialization
+  const { getDownloadProgressState } = await import('../background.ts');
+  const progressState = await getDownloadProgressState();
+
+  return {
+    available: capabilities.available,
+    capabilities,
+    downloadProgress: progressState.downloadProgress,
+    currentDownloadingModel: progressState.currentDownloadingModel
+  };
 }
 
 /**
  * Initialize AI
+ * Triggers initialization in the background without blocking the response.
+ * Progress updates will be sent via MODEL_DOWNLOAD_PROGRESS messages.
  */
 export async function handleInitializeAI(): Promise<any> {
-  return await aiService.initializeAI();
+  // Trigger initialization in background without blocking the response
+  aiService.initializeAI().then((result) => {
+    console.log('[aiHandlers] Initialization completed:', result);
+  }).catch((error) => {
+    console.error('[aiHandlers] Initialization failed:', error);
+  });
+
+  // Return immediately so popup isn't blocked
+  return {
+    success: true,
+    message: 'AI initialization started. Download progress will appear shortly.'
+  };
 }
 
 /**

@@ -143,6 +143,9 @@ class EmbeddingService {
         try {
           console.log(`[Embedding] ⏳ Downloading and initializing model... (this may take a minute)`);
 
+          // Track all file downloads for cumulative progress
+          const fileProgress: Record<string, { loaded: number; total: number }> = {};
+
           this.model = await AutoModel.from_pretrained(this.config.modelId, {
             dtype: optimalDtype,
             device: targetDevice,
@@ -153,6 +156,40 @@ class EmbeddingService {
                   ? ((progress.loaded / progress.total) * 100).toFixed(1)
                   : '?';
                 console.log(`[Embedding] 📥 Downloading ${progress.file}: ${percent}%`);
+
+                // Track progress for all files (not just onnx files)
+                if (progress.file && progress.loaded !== undefined && progress.total !== undefined) {
+                  fileProgress[progress.file] = {
+                    loaded: progress.loaded,
+                    total: progress.total
+                  };
+
+                  // Calculate cumulative progress across all files
+                  let totalLoaded = 0;
+                  let totalSize = 0;
+                  for (const file in fileProgress) {
+                    totalLoaded += fileProgress[file].loaded;
+                    totalSize += fileProgress[file].total;
+                  }
+
+                  const cumulativeProgress = totalSize > 0 ? totalLoaded / totalSize : 0;
+
+                  // Map embedding progress to 80-100% of combined progress
+                  const combinedProgress = 80 + (cumulativeProgress * 20);
+
+                  console.log(`[Embedding] Overall progress: ${(cumulativeProgress * 100).toFixed(1)}% (${totalLoaded}/${totalSize} bytes across ${Object.keys(fileProgress).length} files)`);
+
+                  chrome.runtime.sendMessage({
+                    type: 'MODEL_DOWNLOAD_PROGRESS',
+                    payload: {
+                      model: 'embedding',
+                      progress: cumulativeProgress * 100, // 0-100%
+                      combinedProgress: combinedProgress, // 80-100%
+                    },
+                  }).catch(() => {
+                    // No listeners, that's ok
+                  });
+                }
               } else if (progress.status === 'done') {
                 console.log(`[Embedding] ✓ Downloaded ${progress.file}`);
               }
@@ -171,6 +208,9 @@ class EmbeddingService {
             const wasmDtype = getOptimalDtype('wasm');
             console.log(`[Embedding] 🔄 Retrying with WASM backend (${wasmDtype})...`);
 
+            // Track all file downloads for cumulative progress (fallback path)
+            const fileProgressFallback: Record<string, { loaded: number; total: number }> = {};
+
             this.model = await AutoModel.from_pretrained(this.config.modelId, {
               dtype: wasmDtype, // q4 for WASM
               device: 'wasm',
@@ -180,6 +220,40 @@ class EmbeddingService {
                     ? ((progress.loaded / progress.total) * 100).toFixed(1)
                     : '?';
                   console.log(`[Embedding] 📥 Downloading ${progress.file}: ${percent}%`);
+
+                  // Track progress for all files (fallback path)
+                  if (progress.file && progress.loaded !== undefined && progress.total !== undefined) {
+                    fileProgressFallback[progress.file] = {
+                      loaded: progress.loaded,
+                      total: progress.total
+                    };
+
+                    // Calculate cumulative progress across all files
+                    let totalLoaded = 0;
+                    let totalSize = 0;
+                    for (const file in fileProgressFallback) {
+                      totalLoaded += fileProgressFallback[file].loaded;
+                      totalSize += fileProgressFallback[file].total;
+                    }
+
+                    const cumulativeProgress = totalSize > 0 ? totalLoaded / totalSize : 0;
+
+                    // Map embedding progress to 80-100% of combined progress
+                    const combinedProgress = 80 + (cumulativeProgress * 20);
+
+                    console.log(`[Embedding] Overall progress: ${(cumulativeProgress * 100).toFixed(1)}% (${totalLoaded}/${totalSize} bytes across ${Object.keys(fileProgressFallback).length} files)`);
+
+                    chrome.runtime.sendMessage({
+                      type: 'MODEL_DOWNLOAD_PROGRESS',
+                      payload: {
+                        model: 'embedding',
+                        progress: cumulativeProgress * 100, // 0-100%
+                        combinedProgress: combinedProgress, // 80-100%
+                      },
+                    }).catch(() => {
+                      // No listeners, that's ok
+                    });
+                  }
                 } else if (progress.status === 'done') {
                   console.log(`[Embedding] ✓ Downloaded ${progress.file}`);
                 }
