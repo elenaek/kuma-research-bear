@@ -13,6 +13,7 @@ import { LanguageDropdown } from './components/LanguageDropdown.tsx';
 import { ImageButtonsToggle } from './components/ImageButtonsToggle.tsx';
 import { normalizeUrl } from '../utils/urlUtils.ts';
 import { MessageType } from '../types/index.ts';
+import { getShowImageButtons, setShowImageButtons as saveShowImageButtons } from '../utils/settingsService.ts';
 
 export function Popup() {
   // Ref for Lottie animation control
@@ -68,8 +69,7 @@ export function Popup() {
   useEffect(() => {
     async function loadSettings() {
       try {
-        const { settings } = await chrome.storage.local.get('settings');
-        const showButtons = settings?.showImageButtons ?? true;
+        const showButtons = await getShowImageButtons();
         setShowImageButtons(showButtons);
       } catch (error) {
         console.error('[Popup] Failed to load settings:', error);
@@ -365,13 +365,7 @@ export function Popup() {
 
     try {
       // Update setting in storage
-      const { settings } = await chrome.storage.local.get('settings');
-      await chrome.storage.local.set({
-        settings: {
-          ...settings,
-          showImageButtons: newValue,
-        },
-      });
+      await saveShowImageButtons(newValue);
 
       // Broadcast change to all tabs
       const tabs = await chrome.tabs.query({});

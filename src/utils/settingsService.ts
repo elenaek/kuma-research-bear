@@ -11,6 +11,7 @@ const SETTINGS_KEY = 'kuma_settings';
 
 export interface Settings {
   outputLanguage: string; // ISO 639-1 language code
+  showImageButtons?: boolean; // Show/hide image explanation buttons
 }
 
 /**
@@ -78,6 +79,48 @@ export async function setOutputLanguage(languageCode: string): Promise<void> {
 }
 
 /**
+ * Gets the show image buttons setting
+ * Returns true as default if not set
+ */
+export async function getShowImageButtons(): Promise<boolean> {
+  try {
+    const result = await chrome.storage.sync.get(SETTINGS_KEY);
+    const settings = result[SETTINGS_KEY] as Settings | undefined;
+
+    // Default to true if not set
+    return settings?.showImageButtons ?? true;
+  } catch (error) {
+    console.error('Error getting show image buttons setting:', error);
+    return true;
+  }
+}
+
+/**
+ * Sets the show image buttons preference
+ * @param show Whether to show image explanation buttons
+ */
+export async function setShowImageButtons(show: boolean): Promise<void> {
+  try {
+    // Get existing settings or create new
+    const result = await chrome.storage.sync.get(SETTINGS_KEY);
+    const settings: Settings = (result[SETTINGS_KEY] as Settings) || {
+      outputLanguage: getBrowserLanguage()
+    };
+
+    // Update setting
+    settings.showImageButtons = show;
+
+    // Save to storage
+    await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
+
+    console.log(`Show image buttons set to: ${show}`);
+  } catch (error) {
+    console.error('Error setting show image buttons:', error);
+    throw error;
+  }
+}
+
+/**
  * Gets all settings
  */
 export async function getSettings(): Promise<Settings> {
@@ -86,12 +129,14 @@ export async function getSettings(): Promise<Settings> {
     const settings = result[SETTINGS_KEY] as Settings | undefined;
 
     return settings || {
-      outputLanguage: getBrowserLanguage()
+      outputLanguage: getBrowserLanguage(),
+      showImageButtons: true
     };
   } catch (error) {
     console.error('Error getting settings:', error);
     return {
-      outputLanguage: 'en'
+      outputLanguage: 'en',
+      showImageButtons: true
     };
   }
 }

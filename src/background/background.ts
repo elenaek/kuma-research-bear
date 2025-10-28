@@ -23,6 +23,7 @@ import * as chatHandlers from './handlers/chatHandlers.ts';
 import * as citationHandlers from './handlers/citationHandlers.ts';
 import { executeDetectAndExplainFlow } from './orchestrators/detectAndExplainOrchestrator.ts';
 import { inputQuotaService } from '../utils/inputQuotaService.ts';
+import { getShowImageButtons, setShowImageButtons } from '../utils/settingsService.ts';
 
 // Context menu IDs
 const CONTEXT_MENU_ID = 'open-chat'; // Extension icon - chat menu
@@ -39,15 +40,17 @@ const pendingExtractions = new Map<string, number>();
 chrome.runtime.onInstalled.addListener(async () => {
   console.log('Research Bear extension installed');
 
-  // Set default settings
+  // Set default settings (legacy settings in local storage)
   chrome.storage.local.set({
     settings: {
       enableAutoDetect: true,
       defaultExplanationLevel: 'simple',
       theme: 'auto',
-      showImageButtons: true,
     },
   });
+
+  // Initialize image buttons setting in sync storage (new centralized approach)
+  await setShowImageButtons(true);
 
   // Initialize inputQuota service for adaptive chunking
   try {
@@ -457,8 +460,7 @@ export async function updateContextMenuState() {
 
 
     // Update image buttons toggle checkbox to match current setting
-    const { settings } = await chrome.storage.local.get('settings');
-    const showImageButtons = settings?.showImageButtons ?? true;
+    const showImageButtons = await getShowImageButtons();
     await chrome.contextMenus.update(CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID, {
       checked: showImageButtons,
     });
@@ -518,13 +520,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     else if (info.menuItemId === CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID) {
       console.log('[ContextMenu] Toggle image buttons:', info.checked);
       // Update setting
-      const { settings } = await chrome.storage.local.get('settings');
-      await chrome.storage.local.set({
-        settings: {
-          ...settings,
-          showImageButtons: info.checked,
-        },
-      });
+      await setShowImageButtons(info.checked ?? true);
 
       // Broadcast change to all tabs
       const tabs = await chrome.tabs.query({});

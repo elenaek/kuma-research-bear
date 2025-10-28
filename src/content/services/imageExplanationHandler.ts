@@ -4,6 +4,7 @@ import { detectImages, imageElementToBlob, watchForNewImages, DetectedImage } fr
 import * as ChromeService from '../../services/ChromeService.ts';
 import { aiService } from '../../utils/aiService.ts';
 import { chatboxInjector } from './chatboxInjector.ts'; // NEW: Multi-tab chatbox integration
+import { getShowImageButtons } from '../../utils/settingsService.ts';
 
 interface ImageState {
   element: HTMLImageElement;
@@ -61,8 +62,7 @@ class ImageExplanationHandler {
 
     // Load user setting for button visibility FIRST
     try {
-      const { settings } = await chrome.storage.local.get('settings');
-      this.showImageButtons = settings?.showImageButtons ?? true;
+      this.showImageButtons = await getShowImageButtons();
       console.log('[ImageExplain] Button visibility setting:', this.showImageButtons);
     } catch (error) {
       console.error('[ImageExplain] Error loading settings:', error);
