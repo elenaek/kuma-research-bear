@@ -1545,15 +1545,49 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
       // Get schema with language-appropriate descriptions
       const schema = getSchemaForLanguage('methodology', outputLanguage as 'en' | 'es' | 'ja');
 
-      const response = await this.prompt(
-        input,
-        systemPrompt,
-        schema,
-        languageContextId,
-        [{ type: "text", languages: ["en"] }],  // expectedInputs
-        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
-      );
-      return JSON.parse(response);
+      // Retry logic with exponential backoff
+      const maxRetries = 3;
+      let lastError: any;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await this.prompt(
+            input,
+            systemPrompt,
+            schema,
+            languageContextId,
+            [{ type: "text", languages: ["en"] }],  // expectedInputs
+            [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+          );
+
+          // Clean up session immediately after successful use
+          try {
+            await this.destroySessionForContext(languageContextId);
+          } catch (cleanupError) {
+            console.warn('[Methodology Analysis] Failed to cleanup session:', cleanupError);
+          }
+
+          return JSON.parse(response);
+        } catch (error) {
+          lastError = error;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const isRetryableError = errorMessage.includes('UnknownError') ||
+                                   errorMessage.includes('generic failures') ||
+                                   errorMessage.includes('timeout') ||
+                                   errorMessage.includes('resource');
+
+          if (attempt < maxRetries && isRetryableError) {
+            const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+            console.warn(`[Methodology Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else if (attempt === maxRetries) {
+            console.error(`[Methodology Analysis] Failed after ${attempt} attempts:`, error);
+          }
+        }
+      }
+
+      // If all retries failed, throw to outer catch
+      throw lastError;
     } catch (error) {
       console.error('Methodology analysis failed:', error);
       return {
@@ -1654,15 +1688,49 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
       // Get schema with language-appropriate descriptions
       const schema = getSchemaForLanguage('confounder', outputLanguage as 'en' | 'es' | 'ja');
 
-      const response = await this.prompt(
-        input,
-        systemPrompt,
-        schema,
-        languageContextId,
-        [{ type: "text", languages: ["en"] }],  // expectedInputs
-        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
-      );
-      return JSON.parse(response);
+      // Retry logic with exponential backoff
+      const maxRetries = 3;
+      let lastError: any;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await this.prompt(
+            input,
+            systemPrompt,
+            schema,
+            languageContextId,
+            [{ type: "text", languages: ["en"] }],  // expectedInputs
+            [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+          );
+
+          // Clean up session immediately after successful use
+          try {
+            await this.destroySessionForContext(languageContextId);
+          } catch (cleanupError) {
+            console.warn('[Confounder Analysis] Failed to cleanup session:', cleanupError);
+          }
+
+          return JSON.parse(response);
+        } catch (error) {
+          lastError = error;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const isRetryableError = errorMessage.includes('UnknownError') ||
+                                   errorMessage.includes('generic failures') ||
+                                   errorMessage.includes('timeout') ||
+                                   errorMessage.includes('resource');
+
+          if (attempt < maxRetries && isRetryableError) {
+            const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+            console.warn(`[Confounder Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else if (attempt === maxRetries) {
+            console.error(`[Confounder Analysis] Failed after ${attempt} attempts:`, error);
+          }
+        }
+      }
+
+      // If all retries failed, throw to outer catch
+      throw lastError;
     } catch (error) {
       console.error('Confounder analysis failed:', error);
       return {
@@ -1759,15 +1827,49 @@ Provide a comprehensive analysis of real-world applications, significance, and f
       // Get schema with language-appropriate descriptions
       const schema = getSchemaForLanguage('implication', outputLanguage as 'en' | 'es' | 'ja');
 
-      const response = await this.prompt(
-        input,
-        systemPrompt,
-        schema,
-        languageContextId,
-        [{ type: "text", languages: ["en"] }],  // expectedInputs
-        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
-      );
-      return JSON.parse(response);
+      // Retry logic with exponential backoff
+      const maxRetries = 3;
+      let lastError: any;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await this.prompt(
+            input,
+            systemPrompt,
+            schema,
+            languageContextId,
+            [{ type: "text", languages: ["en"] }],  // expectedInputs
+            [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+          );
+
+          // Clean up session immediately after successful use
+          try {
+            await this.destroySessionForContext(languageContextId);
+          } catch (cleanupError) {
+            console.warn('[Implications Analysis] Failed to cleanup session:', cleanupError);
+          }
+
+          return JSON.parse(response);
+        } catch (error) {
+          lastError = error;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const isRetryableError = errorMessage.includes('UnknownError') ||
+                                   errorMessage.includes('generic failures') ||
+                                   errorMessage.includes('timeout') ||
+                                   errorMessage.includes('resource');
+
+          if (attempt < maxRetries && isRetryableError) {
+            const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+            console.warn(`[Implications Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else if (attempt === maxRetries) {
+            console.error(`[Implications Analysis] Failed after ${attempt} attempts:`, error);
+          }
+        }
+      }
+
+      // If all retries failed, throw to outer catch
+      throw lastError;
     } catch (error) {
       console.error('Implications analysis failed:', error);
       return {
@@ -1864,15 +1966,49 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
       // Get schema with language-appropriate descriptions
       const schema = getSchemaForLanguage('limitation', outputLanguage as 'en' | 'es' | 'ja');
 
-      const response = await this.prompt(
-        input,
-        systemPrompt,
-        schema,
-        languageContextId,
-        [{ type: "text", languages: ["en"] }],  // expectedInputs
-        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
-      );
-      return JSON.parse(response);
+      // Retry logic with exponential backoff
+      const maxRetries = 3;
+      let lastError: any;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await this.prompt(
+            input,
+            systemPrompt,
+            schema,
+            languageContextId,
+            [{ type: "text", languages: ["en"] }],  // expectedInputs
+            [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+          );
+
+          // Clean up session immediately after successful use
+          try {
+            await this.destroySessionForContext(languageContextId);
+          } catch (cleanupError) {
+            console.warn('[Limitations Analysis] Failed to cleanup session:', cleanupError);
+          }
+
+          return JSON.parse(response);
+        } catch (error) {
+          lastError = error;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const isRetryableError = errorMessage.includes('UnknownError') ||
+                                   errorMessage.includes('generic failures') ||
+                                   errorMessage.includes('timeout') ||
+                                   errorMessage.includes('resource');
+
+          if (attempt < maxRetries && isRetryableError) {
+            const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+            console.warn(`[Limitations Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else if (attempt === maxRetries) {
+            console.error(`[Limitations Analysis] Failed after ${attempt} attempts:`, error);
+          }
+        }
+      }
+
+      // If all retries failed, throw to outer catch
+      throw lastError;
     } catch (error) {
       console.error('Limitations analysis failed:', error);
       return {
@@ -2698,47 +2834,79 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       return { summary: parsed.summary, chunkTerms: [parsed.terms] };
     }
 
-    // Step 2: Summarize each chunk in parallel with progress tracking AND extract terms
-    console.log('[Hierarchical Summary] Summarizing chunks in parallel and extracting terms...');
+    // Step 2: Summarize each chunk SEQUENTIALLY with retry logic and progress tracking
+    console.log('[Hierarchical Summary] Summarizing chunks sequentially with retry logic...');
 
     // Report initial progress
     if (onProgress) {
       onProgress(0, chunks.length);
     }
 
-    let completedCount = 0;
+    const chunkResults: Array<{ summary: string; terms: string[] }> = [];
 
-    // Create promises for all chunk summaries with terms (starts parallel execution)
-    const chunkPromises = chunks.map(async (chunk, index) => {
+    // Helper function for retry logic with exponential backoff
+    const summarizeChunkWithRetry = async (
+      chunk: { content: string },
+      index: number,
+      maxRetries: number = 3
+    ): Promise<{ summary: string; terms: string[] }> => {
       const input = `Summarize this section of a research paper, capturing all important points. Also extract the 5-10 most important technical terms and acronyms:\n\n${chunk.content}`;
 
-      try {
-        const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, `${contextId}-chunk-${index}`);
-        const parsed = JSON.parse(response);
-        console.log(`[Hierarchical Summary] Chunk ${index + 1}/${chunks.length} summarized:`, parsed.summary.length, 'chars,', parsed.terms.length, 'terms');
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const chunkContextId = `${contextId}-chunk-${index}`;
+          const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, chunkContextId);
+          const parsed = JSON.parse(response);
 
-        // Report progress after this chunk completes
-        completedCount++;
-        if (onProgress) {
-          onProgress(completedCount, chunks.length);
+          console.log(`[Hierarchical Summary] Chunk ${index + 1}/${chunks.length} summarized:`, parsed.summary.length, 'chars,', parsed.terms.length, 'terms');
+
+          // Clean up session immediately after successful use
+          try {
+            await this.destroySessionForContext(chunkContextId);
+          } catch (cleanupError) {
+            console.warn(`[Hierarchical Summary] Failed to cleanup session for chunk ${index}:`, cleanupError);
+          }
+
+          return { summary: parsed.summary, terms: parsed.terms };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const isRetryableError = errorMessage.includes('UnknownError') ||
+                                   errorMessage.includes('generic failures') ||
+                                   errorMessage.includes('timeout') ||
+                                   errorMessage.includes('resource');
+
+          if (attempt < maxRetries && isRetryableError) {
+            const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+            console.warn(`[Hierarchical Summary] Chunk ${index + 1} failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else {
+            console.error(`[Hierarchical Summary] Chunk ${index + 1} failed after ${attempt} attempts:`, error);
+            // Return original chunk content truncated if all retries fail
+            return { summary: chunk.content.slice(0, 500), terms: [] };
+          }
         }
-
-        return { summary: parsed.summary, terms: parsed.terms };
-      } catch (error) {
-        console.error(`[Hierarchical Summary] Failed to summarize chunk ${index}:`, error);
-
-        // Still count as completed even if failed
-        completedCount++;
-        if (onProgress) {
-          onProgress(completedCount, chunks.length);
-        }
-
-        // Return original chunk content truncated if summary fails, with empty terms
-        return { summary: chunk.content.slice(0, 500), terms: [] };
       }
-    });
 
-    const chunkResults = await Promise.all(chunkPromises);
+      // Fallback (shouldn't reach here, but TypeScript needs it)
+      return { summary: chunk.content.slice(0, 500), terms: [] };
+    };
+
+    // Process chunks sequentially
+    for (let i = 0; i < chunks.length; i++) {
+      const result = await summarizeChunkWithRetry(chunks[i], i);
+      chunkResults.push(result);
+
+      // Report progress after this chunk completes
+      if (onProgress) {
+        onProgress(i + 1, chunks.length);
+      }
+
+      // Add small delay between chunks to prevent resource contention
+      if (i < chunks.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+    }
+
     console.log('[Hierarchical Summary] All chunks summarized and terms extracted');
 
     // Separate summaries and terms
