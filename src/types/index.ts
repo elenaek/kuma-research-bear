@@ -30,6 +30,7 @@ export enum MessageType {
 
   ANALYZE_PAPER = 'ANALYZE_PAPER',
   ANALYSIS_PROGRESS = 'ANALYSIS_PROGRESS',
+  ANALYSIS_SECTION_COMPLETE = 'ANALYSIS_SECTION_COMPLETE',
   MODEL_DOWNLOAD_PROGRESS = 'MODEL_DOWNLOAD_PROGRESS', // Progress updates during model downloads
   ASK_QUESTION = 'ASK_QUESTION',
   UPDATE_PAPER_QA_HISTORY = 'UPDATE_PAPER_QA_HISTORY',
@@ -384,10 +385,10 @@ export interface LimitationAnalysis {
 }
 
 export interface PaperAnalysisResult {
-  methodology: MethodologyAnalysis;
-  confounders: ConfounderAnalysis;
-  implications: ImplicationAnalysis;
-  limitations: LimitationAnalysis;
+  methodology?: MethodologyAnalysis;
+  confounders?: ConfounderAnalysis;
+  implications?: ImplicationAnalysis;
+  limitations?: LimitationAnalysis;
   timestamp: number;
 }
 

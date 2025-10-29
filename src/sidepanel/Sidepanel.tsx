@@ -307,6 +307,25 @@ export function Sidepanel() {
       }
     };
 
+    // Create analysis section completion listener for progressive display
+    const analysisSectionCompleteListener = (message: any) => {
+      if (message.type === MessageType.ANALYSIS_SECTION_COMPLETE) {
+        const { paperUrl, section, result } = message.payload;
+
+        // Only update if it's the current paper
+        if (currentPaperUrlRef.current && normalizeUrl(currentPaperUrlRef.current) === normalizeUrl(paperUrl)) {
+          console.log('[Sidepanel] Analysis section complete:', section);
+
+          // Update analysis state with partial result
+          setAnalysis((prevAnalysis) => ({
+            ...prevAnalysis,
+            [section]: result,
+            timestamp: prevAnalysis?.timestamp || Date.now(),
+          }));
+        }
+      }
+    };
+
     // Create paper deleted listener for PAPER_DELETED broadcasts
     const paperDeletedListener = async (message: any) => {
       if (message.type === MessageType.PAPER_DELETED) {
@@ -361,6 +380,7 @@ export function Sidepanel() {
     chrome.runtime.onMessage.addListener(navigationListener);
     chrome.runtime.onMessage.addListener(glossaryProgressListener);
     chrome.runtime.onMessage.addListener(analysisProgressListener);
+    chrome.runtime.onMessage.addListener(analysisSectionCompleteListener);
     chrome.runtime.onMessage.addListener(paperDeletedListener);
 
     return () => {
@@ -368,6 +388,7 @@ export function Sidepanel() {
       chrome.runtime.onMessage.removeListener(navigationListener);
       chrome.runtime.onMessage.removeListener(glossaryProgressListener);
       chrome.runtime.onMessage.removeListener(analysisProgressListener);
+      chrome.runtime.onMessage.removeListener(analysisSectionCompleteListener);
       chrome.runtime.onMessage.removeListener(paperDeletedListener);
     };
   }, []);

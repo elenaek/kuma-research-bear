@@ -34,7 +34,20 @@ export function AnalysisSection(props: AnalysisSectionProps) {
     }
   };
 
-  // Loading state with progress
+  // Helper to generate loading card for next section
+  const LoadingCard = ({ message, detail }: { message: string; detail: string }) => (
+    <div class="card animate-scale-in" style={{ animationDuration: '500ms' }}>
+      <div class="flex flex-col items-center justify-center gap-4 py-12">
+        <LottiePlayer path="/lotties/kuma-reading.lottie" className="mx-auto mb-1" autoStartLoop={true} size={140} loopPurpose={LoopPurpose.QASection} />
+        <div class="text-center">
+          <p class="text-base font-medium text-gray-900 mb-2">{message}</p>
+          <p class="text-sm text-gray-600">{detail}</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Full loading state (before any sections complete)
   if (isAnalyzing && !analysis) {
     let progressMessage = 'Analyzing Paper...';
     let progressDetail = 'Evaluating methodology, identifying confounders, analyzing implications, and assessing limitations.';
@@ -50,23 +63,11 @@ export function AnalysisSection(props: AnalysisSectionProps) {
       }
     }
 
-    return (
-      <div class="card">
-        <div class="flex flex-col items-center justify-center gap-4 py-12">
-          <LottiePlayer path="/lotties/kuma-reading.lottie" className="mx-auto mb-1" autoStartLoop={true} size={140} loopPurpose={LoopPurpose.QASection} />
-          <div class="text-center">
-            <p class="text-base font-medium text-gray-900 mb-2">{progressMessage}</p>
-            <p class="text-sm text-gray-600">
-              {progressDetail}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+    return <LoadingCard message={progressMessage} detail={progressDetail} />;
   }
 
-  // No analysis yet
-  if (!analysis) {
+  // No analysis yet and not analyzing
+  if (!analysis && !isAnalyzing) {
     return (
       <div class="card">
         <div class="text-center py-8">
@@ -90,18 +91,19 @@ export function AnalysisSection(props: AnalysisSectionProps) {
     );
   }
 
-  // Analysis results
+  // Progressive analysis results display
   return (
     <>
       {/* Methodology Analysis */}
-      <div class="animate-scale-in" style={{ animationDuration: '1000ms' }}>
-        <CollapsibleSection
-          title="Methodology"
-          icon={FileText}
-          iconColor="text-blue-600"
-          titleClassName="text-responsive-base font-semibold text-gray-900"
-          defaultOpen={false}
-        >
+      {analysis?.methodology && (
+        <div class="animate-scale-in" style={{ animationDuration: '500ms' }}>
+          <CollapsibleSection
+            title="Methodology"
+            icon={FileText}
+            iconColor="text-blue-600"
+            titleClassName="text-responsive-base font-semibold text-gray-900"
+            defaultOpen={false}
+          >
           <div class="space-y-2 sm:space-y-3">
             <div>
               <p class="text-sm font-medium text-gray-700 mb-1">
@@ -178,17 +180,24 @@ export function AnalysisSection(props: AnalysisSectionProps) {
             </div>
           </div>
         </CollapsibleSection>
-      </div>
+        </div>
+      )}
+
+      {/* Show loading for confounders if analyzing and methodology done but not confounders */}
+      {isAnalyzing && analysis?.methodology && !analysis?.confounders && (
+        <LoadingCard message="Analyzing 2/4" detail="Identifying confounders and biases..." />
+      )}
 
       {/* Confounders & Biases */}
-      <div class="animate-scale-in" style={{ animationDuration: '1000ms' }}>
-        <CollapsibleSection
-          title="Confounders & Biases"
-          icon={AlertTriangle}
-          iconColor="text-orange-600"
-          titleClassName="text-responsive-base font-semibold text-gray-900"
-          defaultOpen={false}
-        >
+      {analysis?.confounders && (
+        <div class="animate-scale-in" style={{ animationDuration: '500ms' }}>
+          <CollapsibleSection
+            title="Confounders & Biases"
+            icon={AlertTriangle}
+            iconColor="text-orange-600"
+            titleClassName="text-responsive-base font-semibold text-gray-900"
+            defaultOpen={false}
+          >
           <div class="space-y-2 sm:space-y-3">
             <div>
               <p class="text-base font-medium text-gray-700 mb-1">
@@ -236,17 +245,24 @@ export function AnalysisSection(props: AnalysisSectionProps) {
             </div>
           </div>
         </CollapsibleSection>
-      </div>
+        </div>
+      )}
+
+      {/* Show loading for implications if analyzing and confounders done but not implications */}
+      {isAnalyzing && analysis?.confounders && !analysis?.implications && (
+        <LoadingCard message="Analyzing 3/4" detail="Analyzing implications and significance..." />
+      )}
 
       {/* Implications */}
-      <div class="animate-scale-in" style={{ animationDuration: '1000ms' }}>
-        <CollapsibleSection
-          title="Implications"
-          icon={TrendingUp}
-          iconColor="text-blue-600"
-          titleClassName="text-responsive-base font-semibold text-gray-900"
-          defaultOpen={false}
-        >
+      {analysis?.implications && (
+        <div class="animate-scale-in" style={{ animationDuration: '500ms' }}>
+          <CollapsibleSection
+            title="Implications"
+            icon={TrendingUp}
+            iconColor="text-blue-600"
+            titleClassName="text-responsive-base font-semibold text-gray-900"
+            defaultOpen={false}
+          >
           <div class="space-y-2 sm:space-y-3">
             <div>
               <p class="text-sm font-medium text-gray-700 mb-1">
@@ -287,17 +303,24 @@ export function AnalysisSection(props: AnalysisSectionProps) {
             </div>
           </div>
         </CollapsibleSection>
-      </div>
+        </div>
+      )}
+
+      {/* Show loading for limitations if analyzing and implications done but not limitations */}
+      {isAnalyzing && analysis?.implications && !analysis?.limitations && (
+        <LoadingCard message="Analyzing 4/4" detail="Identifying limitations and generalizability..." />
+      )}
 
       {/* Limitations */}
-      <div class="animate-scale-in" style={{ animationDuration: '1000ms' }}>
-        <CollapsibleSection
-          title="Limitations"
-          icon={AlertCircle}
-          iconColor="text-red-600"
-          titleClassName="text-responsive-base font-semibold text-gray-900"
-          defaultOpen={false}
-        >
+      {analysis?.limitations && (
+        <div class="animate-scale-in" style={{ animationDuration: '500ms' }}>
+          <CollapsibleSection
+            title="Limitations"
+            icon={AlertCircle}
+            iconColor="text-red-600"
+            titleClassName="text-responsive-base font-semibold text-gray-900"
+            defaultOpen={false}
+          >
           <div class="space-y-2 sm:space-y-3">
             <div>
               <p class="text-sm font-medium text-gray-700 mb-1">
@@ -323,7 +346,8 @@ export function AnalysisSection(props: AnalysisSectionProps) {
             </div>
           </div>
         </CollapsibleSection>
-      </div>
+        </div>
+      )}
     </>
   );
 }

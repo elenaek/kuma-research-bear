@@ -644,6 +644,32 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
               total,
             },
           });
+        },
+        async (section, result) => {
+          // Section completion handler - broadcast partial results
+          console.log(`[Analysis] Section complete: ${section}`);
+
+          // Broadcast section completion to sidepanel
+          chrome.runtime.sendMessage({
+            type: MessageType.ANALYSIS_SECTION_COMPLETE,
+            payload: {
+              paperUrl: storedPaper.url,
+              section,
+              result,
+            },
+          }).catch((error) => {
+            console.warn('[Analysis] Failed to broadcast section completion:', error);
+          });
+
+          // Update partial analysis in IndexedDB
+          try {
+            const { updatePartialPaperAnalysis } = await import('../../utils/dbService.ts');
+            const { getOutputLanguage } = await import('../../utils/settingsService.ts');
+            const outputLanguage = await getOutputLanguage();
+            await updatePartialPaperAnalysis(storedPaper.id, section, result, outputLanguage);
+          } catch (error) {
+            console.warn(`[Analysis] Failed to store partial ${section} analysis:`, error);
+          }
         }
       );
 

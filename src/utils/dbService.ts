@@ -746,6 +746,69 @@ export async function updatePaperAnalysis(paperId: string, analysis: any, output
 }
 
 /**
+ * Update a specific section of paper analysis (for progressive display)
+ * Allows updating individual sections as they complete
+ */
+export async function updatePartialPaperAnalysis(
+  paperId: string,
+  section: string,
+  sectionResult: any,
+  outputLanguage?: string
+): Promise<boolean> {
+  const db = await initDB();
+
+  try {
+    // Use single readwrite transaction for atomic read-modify-write
+    const transaction = db.transaction([PAPERS_STORE], 'readwrite');
+    const store = transaction.objectStore(PAPERS_STORE);
+
+    const paper = await new Promise<StoredPaper | null>((resolve) => {
+      const request = store.get(paperId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+
+    if (!paper) {
+      console.error('Paper not found for partial analysis update:', paperId);
+      db.close();
+      throw new Error(`Paper not found for partial analysis update: ${paperId}`);
+    }
+
+    // Initialize analysis object if it doesn't exist
+    if (!paper.analysis) {
+      paper.analysis = { timestamp: Date.now() };
+    }
+
+    // Update the specific section
+    paper.analysis[section] = sectionResult;
+    paper.lastAccessedAt = Date.now();
+
+    // Store output language in metadata if provided
+    if (outputLanguage) {
+      if (!paper.metadata) {
+        paper.metadata = {};
+      }
+      paper.metadata.outputLanguage = outputLanguage;
+    }
+
+    // Write in the same transaction (prevents race conditions)
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put(paper);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error(`Failed to update ${section} analysis`));
+    });
+
+    console.log(`✓ Updated ${section} analysis for paper: ${paper.title}`);
+    db.close();
+    return true;
+  } catch (error) {
+    db.close();
+    console.error(`Error updating partial ${section} analysis:`, error);
+    throw error;
+  }
+}
+
+/**
  * Update glossary for a paper
  */
 export async function updatePaperGlossary(paperId: string, glossary: any, outputLanguage?: string): Promise<boolean> {
