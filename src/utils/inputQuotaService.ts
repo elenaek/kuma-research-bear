@@ -119,6 +119,70 @@ class InputQuotaService {
   }
 
   /**
+   * Calculate minimum quota required for paper analysis
+   * Dynamically calculates based on hierarchical summary size
+   *
+   * @param hierarchicalSummarySize - Size of the hierarchical summary in characters
+   * @returns Minimum quota needed for full analysis with reasonable RAG context
+   */
+  async getMinimumAnalysisQuota(hierarchicalSummarySize: number): Promise<{
+    minimumQuota: number;
+    breakdown: {
+      hierarchicalSummary: number;
+      perSectionOverhead: number;
+      perSectionRAG: number;
+      responseBuffer: number;
+      totalPerSection: number;
+      totalAllSections: number;
+      safetyMargin: number;
+    };
+  }> {
+    // Convert hierarchical summary chars to tokens (rough: 1 token = 4 chars)
+    const summaryTokens = Math.ceil(hierarchicalSummarySize / 4);
+
+    // Per-section overhead (system prompt + input formatting + structured output overhead)
+    // Analysis uses structured JSON schemas which add ~100-150 tokens overhead
+    const systemPromptTokens = 150;
+    const inputFormattingTokens = 50;
+    const schemaOverheadTokens = 100;
+    const perSectionOverhead = systemPromptTokens + inputFormattingTokens + schemaOverheadTokens;
+
+    // Estimated RAG context per section (minimum 2 chunks, ~125 tokens each)
+    const minChunksPerSection = 2;
+    const avgChunkTokens = 125;
+    const perSectionRAG = minChunksPerSection * avgChunkTokens;
+
+    // Response buffer per section (conservative: 400 tokens for structured output)
+    const responseBufferPerSection = 400;
+
+    // Total per section = summary + overhead + RAG + response
+    const totalPerSection = summaryTokens + perSectionOverhead + perSectionRAG + responseBufferPerSection;
+
+    // Total for all 4 sections (methodology, confounders, implications, limitations)
+    const numSections = 4;
+    const totalAllSections = totalPerSection * numSections;
+
+    // Add 20% safety margin for unexpected overhead
+    const safetyMargin = Math.ceil(totalAllSections * 0.2);
+    const minimumQuota = totalAllSections + safetyMargin;
+
+    console.log(`[InputQuota] Minimum analysis quota: ${minimumQuota} tokens (summary: ${summaryTokens}, per-section: ${totalPerSection}, sections: ${numSections})`);
+
+    return {
+      minimumQuota,
+      breakdown: {
+        hierarchicalSummary: summaryTokens,
+        perSectionOverhead,
+        perSectionRAG,
+        responseBuffer: responseBufferPerSection,
+        totalPerSection,
+        totalAllSections,
+        safetyMargin,
+      },
+    };
+  }
+
+  /**
    * Get detailed quota info for debugging
    */
   async getQuotaInfo(): Promise<{

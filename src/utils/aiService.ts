@@ -1484,22 +1484,52 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
-      // Import RAG function (semantic search with keyword fallback)
+      // Import RAG and quota services
       const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
+      const { trimChunksByTokenBudget } = await import('./adaptiveRAGService.ts');
+      const { inputQuotaService } = await import('./inputQuotaService.ts');
 
-      // Find relevant chunks for methodology using semantic search (adaptive limit)
+      // Pre-flight quota check: Calculate available quota
+      const inputQuota = await inputQuotaService.getInputQuota();
+      const summaryTokens = Math.ceil(hierarchicalSummary.length / 4);
+      const estimatedOverhead = 150 + 50 + 100; // system + formatting + schema
+      const responseBuffer = 400;
+      const minRAGTokens = 250; // Minimum 2 chunks
+
+      console.log(`[Methodology Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
+
+      // Find relevant chunks for methodology using semantic search (oversample for trimming)
       const topics = ['methodology', 'methods', 'design', 'procedure', 'participants', 'sample', 'statistical'];
       const chunkLimit = await getOptimalRAGChunkCount('analysis');
       const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, chunkLimit);
 
-      // Combine hierarchical summary + relevant chunks
-      const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+      // Trim chunks by token budget (pass hierarchical summary as conversationState.summary)
+      const { chunks: trimmedChunks, budgetStatus } = await trimChunksByTokenBudget(
+        relevantChunks,
+        'analysis',
+        { summary: hierarchicalSummary, recentMessages: [] }
+      );
 
-      const context = `FULL PAPER SUMMARY:
+      console.log(`[Methodology Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
+      console.log(`[Methodology Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
+
+      if (trimmedChunks.length === 0) {
+        console.warn('[Methodology Analysis] No chunks fit within quota - using summary only');
+      }
+
+      // Combine hierarchical summary + trimmed chunks
+      const chunksText = trimmedChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+
+      const context = trimmedChunks.length > 0
+        ? `FULL PAPER SUMMARY:
 ${hierarchicalSummary}
 
 DETAILED METHODOLOGY SECTIONS:
-${chunksText}`;
+${chunksText}`
+        : `FULL PAPER SUMMARY:
+${hierarchicalSummary}
+
+Note: Limited quota - analysis based on summary only.`;
 
       const input = `IMPORTANT: You must respond entirely in ${languageName}. All analysis must be in ${languageName}.
 
@@ -1508,8 +1538,6 @@ Analyze the methodology of this research paper using the full paper summary and 
 ${context}
 
 Provide a comprehensive analysis of the study design, methods, and rigor.`;
-
-      console.log('[Methodology Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
 
       // Include language in context ID to ensure separate sessions per language
       const languageContextId = `${contextId}-${outputLanguage}`;
@@ -1566,22 +1594,51 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
-      // Import RAG function (semantic search with keyword fallback)
+      // Import RAG and quota services
       const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
+      const { trimChunksByTokenBudget } = await import('./adaptiveRAGService.ts');
+      const { inputQuotaService } = await import('./inputQuotaService.ts');
 
-      // Find relevant chunks for confounders/biases using semantic search (adaptive limit)
+      // Pre-flight quota check: Calculate available quota
+      const inputQuota = await inputQuotaService.getInputQuota();
+      const summaryTokens = Math.ceil(hierarchicalSummary.length / 4);
+      const estimatedOverhead = 150 + 50 + 100; // system + formatting + schema
+      const responseBuffer = 400;
+
+      console.log(`[Confounder Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
+
+      // Find relevant chunks for confounders/biases using semantic search (oversample for trimming)
       const topics = ['bias', 'confound', 'limitation', 'control', 'random', 'blinding', 'selection'];
       const chunkLimit = await getOptimalRAGChunkCount('analysis');
       const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, chunkLimit);
 
-      // Combine hierarchical summary + relevant chunks
-      const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+      // Trim chunks by token budget (pass hierarchical summary as conversationState.summary)
+      const { chunks: trimmedChunks, budgetStatus } = await trimChunksByTokenBudget(
+        relevantChunks,
+        'analysis',
+        { summary: hierarchicalSummary, recentMessages: [] }
+      );
 
-      const context = `FULL PAPER SUMMARY:
+      console.log(`[Confounder Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
+      console.log(`[Confounder Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
+
+      if (trimmedChunks.length === 0) {
+        console.warn('[Confounder Analysis] No chunks fit within quota - using summary only');
+      }
+
+      // Combine hierarchical summary + trimmed chunks
+      const chunksText = trimmedChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+
+      const context = trimmedChunks.length > 0
+        ? `FULL PAPER SUMMARY:
 ${hierarchicalSummary}
 
 DETAILED SECTIONS (Methods, Limitations, Discussion):
-${chunksText}`;
+${chunksText}`
+        : `FULL PAPER SUMMARY:
+${hierarchicalSummary}
+
+Note: Limited quota - analysis based on summary only.`;
 
       const input = `IMPORTANT: You must respond entirely in ${languageName}. All analysis must be in ${languageName}.
 
@@ -1590,8 +1647,6 @@ Identify potential confounders and biases in this research paper using the full 
 ${context}
 
 Provide a comprehensive analysis of confounders, biases, and control measures.`;
-
-      console.log('[Confounder Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
 
       // Include language in context ID to ensure separate sessions per language
       const languageContextId = `${contextId}-${outputLanguage}`;
@@ -1644,22 +1699,51 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
-      // Import RAG function (semantic search with keyword fallback)
+      // Import RAG and quota services
       const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
+      const { trimChunksByTokenBudget } = await import('./adaptiveRAGService.ts');
+      const { inputQuotaService } = await import('./inputQuotaService.ts');
 
-      // Find relevant chunks for implications using semantic search (adaptive limit)
+      // Pre-flight quota check: Calculate available quota
+      const inputQuota = await inputQuotaService.getInputQuota();
+      const summaryTokens = Math.ceil(hierarchicalSummary.length / 4);
+      const estimatedOverhead = 150 + 50 + 100; // system + formatting + schema
+      const responseBuffer = 400;
+
+      console.log(`[Implications Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
+
+      // Find relevant chunks for implications using semantic search (oversample for trimming)
       const topics = ['implication', 'application', 'significance', 'discussion', 'conclusion', 'impact', 'future'];
       const chunkLimit = await getOptimalRAGChunkCount('analysis');
       const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, chunkLimit);
 
-      // Combine hierarchical summary + relevant chunks
-      const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+      // Trim chunks by token budget (pass hierarchical summary as conversationState.summary)
+      const { chunks: trimmedChunks, budgetStatus } = await trimChunksByTokenBudget(
+        relevantChunks,
+        'analysis',
+        { summary: hierarchicalSummary, recentMessages: [] }
+      );
 
-      const context = `FULL PAPER SUMMARY:
+      console.log(`[Implications Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
+      console.log(`[Implications Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
+
+      if (trimmedChunks.length === 0) {
+        console.warn('[Implications Analysis] No chunks fit within quota - using summary only');
+      }
+
+      // Combine hierarchical summary + trimmed chunks
+      const chunksText = trimmedChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+
+      const context = trimmedChunks.length > 0
+        ? `FULL PAPER SUMMARY:
 ${hierarchicalSummary}
 
 DETAILED SECTIONS (Results, Discussion, Conclusions):
-${chunksText}`;
+${chunksText}`
+        : `FULL PAPER SUMMARY:
+${hierarchicalSummary}
+
+Note: Limited quota - analysis based on summary only.`;
 
       const input = `IMPORTANT: You must respond entirely in ${languageName}. All analysis must be in ${languageName}.
 
@@ -1668,8 +1752,6 @@ Analyze the implications of this research paper using the full paper summary and
 ${context}
 
 Provide a comprehensive analysis of real-world applications, significance, and future research directions.`;
-
-      console.log('[Implications Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
 
       // Include language in context ID to ensure separate sessions per language
       const languageContextId = `${contextId}-${outputLanguage}`;
@@ -1722,22 +1804,51 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
 IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
 
     try {
-      // Import RAG function (semantic search with keyword fallback)
+      // Import RAG and quota services
       const { getRelevantChunksByTopicSemantic } = await import('./dbService.ts');
+      const { trimChunksByTokenBudget } = await import('./adaptiveRAGService.ts');
+      const { inputQuotaService } = await import('./inputQuotaService.ts');
 
-      // Find relevant chunks for limitations using semantic search (adaptive limit)
+      // Pre-flight quota check: Calculate available quota
+      const inputQuota = await inputQuotaService.getInputQuota();
+      const summaryTokens = Math.ceil(hierarchicalSummary.length / 4);
+      const estimatedOverhead = 150 + 50 + 100; // system + formatting + schema
+      const responseBuffer = 400;
+
+      console.log(`[Limitations Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
+
+      // Find relevant chunks for limitations using semantic search (oversample for trimming)
       const topics = ['limitation', 'constraint', 'weakness', 'generalizability', 'caveat', 'shortcoming'];
       const chunkLimit = await getOptimalRAGChunkCount('analysis');
       const relevantChunks = await getRelevantChunksByTopicSemantic(paperId, topics, chunkLimit);
 
-      // Combine hierarchical summary + relevant chunks
-      const chunksText = relevantChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+      // Trim chunks by token budget (pass hierarchical summary as conversationState.summary)
+      const { chunks: trimmedChunks, budgetStatus } = await trimChunksByTokenBudget(
+        relevantChunks,
+        'analysis',
+        { summary: hierarchicalSummary, recentMessages: [] }
+      );
 
-      const context = `FULL PAPER SUMMARY:
+      console.log(`[Limitations Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
+      console.log(`[Limitations Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
+
+      if (trimmedChunks.length === 0) {
+        console.warn('[Limitations Analysis] No chunks fit within quota - using summary only');
+      }
+
+      // Combine hierarchical summary + trimmed chunks
+      const chunksText = trimmedChunks.map(chunk => chunk.content).join('\n\n---\n\n');
+
+      const context = trimmedChunks.length > 0
+        ? `FULL PAPER SUMMARY:
 ${hierarchicalSummary}
 
 DETAILED SECTIONS (Limitations, Discussion):
-${chunksText}`;
+${chunksText}`
+        : `FULL PAPER SUMMARY:
+${hierarchicalSummary}
+
+Note: Limited quota - analysis based on summary only.`;
 
       const input = `IMPORTANT: You must respond entirely in ${languageName}. All analysis must be in ${languageName}.
 
@@ -1746,8 +1857,6 @@ Identify the limitations of this research paper using the full paper summary and
 ${context}
 
 Provide a comprehensive analysis of study limitations and generalizability.`;
-
-      console.log('[Limitations Analysis] Using', relevantChunks.length, 'chunks + hierarchical summary');
 
       // Include language in context ID to ensure separate sessions per language
       const languageContextId = `${contextId}-${outputLanguage}`;
