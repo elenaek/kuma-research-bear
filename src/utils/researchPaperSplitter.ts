@@ -296,8 +296,8 @@ export async function extractHTMLSections(doc?: Document): Promise<PaperSection[
       return [];
     }
 
-    // Find all heading elements (h1, h2, h3) in document order
-    const headingElements = Array.from(mainContent.querySelectorAll('h1, h2, h3'));
+    // Find all heading elements (h1-h6) in document order
+    const headingElements = Array.from(mainContent.querySelectorAll('h1, h2, h3, h4, h5, h6'));
 
     if (headingElements.length === 0) {
       console.warn('[ResearchPaperSplitter] No headings found in document');
