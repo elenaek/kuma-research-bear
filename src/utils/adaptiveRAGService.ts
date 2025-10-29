@@ -94,6 +94,67 @@ export async function getAdaptiveChunkLimit(
 }
 
 /**
+ * Calculate available RAG budget for a session
+ * Takes into account current session usage, conversation overhead, and response buffer
+ *
+ * @param session - AI session object with inputQuota and inputUsage
+ * @param useCase - The type of operation
+ * @param conversationState - Current conversation state
+ * @returns Target token budget for RAG context
+ */
+export async function calculateAvailableRAGBudget(
+  session: { inputQuota?: number; inputUsage?: number } | null,
+  useCase: 'chat' | 'qa' | 'analysis' | 'definition',
+  conversationState?: {
+    summary?: string | null;
+    recentMessages?: Array<{ content: string }>;
+  }
+): Promise<{
+  targetRAGTokens: number;
+  breakdown: {
+    inputQuota: number;
+    sessionUsage: number;
+    conversationTokens: number;
+    responseBuffer: number;
+    availableForRAG: number;
+  };
+}> {
+  // Get input quota
+  const inputQuota = session?.inputQuota || await inputQuotaService.getInputQuota();
+
+  // Get current session usage (0 for new sessions)
+  const sessionUsage = session?.inputUsage || 0;
+
+  // Calculate conversation overhead
+  const { promptTokens, breakdown } = calculateActualPromptTokens(useCase, conversationState);
+  const conversationTokens = promptTokens;
+
+  // Reserve response buffer
+  const responseBuffer = 500;
+
+  // Calculate available tokens for RAG context
+  const availableForRAG = Math.max(0, inputQuota - sessionUsage - conversationTokens - responseBuffer);
+
+  // Target 50% of available space, but respect minimum threshold
+  const MIN_TOKENS = 1000;
+  const targetRAGTokens = Math.max(MIN_TOKENS, Math.floor(availableForRAG * 0.5));
+
+  console.log(`[Budget] Quota=${inputQuota}, SessionUsage=${sessionUsage}, Conversation=${conversationTokens}, Buffer=${responseBuffer}`);
+  console.log(`[Budget] AvailableForRAG=${availableForRAG}, Target=${targetRAGTokens} (50% or min ${MIN_TOKENS})`);
+
+  return {
+    targetRAGTokens,
+    breakdown: {
+      inputQuota,
+      sessionUsage,
+      conversationTokens,
+      responseBuffer,
+      availableForRAG,
+    },
+  };
+}
+
+/**
  * Calculate actual prompt tokens based on real conversation state
  * Provides accurate token estimation instead of fixed estimates
  */
