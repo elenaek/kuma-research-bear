@@ -14,7 +14,7 @@ export default defineConfig({
         'src/offscreen/offscreen.html',
       ],
     }),
-    // Copy PDF.js worker, DotLottie WASM, ONNX Runtime WASM, KaTeX fonts, and chatbox CSS to dist folder
+    // Copy PDF.js worker, DotLottie WASM, ONNX Runtime WASM, and chatbox CSS to dist folder
     viteStaticCopy({
       targets: [
         {
@@ -28,10 +28,6 @@ export default defineConfig({
         {
           src: 'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded*.{wasm,mjs}',
           dest: '.',
-        },
-        {
-          src: 'node_modules/katex/dist/fonts/*',
-          dest: 'fonts',
         },
         {
           src: 'src/content/components/chatbox.css',

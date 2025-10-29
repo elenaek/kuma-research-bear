@@ -73,6 +73,11 @@ export async function generateEmbeddingsOffscreen(
       payload: { paperId, paperUrl }
     });
 
+    if (!response) {
+      console.error('[Offscreen] No response from offscreen document for embedding generation');
+      return { success: false, error: 'Offscreen document not responding' };
+    }
+
     if (response.success) {
       const backendUsed = response.device === 'webgpu' ? 'WebGPU (GPU-accelerated)' : 'WASM (CPU)';
       console.log(`[Offscreen] ✓ Generated ${response.count} embeddings using ${backendUsed}`);
@@ -104,6 +109,11 @@ export async function searchSemanticOffscreen(
       type: MessageType.SEMANTIC_SEARCH,
       payload: { paperId, query, limit }
     });
+
+    if (!response) {
+      console.error('[Offscreen] No response from offscreen document for semantic search');
+      return { success: false, chunkIds: [], error: 'Offscreen document not responding' };
+    }
 
     if (response.success && response.chunkIds) {
       return { success: true, chunkIds: response.chunkIds };
@@ -140,6 +150,11 @@ export async function searchHybridOffscreen(
       type: MessageType.HYBRID_SEARCH,
       payload: { paperId, query, limit, alpha }
     });
+
+    if (!response) {
+      console.error('[Offscreen] No response from offscreen document for hybrid search');
+      return { success: false, chunkIds: [], error: 'Offscreen document not responding' };
+    }
 
     if (response.success && response.chunkIds) {
       return { success: true, chunkIds: response.chunkIds };

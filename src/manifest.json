@@ -71,8 +71,6 @@
         "src/content/styles/selectionToolbar.css",
         "src/content/styles/imageExplainButton.css",
         "lotties/*",
-        "fonts/*",
-        "katex/*",
         "icons/*"
       ],
       "matches": ["<all_urls>"]

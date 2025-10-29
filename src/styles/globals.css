@@ -813,9 +813,37 @@ select:focus {
   margin-left: 0.5rem;
 }
 
-/* Increase MathML font size for better readability */
-.katex,
-.katex-mathml,
-.katex-html {
-  font-size: 1.1em !important;
+/* MathJax SVG styling for better readability */
+.mathjax-inline {
+  display: inline;
+  vertical-align: middle;
+  font-size: 1.25em;
+}
+
+.mathjax-inline svg {
+  display: inline;
+  vertical-align: middle;
+  margin-left: 0.25rem;
+  margin-right: 0.25rem;
+  stroke-width: 0.5;
+  stroke: currentColor;
+  fill: currentColor;
+  paint-order: stroke fill;
+  /* Let SVG scale naturally without height constraint */
+}
+
+.mathjax-display {
+  display: block;
+  margin: 1em 0;
+  text-align: center;
+  font-size: 1.25em;
+}
+
+.mathjax-display svg {
+  display: inline-block;
+  max-width: 100%;
+  stroke-width: 0.5;
+  stroke: currentColor;
+  fill: currentColor;
+  paint-order: stroke fill;
 }
