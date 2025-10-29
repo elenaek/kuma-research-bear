@@ -173,6 +173,17 @@ class TextSelectionHandler {
   }
 
   private handleMouseUp(event: MouseEvent) {
+    // Check if click originated from inside chatbox shadow DOM
+    const path = event.composedPath();
+    const isInsideChatbox = path.some(el =>
+      el instanceof HTMLElement &&
+      (el.id === 'kuma-chatbox-container' || el.classList?.contains('kuma-chatbox'))
+    );
+
+    if (isInsideChatbox) {
+      return;
+    }
+
     // Debounce to avoid multiple rapid updates
     if (this.debounceTimer) {
       window.clearTimeout(this.debounceTimer);
@@ -202,6 +213,17 @@ class TextSelectionHandler {
   private handleClickOutside(event: MouseEvent) {
     // Don't hide if clicking on the button itself
     if (this.container && this.container.contains(event.target as Node)) {
+      return;
+    }
+
+    // Check if click originated from inside chatbox shadow DOM
+    const path = event.composedPath();
+    const isInsideChatbox = path.some(el =>
+      el instanceof HTMLElement &&
+      (el.id === 'kuma-chatbox-container' || el.classList?.contains('kuma-chatbox'))
+    );
+
+    if (isInsideChatbox) {
       return;
     }
 
