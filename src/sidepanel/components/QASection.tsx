@@ -165,7 +165,7 @@ export const QASection = memo(function QASection(props: QASectionProps) {
         </div>
         <p class="text-responsive-xs text-gray-500 animate-fade-in" style={{ animationDuration: '1000ms' }}>
           <InfoIcon size={16} class="text-gray-500 inline-block mr-1" /> 
-          Kuma has more room to think here than in the chatbox. Kuma will search through {storedPaper?.chunkCount} paper sections to answer your question.
+          Kuma has more room to think here than in the chatbox and will search through {storedPaper?.chunkCount} content chunks to answer your question.
         </p>
       </div>
 
