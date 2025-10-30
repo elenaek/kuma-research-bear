@@ -7,6 +7,7 @@
 
 // Type imports only (no runtime import)
 import type * as PDFJS from 'pdfjs-dist';
+import { logger } from './logger.ts';
 
 // Lazy load PDF.js library
 let pdfjsLib: typeof PDFJS | null = null;
@@ -24,11 +25,11 @@ async function getPDFLib(): Promise<typeof PDFJS> {
     // Use locally bundled worker (1MB, copied during build)
     pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdf.worker.min.mjs');
 
-    console.log('[PDF Extractor] PDF.js library loaded successfully');
-    console.log('[PDF Extractor] Worker URL:', pdfjsLib.GlobalWorkerOptions.workerSrc);
+    logger.debug('UTILS', '[PDF Extractor] PDF.js library loaded successfully');
+    logger.debug('UTILS', '[PDF Extractor] Worker URL:', pdfjsLib.GlobalWorkerOptions.workerSrc);
     return pdfjsLib;
   } catch (error) {
-    console.error('[PDF Extractor] Failed to load PDF.js library:', error);
+    logger.error('UTILS', '[PDF Extractor] Failed to load PDF.js library:', error);
     throw new Error('Failed to load PDF.js library. PDF extraction is not available.');
   }
 }
@@ -93,32 +94,32 @@ export function getPDFUrl(): string | null {
   // Direct PDF view - Chrome's PDF viewer
   // Priority 1: window.location.href if it looks like a PDF
   if (isPDFViewerPage() && isValidPDFUrl(window.location.href)) {
-    console.log('[PDF Extractor] Detected direct PDF view:', window.location.href);
+    logger.debug('UTILS', '[PDF Extractor] Detected direct PDF view:', window.location.href);
     return window.location.href;
   }
 
   // Priority 2: Embedded PDF via <embed> tag (but filter out about:blank)
   const embedElement = document.querySelector('embed[type="application/pdf"]') as HTMLEmbedElement;
   if (embedElement && embedElement.src && isValidPDFUrl(embedElement.src)) {
-    console.log('[PDF Extractor] Detected embedded PDF via <embed>:', embedElement.src);
+    logger.debug('UTILS', '[PDF Extractor] Detected embedded PDF via <embed>:', embedElement.src);
     return embedElement.src;
   }
 
   // Priority 3: Embedded PDF via <object> tag
   const objectElement = document.querySelector('object[type="application/pdf"]') as HTMLObjectElement;
   if (objectElement && objectElement.data && isValidPDFUrl(objectElement.data)) {
-    console.log('[PDF Extractor] Detected embedded PDF via <object>:', objectElement.data);
+    logger.debug('UTILS', '[PDF Extractor] Detected embedded PDF via <object>:', objectElement.data);
     return objectElement.data;
   }
 
   // Priority 4: Embedded PDF via <iframe>
   const iframeElement = document.querySelector('iframe[src*=".pdf"]') as HTMLIFrameElement;
   if (iframeElement && iframeElement.src && isValidPDFUrl(iframeElement.src)) {
-    console.log('[PDF Extractor] Detected embedded PDF via <iframe>:', iframeElement.src);
+    logger.debug('UTILS', '[PDF Extractor] Detected embedded PDF via <iframe>:', iframeElement.src);
     return iframeElement.src;
   }
 
-  console.log('[PDF Extractor] Could not detect PDF URL');
+  logger.debug('UTILS', '[PDF Extractor] Could not detect PDF URL');
   return null;
 }
 
@@ -141,7 +142,7 @@ async function extractPDFMetadata(pdfDocument: any): Promise<PDFContent['metadat
       modificationDate: info.ModDate || undefined,
     };
   } catch (error) {
-    console.error('Error extracting PDF metadata:', error);
+    logger.error('UTILS', 'Error extracting PDF metadata:', error);
     return {};
   }
 }
@@ -176,7 +177,7 @@ async function extractPageText(page: any): Promise<string> {
 
     return pageText.trim();
   } catch (error) {
-    console.error('Error extracting text from page:', error);
+    logger.error('UTILS', 'Error extracting text from page:', error);
     return '';
   }
 }
@@ -191,7 +192,7 @@ export async function extractPDFText(
   progressCallback?: (progress: PDFExtractionProgress) => void
 ): Promise<PDFContent> {
   try {
-    console.log('[PDF Extractor] Loading PDF from:', pdfUrl);
+    logger.debug('UTILS', '[PDF Extractor] Loading PDF from:', pdfUrl);
 
     // Lazy load PDF.js library
     const pdfjs = await getPDFLib();
@@ -200,7 +201,7 @@ export async function extractPDFText(
     const loadingTask = pdfjs.getDocument(pdfUrl);
     const pdfDocument = await loadingTask.promise;
 
-    console.log('[PDF Extractor] PDF loaded, extracting content...');
+    logger.debug('UTILS', '[PDF Extractor] PDF loaded, extracting content...');
 
     // Extract metadata
     const metadata = await extractPDFMetadata(pdfDocument);
@@ -223,13 +224,13 @@ export async function extractPDFText(
       const pageText = await extractPageText(page);
       textPages.push(pageText);
 
-      console.log(`[PDF Extractor] Extracted page ${i}/${pageCount}`);
+      logger.debug('UTILS', `[PDF Extractor] Extracted page ${i}/${pageCount}`);
     }
 
     // Combine all page text with double line breaks between pages
     const fullText = textPages.join('\n\n');
 
-    console.log('[PDF Extractor] Extraction complete!', {
+    logger.debug('UTILS', '[PDF Extractor] Extraction complete!', {
       pageCount,
       textLength: fullText.length,
       wordCount: fullText.split(/\s+/).length,
@@ -241,7 +242,7 @@ export async function extractPDFText(
       pageCount,
     };
   } catch (error) {
-    console.error('[PDF Extractor] Failed to extract PDF:', error);
+    logger.error('UTILS', '[PDF Extractor] Failed to extract PDF:', error);
     throw new Error(`Failed to extract PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -274,7 +275,7 @@ export async function extractPDFPages(
 
     return textPages.join('\n\n');
   } catch (error) {
-    console.error('[PDF Extractor] Failed to extract PDF pages:', error);
+    logger.error('UTILS', '[PDF Extractor] Failed to extract PDF pages:', error);
     throw new Error(`Failed to extract PDF pages: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -307,7 +308,7 @@ export async function isScannedPDF(pdfUrl: string): Promise<boolean> {
     // If less than 200 chars per page, likely scanned
     return avgCharsPerPage < 200;
   } catch (error) {
-    console.error('[PDF Extractor] Error checking if PDF is scanned:', error);
+    logger.error('UTILS', '[PDF Extractor] Error checking if PDF is scanned:', error);
     return false; // Assume not scanned if we can't check
   }
 }

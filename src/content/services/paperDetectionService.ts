@@ -2,6 +2,7 @@ import { ResearchPaper } from '../../types/index.ts';
 import { detectPaper, detectPaperWithAI } from '../../utils/paperDetectors.ts';
 import { storePaperSimple } from './paperStorageService.ts';
 import { aiService } from '../../utils/aiService.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Paper Detection Service
@@ -19,7 +20,7 @@ export async function detectAndStorePaper(): Promise<ResearchPaper | null> {
     const paper = await detectPaper();
 
     if (paper) {
-      console.log('[PaperDetection] Research paper detected:', paper.title);
+      logger.debug('CONTENT_SCRIPT', '[PaperDetection] Research paper detected:', paper.title);
 
       // Detect language
       try {
@@ -31,10 +32,10 @@ export async function detectAndStorePaper(): Promise<ResearchPaper | null> {
             paper.metadata = {};
           }
           paper.metadata.originalLanguage = detectedLanguage;
-          console.log('[PaperDetection] Detected paper language:', detectedLanguage);
+          logger.debug('CONTENT_SCRIPT', '[PaperDetection] Detected paper language:', detectedLanguage);
         }
       } catch (error) {
-        console.error('[PaperDetection] Error detecting language:', error);
+        logger.error('CONTENT_SCRIPT', '[PaperDetection] Error detecting language:', error);
         // Continue anyway - language detection is optional
       }
 
@@ -43,11 +44,11 @@ export async function detectAndStorePaper(): Promise<ResearchPaper | null> {
 
       return paper;
     } else {
-      console.log('[PaperDetection] No research paper detected on this page');
+      logger.debug('CONTENT_SCRIPT', '[PaperDetection] No research paper detected on this page');
       return null;
     }
   } catch (error) {
-    console.error('[PaperDetection] Error during paper detection:', error);
+    logger.error('CONTENT_SCRIPT', '[PaperDetection] Error during paper detection:', error);
     return null;
   }
 }
@@ -62,12 +63,12 @@ export async function detectPaperWithAIOnly(): Promise<ResearchPaper | null> {
     const paper = await detectPaperWithAI();
 
     if (paper) {
-      console.log('[PaperDetection] AI-detected paper:', paper.title);
+      logger.debug('CONTENT_SCRIPT', '[PaperDetection] AI-detected paper:', paper.title);
     }
 
     return paper;
   } catch (error) {
-    console.error('[PaperDetection] Error during AI paper detection:', error);
+    logger.error('CONTENT_SCRIPT', '[PaperDetection] Error during AI paper detection:', error);
     return null;
   }
 }

@@ -4,6 +4,7 @@ import { extractFullText } from './textExtractionService.ts';
 import { detectResearchPaper } from '../../utils/paperDetection.ts';
 import { generatePaperId } from '../../utils/dbService.ts';
 import { extractResearchPaper } from '../../utils/contentExtractor.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Paper Storage Service
@@ -120,7 +121,7 @@ export function createMetadataChunk(
  * Handles both new papers and already-stored papers
  */
 export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
-  console.log('[PaperStorage] Preparing to store paper:', {
+  logger.debug('CONTENT_SCRIPT', '[PaperStorage] Preparing to store paper:', {
     title: paper.title,
     url: paper.url,
     source: paper.source
@@ -128,13 +129,13 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
 
   try {
     // Step 1: Detect if this is a research paper
-    console.log('[PaperStorage] Detecting if page is a research paper...');
+    logger.debug('CONTENT_SCRIPT', '[PaperStorage] Detecting if page is a research paper...');
     const detectionResult = await detectResearchPaper();
-    console.log('[PaperStorage] Detection result:', detectionResult);
+    logger.debug('CONTENT_SCRIPT', '[PaperStorage] Detection result:', detectionResult);
 
     // If not a research paper, return early (don't store)
     if (!detectionResult.isResearchPaper) {
-      console.warn('[PaperStorage] ⚠ Not a research paper, skipping storage');
+      logger.warn('CONTENT_SCRIPT', '[PaperStorage] ⚠ Not a research paper, skipping storage');
       return {
         stored: false,
         chunkCount: 0,
@@ -147,12 +148,12 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
 
     // LEVEL 1 DEDUPLICATION: Check if already stored
     const alreadyStored = await ChromeService.isPaperStoredInDB(paper.url);
-    console.log('[PaperStorage] isPaperStored check result:', alreadyStored);
+    logger.debug('CONTENT_SCRIPT', '[PaperStorage] isPaperStored check result:', alreadyStored);
 
     if (alreadyStored) {
-      console.log('[PaperStorage] Paper already stored, fetching existing data...');
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] Paper already stored, fetching existing data...');
       const existingPaper = await ChromeService.getPaperByUrl(paper.url);
-      console.log('[PaperStorage] Existing paper retrieved:', {
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] Existing paper retrieved:', {
         id: existingPaper?.id,
         chunkCount: existingPaper?.chunkCount
       });
@@ -166,7 +167,7 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
     }
 
     // NEW FLOW: Send HTML to background for offscreen extraction (fire-and-forget)
-    console.log('[PaperStorage] Research paper detected ✓ Sending HTML to background for extraction...');
+    logger.debug('CONTENT_SCRIPT', '[PaperStorage] Research paper detected ✓ Sending HTML to background for extraction...');
 
     // Serialize HTML
     const paperHtml = document.documentElement.outerHTML;
@@ -184,7 +185,7 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
       }
     });
 
-    console.log('[PaperStorage] ✓ Extraction message sent to background (processing in offscreen)');
+    logger.debug('CONTENT_SCRIPT', '[PaperStorage] ✓ Extraction message sent to background (processing in offscreen)');
 
     // Return immediately - extraction will complete asynchronously
     // User can navigate away while extraction happens
@@ -196,7 +197,7 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
     };
   } catch (error) {
     // Capture detailed error message for debugging
-    console.error('[PaperStorage] ❌ Failed to store paper:', {
+    logger.error('CONTENT_SCRIPT', '[PaperStorage] ❌ Failed to store paper:', {
       error,
       stack: error instanceof Error ? error.stack : undefined,
       paperUrl: paper.url
@@ -217,12 +218,12 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
 export async function storePaperSimple(paper: ResearchPaper): Promise<boolean> {
   try {
     // Detect if this is a research paper
-    console.log('[PaperStorage] Detecting if page is a research paper...');
+    logger.debug('CONTENT_SCRIPT', '[PaperStorage] Detecting if page is a research paper...');
     const detectionResult = await detectResearchPaper();
 
     // If not a research paper, return false (don't store)
     if (!detectionResult.isResearchPaper) {
-      console.warn('[PaperStorage] ⚠ Not a research paper, skipping storage:', detectionResult.reason);
+      logger.warn('CONTENT_SCRIPT', '[PaperStorage] ⚠ Not a research paper, skipping storage:', detectionResult.reason);
       return false;
     }
 
@@ -230,12 +231,12 @@ export async function storePaperSimple(paper: ResearchPaper): Promise<boolean> {
     const alreadyStored = await ChromeService.isPaperStoredInDB(paper.url);
 
     if (alreadyStored) {
-      console.log('[PaperStorage] Paper already stored in IndexedDB');
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] Paper already stored in IndexedDB');
       return true;
     }
 
     // NEW FLOW: Send HTML to background for offscreen extraction (fire-and-forget)
-    console.log('[PaperStorage] Research paper detected ✓ Sending HTML to background for extraction...');
+    logger.debug('CONTENT_SCRIPT', '[PaperStorage] Research paper detected ✓ Sending HTML to background for extraction...');
 
     // Serialize HTML
     const paperHtml = document.documentElement.outerHTML;
@@ -250,10 +251,10 @@ export async function storePaperSimple(paper: ResearchPaper): Promise<boolean> {
       }
     });
 
-    console.log('[PaperStorage] ✓ Extraction message sent to background (processing in offscreen)');
+    logger.debug('CONTENT_SCRIPT', '[PaperStorage] ✓ Extraction message sent to background (processing in offscreen)');
     return true;
   } catch (error) {
-    console.warn('[PaperStorage] Failed to store paper:', error);
+    logger.warn('CONTENT_SCRIPT', '[PaperStorage] Failed to store paper:', error);
     return false;
   }
 }

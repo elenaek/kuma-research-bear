@@ -24,6 +24,7 @@ import { JSONSchema } from '../utils/typeToSchema.ts';
 import { getSchemaForLanguage } from '../schemas/analysisSchemas.multilang.ts';
 import { getOutputLanguage } from './settingsService.ts';
 import { getOptimalRAGChunkCount } from './adaptiveRAGService.ts';
+import { logger } from './logger.ts';
 
 /**
  * Utility: Sleep for a specified duration
@@ -66,7 +67,7 @@ class ChromeAIService {
       try {
         params = await LanguageModel.params();
       } catch (paramsError) {
-        console.warn('Could not fetch AI params:', paramsError);
+        logger.warn('AI_SERVICE', 'Could not fetch AI params:', paramsError);
       }
 
       this.capabilities = {
@@ -80,7 +81,7 @@ class ChromeAIService {
 
       return this.capabilities;
     } catch (error) {
-      console.error('Error checking AI availability:', error);
+      logger.error('AI_SERVICE', 'Error checking AI availability:', error);
       return {
         available: false,
         availability: 'no',
@@ -96,7 +97,7 @@ class ChromeAIService {
     try {
       // Check if Summarizer global is available
       if (typeof Summarizer === 'undefined') {
-        console.log('[Summarizer] API not available (typeof Summarizer === undefined)');
+        logger.debug('AI_SERVICE', '[Summarizer] API not available (typeof Summarizer === undefined)');
         return {
           available: false,
           availability: 'no',
@@ -105,7 +106,7 @@ class ChromeAIService {
       }
 
       const availability: AIAvailability = await Summarizer.availability();
-      console.log('[Summarizer] API availability:', availability);
+      logger.debug('AI_SERVICE', '[Summarizer] API availability:', availability);
 
       return {
         available: availability === 'available',
@@ -113,7 +114,7 @@ class ChromeAIService {
         model: 'Gemini Nano',
       };
     } catch (error) {
-      console.error('[Summarizer] Error checking availability:', error);
+      logger.error('AI_SERVICE', '[Summarizer] Error checking availability:', error);
       return {
         available: false,
         availability: 'no',
@@ -129,7 +130,7 @@ class ChromeAIService {
     try {
       // Check if LanguageDetector global is available
       if (typeof LanguageDetector === 'undefined') {
-        console.log('[LanguageDetector] API not available (typeof LanguageDetector === undefined)');
+        logger.debug('AI_SERVICE', '[LanguageDetector] API not available (typeof LanguageDetector === undefined)');
         return {
           available: false,
           availability: 'no',
@@ -137,14 +138,14 @@ class ChromeAIService {
       }
 
       const availability: AIAvailability = await LanguageDetector.availability();
-      console.log('[LanguageDetector] API availability:', availability);
+      logger.debug('AI_SERVICE', '[LanguageDetector] API availability:', availability);
 
       return {
         available: availability === 'available',
         availability,
       };
     } catch (error) {
-      console.error('[LanguageDetector] Error checking availability:', error);
+      logger.error('AI_SERVICE', '[LanguageDetector] Error checking availability:', error);
       return {
         available: false,
         availability: 'no',
@@ -159,7 +160,7 @@ class ChromeAIService {
     try {
       // Check if LanguageModel global is available
       if (typeof LanguageModel === 'undefined') {
-        console.log('[Multimodal] API not available (typeof LanguageModel === undefined)');
+        logger.debug('AI_SERVICE', '[Multimodal] API not available (typeof LanguageModel === undefined)');
         return {
           available: false,
           availability: 'no',
@@ -169,7 +170,7 @@ class ChromeAIService {
       }
 
       const availability: AIAvailability = await LanguageModel.availability();
-      console.log('[Multimodal] API availability:', availability);
+      logger.debug('AI_SERVICE', '[Multimodal] API availability:', availability);
 
       // Multimodal capabilities are only available in origin trial
       // We need to try creating a session with image inputs to check support
@@ -181,9 +182,9 @@ class ChromeAIService {
           });
           supportsImages = true;
           testSession.destroy();
-          console.log('[Multimodal] Image input support confirmed');
+          logger.debug('AI_SERVICE', '[Multimodal] Image input support confirmed');
         } catch (error) {
-          console.log('[Multimodal] Image input not supported:', error);
+          logger.debug('AI_SERVICE', '[Multimodal] Image input not supported:', error);
           supportsImages = false;
         }
       }
@@ -195,7 +196,7 @@ class ChromeAIService {
         supportsImages,
       };
     } catch (error) {
-      console.error('[Multimodal] Error checking availability:', error);
+      logger.error('AI_SERVICE', '[Multimodal] Error checking availability:', error);
       return {
         available: false,
         availability: 'no',
@@ -217,18 +218,18 @@ class ChromeAIService {
     contextId: string = 'default'
   ): Promise<{ title: string; explanation: string } | null> {
     try {
-      console.log('[ImageExplain] Starting image explanation for paper:', paperTitle);
+      logger.debug('AI_SERVICE', '[ImageExplain] Starting image explanation for paper:', paperTitle);
 
       // Check multimodal availability first
       const { available } = await this.checkMultimodalAvailability();
       if (!available) {
-        console.warn('[ImageExplain] Multimodal API not available');
+        logger.warn('AI_SERVICE', '[ImageExplain] Multimodal API not available');
         return null;
       }
 
       // Get user's preferred output language
       const outputLanguage = await getOutputLanguage();
-      console.log('[ImageExplain] Using output language:', outputLanguage);
+      logger.debug('AI_SERVICE', '[ImageExplain] Using output language:', outputLanguage);
 
       // Import schema for structured output
       const { imageExplanationSchema } = await import('../schemas/analysisSchemas.ts');
@@ -264,7 +265,7 @@ More examples: \\\\alpha, \\\\beta, \\\\gamma, \\\\ell, \\\\sum, \\\\int, \\\\bo
 Use markdown formatting to make your response easier to read (e.g., **bold**, *italic*, bullet points, numbered lists, etc.).`,
       });
 
-      console.log('[ImageExplain] Session created, sending image...');
+      logger.debug('AI_SERVICE', '[ImageExplain] Session created, sending image...');
 
       // Use append() method to send multimodal content
       await session.append([
@@ -331,13 +332,13 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
         responseConstraint: imageExplanationSchema,
       });
 
-      console.log('[ImageExplain] Raw response:', response);
+      logger.debug('AI_SERVICE', '[ImageExplain] Raw response:', response);
 
       // Parse JSON response
       const parsed = JSON.parse(response);
 
-      console.log('[ImageExplain] Explanation generated successfully');
-      console.log('[ImageExplain] Title:', parsed.title);
+      logger.debug('AI_SERVICE', '[ImageExplain] Explanation generated successfully');
+      logger.debug('AI_SERVICE', '[ImageExplain] Title:', parsed.title);
 
       // Cleanup
       session.destroy();
@@ -347,11 +348,11 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
         explanation: parsed.explanation,
       };
     } catch (error) {
-      console.error('[ImageExplain] Error generating image explanation:', error);
+      logger.error('AI_SERVICE', '[ImageExplain] Error generating image explanation:', error);
 
       // Try to extract partial data if JSON parsing failed but we got a response
       if (error instanceof SyntaxError && typeof error === 'object') {
-        console.warn('[ImageExplain] JSON parsing failed, using fallback');
+        logger.warn('AI_SERVICE', '[ImageExplain] JSON parsing failed, using fallback');
         return {
           title: 'Image Explanation',
           explanation: 'Unable to generate explanation due to parsing error.',
@@ -370,18 +371,18 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
   async detectLanguage(text: string): Promise<string | null> {
     try {
       if (!text || text.trim().length === 0) {
-        console.warn('[LanguageDetector] Empty text provided');
+        logger.warn('AI_SERVICE', '[LanguageDetector] Empty text provided');
         return null;
       }
 
       // Check availability first
       const { available } = await this.checkLanguageDetectorAvailability();
       if (!available) {
-        console.warn('[LanguageDetector] API not available, falling back to "en"');
+        logger.warn('AI_SERVICE', '[LanguageDetector] API not available, falling back to "en"');
         return 'en'; // Default to English if detector unavailable
       }
 
-      console.log('[LanguageDetector] Detecting language for text (length:', text.length, ')');
+      logger.debug('AI_SERVICE', '[LanguageDetector] Detecting language for text (length:', text.length, ')');
 
       // Create detector and detect language
       const detector = await LanguageDetector.create();
@@ -393,15 +394,15 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
       // Get the most confident result
       if (results && results.length > 0) {
         const topResult = results[0];
-        console.log('[LanguageDetector] Detected language:', topResult.detectedLanguage,
+        logger.debug('AI_SERVICE', '[LanguageDetector] Detected language:', topResult.detectedLanguage,
                     'with confidence:', topResult.confidence);
         return topResult.detectedLanguage;
       }
 
-      console.warn('[LanguageDetector] No language detected, falling back to "en"');
+      logger.warn('AI_SERVICE', '[LanguageDetector] No language detected, falling back to "en"');
       return 'en';
     } catch (error) {
-      console.error('[LanguageDetector] Error detecting language:', error);
+      logger.error('AI_SERVICE', '[LanguageDetector] Error detecting language:', error);
       return 'en'; // Default to English on error
     }
   }
@@ -412,16 +413,16 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
   async createSummarizer(options: SummarizerOptions): Promise<AISummarizer | null> {
     try {
       if (typeof Summarizer === 'undefined') {
-        console.error('[Summarizer] API not available');
+        logger.error('AI_SERVICE', '[Summarizer] API not available');
         return null;
       }
 
-      console.log('[Summarizer] Creating summarizer with options:', options);
+      logger.debug('AI_SERVICE', '[Summarizer] Creating summarizer with options:', options);
       const summarizer = await Summarizer.create(options);
-      console.log('[Summarizer] Summarizer created successfully');
+      logger.debug('AI_SERVICE', '[Summarizer] Summarizer created successfully');
       return summarizer;
     } catch (error) {
-      console.error('[Summarizer] Error creating summarizer:', error);
+      logger.error('AI_SERVICE', '[Summarizer] Error creating summarizer:', error);
       return null;
     }
   }
@@ -436,11 +437,11 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
     contextId: string = 'default'
   ): Promise<SummaryResult | null> {
     try {
-      console.log('[Summarizer] Starting summary generation for:', title);
+      logger.debug('AI_SERVICE', '[Summarizer] Starting summary generation for:', title);
 
       // Get user's preferred output language
       const outputLanguage = await getOutputLanguage();
-      console.log('[Summarizer] Using output language:', outputLanguage);
+      logger.debug('AI_SERVICE', '[Summarizer] Using output language:', outputLanguage);
 
       // Create tldr summarizer for quick summary
       const tldrSummarizer = await this.createSummarizer({
@@ -453,7 +454,7 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
       });
 
       if (!tldrSummarizer) {
-        console.warn('[Summarizer] Failed to create tldr summarizer');
+        logger.warn('AI_SERVICE', '[Summarizer] Failed to create tldr summarizer');
         return null;
       }
 
@@ -468,20 +469,20 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
       });
 
       if (!keyPointsSummarizer) {
-        console.warn('[Summarizer] Failed to create key-points summarizer');
+        logger.warn('AI_SERVICE', '[Summarizer] Failed to create key-points summarizer');
         tldrSummarizer.destroy();
         return null;
       }
 
       // Generate both summaries in parallel
-      console.log('[Summarizer] Generating summaries...');
+      logger.debug('AI_SERVICE', '[Summarizer] Generating summaries...');
       const [tldrResult, keyPointsResult] = await Promise.all([
         tldrSummarizer.summarize(abstract, { context: title }),
         keyPointsSummarizer.summarize(abstract, { context: title })
       ]);
 
-      console.log('[Summarizer] tldr result:', tldrResult);
-      console.log('[Summarizer] key-points result:', keyPointsResult);
+      logger.debug('AI_SERVICE', '[Summarizer] tldr result:', tldrResult);
+      logger.debug('AI_SERVICE', '[Summarizer] key-points result:', keyPointsResult);
 
       // Clean up summarizers
       tldrSummarizer.destroy();
@@ -494,9 +495,9 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
         .map(line => line.replace(/^[-*]\s*/, '').trim())
         .filter(point => point.length > 0);
 
-      console.log('[Summarizer] ✓ Summary generated successfully using Summarizer API');
-      console.log('[Summarizer] Summary:', tldrResult);
-      console.log('[Summarizer] Key points:', keyPoints);
+      logger.debug('AI_SERVICE', '[Summarizer] ✓ Summary generated successfully using Summarizer API');
+      logger.debug('AI_SERVICE', '[Summarizer] Summary:', tldrResult);
+      logger.debug('AI_SERVICE', '[Summarizer] Key points:', keyPoints);
 
       return {
         summary: tldrResult,
@@ -505,7 +506,7 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
         generatedBy: 'summarizer-api'
       };
     } catch (error) {
-      console.error('[Summarizer] Error generating summary:', error);
+      logger.error('AI_SERVICE', '[Summarizer] Error generating summary:', error);
       return null;
     }
   }
@@ -526,7 +527,7 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
         throw new Error('Prompt API not available');
       }
 
-      console.log(`[AI] Creating new session for context: ${contextId}`);
+      logger.debug('AI_SERVICE', `[AI] Creating new session for context: ${contextId}`);
 
       // Convert systemPrompt to initialPrompts if present (new API format)
       let sessionOptions: any = options;
@@ -551,7 +552,7 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
           monitor(m: any) {
             m.addEventListener('downloadprogress', (e: any) => {
               const progress = e.loaded || 0; // 0 to 1
-              console.log(`[AI] GeminiNano download progress: ${(progress * 100).toFixed(1)}%`);
+              logger.debug('AI_SERVICE', `[AI] GeminiNano download progress: ${(progress * 100).toFixed(1)}%`);
               onDownloadProgress(progress);
             });
           }
@@ -561,10 +562,10 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
       const session = await LanguageModel.create(sessionOptions);
 
       this.sessions.set(contextId, session);
-      console.log(`[AI] Session created successfully. Total sessions: ${this.sessions.size}`);
+      logger.debug('AI_SERVICE', `[AI] Session created successfully. Total sessions: ${this.sessions.size}`);
       return session;
     } catch (error) {
-      console.error(`[AI] Error creating session for context ${contextId}:`, error);
+      logger.error('AI_SERVICE', `[AI] Error creating session for context ${contextId}:`, error);
       throw error;
     }
   }
@@ -577,9 +578,9 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
     if (session) {
       try {
         session.destroy();
-        console.log(`[AI] Session destroyed for context: ${contextId}`);
+        logger.debug('AI_SERVICE', `[AI] Session destroyed for context: ${contextId}`);
       } catch (error) {
-        console.error(`[AI] Error destroying session for context ${contextId}:`, error);
+        logger.error('AI_SERVICE', `[AI] Error destroying session for context ${contextId}:`, error);
       }
     }
 
@@ -603,7 +604,7 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
       await this.getOrCreateSession('default', options, onDownloadProgress);
       return true;
     } catch (error) {
-      console.error('Error creating AI session:', error);
+      logger.error('AI_SERVICE', 'Error creating AI session:', error);
       return false;
     }
   }
@@ -637,7 +638,7 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
 
       const fits = actualUsage <= available;
 
-      console.log(`[Prompt Validation] Actual usage: ${actualUsage}, Available: ${available}/${quota}, Fits: ${fits}`);
+      logger.debug('PROMPT_ENGINEERING', `[Prompt Validation] Actual usage: ${actualUsage}, Available: ${available}/${quota}, Fits: ${fits}`);
 
       return {
         fits,
@@ -646,7 +647,7 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
         available
       };
     } catch (error) {
-      console.error('[Prompt Validation] Error measuring input usage:', error);
+      logger.error('PROMPT_ENGINEERING', '[Prompt Validation] Error measuring input usage:', error);
 
       // Fallback: estimate if measureInputUsage() fails
       const estimatedUsage = Math.ceil(prompt.length / 4);
@@ -676,8 +677,8 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
     expectedOutputs?: Array<{ type: string; languages: string[] }>,
   ): Promise<string> {
     try {
-      console.log('[Prompt] contextId:', contextId);
-      console.log('[Prompt] expectedOutputs:', JSON.stringify(expectedOutputs));
+      logger.debug('PROMPT_ENGINEERING', '[Prompt] contextId:', contextId);
+      logger.debug('PROMPT_ENGINEERING', '[Prompt] expectedOutputs:', JSON.stringify(expectedOutputs));
 
       // Get or create session for this context
       const session = await this.getOrCreateSession(contextId, { systemPrompt, expectedInputs, expectedOutputs });
@@ -688,7 +689,7 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
       // Cancel any existing request for this context
       const existingController = this.activeRequests.get(contextId);
       if (existingController) {
-        console.log(`[AI] Cancelling existing request for context: ${contextId}`);
+        logger.debug('AI_SERVICE', `[AI] Cancelling existing request for context: ${contextId}`);
         existingController.abort();
       }
 
@@ -711,14 +712,14 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
 
         // Check if it was an abort
         if (error.name === 'AbortError') {
-          console.log(`[AI] Request aborted for context: ${contextId}`);
+          logger.debug('AI_SERVICE', `[AI] Request aborted for context: ${contextId}`);
           throw new Error('AI request was cancelled');
         }
 
         throw error;
       }
     } catch (error) {
-      console.error(`[AI] Error prompting AI for context ${contextId}:`, error);
+      logger.error('AI_SERVICE', `[AI] Error prompting AI for context ${contextId}:`, error);
       throw error;
     }
   }
@@ -744,7 +745,7 @@ Important:
       const response = await this.prompt(input, systemPrompt, undefined, contextId);
       return response.trim();
     } catch (error) {
-      console.error('Failed to fix malformed JSON:', error);
+      logger.error('AI_SERVICE', 'Failed to fix malformed JSON:', error);
       throw error;
     }
   }
@@ -760,7 +761,7 @@ Important:
   ): Promise<ExplanationResult> {
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
-    console.log('[ExplainAbstract] Output language:', outputLanguage);
+    logger.debug('AI_SERVICE', '[ExplainAbstract] Output language:', outputLanguage);
 
     // Get language name for instructions
     const languageNames: { [key: string]: string } = {
@@ -784,7 +785,7 @@ IMPORTANT: Respond in ${languageName}. Your entire explanation must be in ${lang
     // If hierarchical summary is provided, use it for richer context
     let input: string;
     if (hierarchicalSummary) {
-      console.log('[Explain] Using hierarchical summary for comprehensive explanation');
+      logger.debug('AI_SERVICE', '[Explain] Using hierarchical summary for comprehensive explanation');
       input = `IMPORTANT: You must respond entirely in ${languageName}. Do not use any other language.
 
 Please explain this research paper in simple terms that anyone can understand.
@@ -828,7 +829,7 @@ For mathematical expressions, equations, or formulas:
 - You can also use \\(expression\\) for inline, \\[expression\\] for display
 - Use proper LaTeX syntax (e.g., \\frac{numerator}{denominator}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)`;
     } else {
-      console.log('[Explain] Using abstract only (standard approach)');
+      logger.debug('AI_SERVICE', '[Explain] Using abstract only (standard approach)');
       input = `IMPORTANT: You must respond entirely in ${languageName}. Do not use any other language.
 
 Please explain this research paper abstract in simple terms that anyone can understand.
@@ -898,28 +899,28 @@ ${abstract}`;
   ): Promise<SummaryResult> {
     // Try Summarizer API first if no hierarchical summary (Summarizer works best with abstract)
     if (!hierarchicalSummary) {
-      console.log('[Summary] Checking Summarizer API availability...');
+      logger.debug('AI_SERVICE', '[Summary] Checking Summarizer API availability...');
       const summarizerCapabilities = await this.checkSummarizerAvailability();
 
       if (summarizerCapabilities.available) {
-        console.log('[Summary] Summarizer API available, using it for summary generation');
+        logger.debug('AI_SERVICE', '[Summary] Summarizer API available, using it for summary generation');
         const summarizerResult = await this.generateSummaryWithSummarizer(title, abstract, contextId);
 
         if (summarizerResult) {
-          console.log('[Summary] ✓ Successfully generated summary with Summarizer API');
+          logger.debug('AI_SERVICE', '[Summary] ✓ Successfully generated summary with Summarizer API');
           return summarizerResult;
         } else {
-          console.warn('[Summary] Summarizer API failed, falling back to Prompt API');
+          logger.warn('AI_SERVICE', '[Summary] Summarizer API failed, falling back to Prompt API');
         }
       } else {
-        console.log(`[Summary] Summarizer API not available (${summarizerCapabilities.availability}), using Prompt API`);
+        logger.debug('AI_SERVICE', `[Summary] Summarizer API not available (${summarizerCapabilities.availability}), using Prompt API`);
       }
     } else {
-      console.log('[Summary] Using Prompt API for hierarchical summary (better for full paper analysis)');
+      logger.debug('AI_SERVICE', '[Summary] Using Prompt API for hierarchical summary (better for full paper analysis)');
     }
 
     // Fall back to Prompt API
-    console.log('[Summary] Using Prompt API for summary generation');
+    logger.debug('AI_SERVICE', '[Summary] Using Prompt API for summary generation');
     const systemPrompt = `You are a research assistant that creates concise summaries of academic papers.
 Extract the most important information and present it clearly.
 Use markdown formatting to enhance readability.
@@ -928,7 +929,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
     // If hierarchical summary is provided, use it for comprehensive summary
     let input: string;
     if (hierarchicalSummary) {
-      console.log('[Summary] Using hierarchical summary for comprehensive key points');
+      logger.debug('AI_SERVICE', '[Summary] Using hierarchical summary for comprehensive key points');
       input = `Create a brief summary and list 3-5 key points from this paper.
 Use the full paper summary below to ensure your key points reflect the entire study (methodology, results, conclusions), not just the abstract.
 
@@ -949,7 +950,7 @@ KEY POINTS:
 
 Include key findings and conclusions from the full paper, not just the introduction.`;
     } else {
-      console.log('[Summary] Using abstract only (standard approach)');
+      logger.debug('AI_SERVICE', '[Summary] Using abstract only (standard approach)');
       input = `Create a brief summary and list 3-5 key points from this paper.
 Use markdown formatting for better readability (bold for key terms, etc.):
 
@@ -979,7 +980,7 @@ KEY POINTS:
           .map(line => line.replace(/^-\s*/, '').trim())
       : [];
 
-    console.log('[Summary] ✓ Successfully generated summary with Prompt API');
+    logger.debug('AI_SERVICE', '[Summary] ✓ Successfully generated summary with Prompt API');
     return {
       summary,
       keyPoints: keyPoints.length > 0 ? keyPoints : ['No key points extracted'],
@@ -1024,14 +1025,14 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
     const capabilities = await this.checkAvailability();
 
     if (capabilities.availability !== 'available') {
-      console.log(`⚠️ AI extraction skipped: AI status is "${capabilities.availability}"`);
+      logger.debug('AI_SERVICE', `⚠️ AI extraction skipped: AI status is "${capabilities.availability}"`);
 
       if (capabilities.availability === 'downloadable') {
-        console.log('💡 Tip: Click "Initialize AI" button in the extension popup to download the AI model (one-time setup)');
+        logger.debug('AI_SERVICE', '💡 Tip: Click "Initialize AI" button in the extension popup to download the AI model (one-time setup)');
       } else if (capabilities.availability === 'downloading') {
-        console.log('⏳ AI model is currently downloading. AI extraction will work automatically once download completes.');
+        logger.debug('AI_SERVICE', '⏳ AI model is currently downloading. AI extraction will work automatically once download completes.');
       } else if (capabilities.availability === 'unavailable') {
-        console.log('❌ Chrome AI has crashed. Open extension popup for recovery instructions.');
+        logger.debug('AI_SERVICE', '❌ Chrome AI has crashed. Open extension popup for recovery instructions.');
       }
 
       return null;
@@ -1048,7 +1049,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
 
     // Hard stop after max retries
     if (currentRetries >= maxRetries) {
-      console.warn(`AI extraction failed after ${maxRetries} attempts for ${url}`);
+      logger.warn('AI_SERVICE', `AI extraction failed after ${maxRetries} attempts for ${url}`);
       this.extractionRetries.delete(url); // Reset for next time
       return null;
     }
@@ -1056,7 +1057,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
     // If this is a retry, apply exponential backoff
     if (currentRetries > 0) {
       const delay = baseDelay * Math.pow(2, currentRetries - 1);
-      console.log(`Retry ${currentRetries}/${maxRetries} - waiting ${delay}ms before retry...`);
+      logger.debug('AI_SERVICE', `Retry ${currentRetries}/${maxRetries} - waiting ${delay}ms before retry...`);
       await sleep(delay);
     }
 
@@ -1065,7 +1066,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
 
     // Check content length and warn if too large
     if (content.length > 10000) {
-      console.warn(`[AI] Content is very large (${content.length} chars). Consider pre-cleaning or truncating before calling AI.`);
+      logger.warn('AI_SERVICE', `[AI] Content is very large (${content.length} chars). Consider pre-cleaning or truncating before calling AI.`);
     }
 
     // Truncate content to ~2000 tokens max to stay within context limits
@@ -1096,7 +1097,7 @@ ${truncatedContent}
 Return ONLY the JSON object, no other text. Extract as much information as you can find.`;
 
     try {
-      console.log(`Attempting AI extraction (attempt ${currentRetries + 1}/${maxRetries})...`);
+      logger.debug('AI_SERVICE', `Attempting AI extraction (attempt ${currentRetries + 1}/${maxRetries})...`);
       const response = await this.prompt(input, systemPrompt, undefined, contextId);
 
       // Try to extract JSON from response
@@ -1114,7 +1115,7 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
         // First attempt: parse directly
         metadata = JSON.parse(jsonStr);
       } catch (parseError) {
-        console.warn('JSON parse failed, asking AI to fix...', parseError);
+        logger.warn('AI_SERVICE', 'JSON parse failed, asking AI to fix...', parseError);
 
         try {
           // Ask AI to fix the malformed JSON
@@ -1128,10 +1129,10 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
 
           // Try parsing the fixed JSON
           metadata = JSON.parse(cleanedFixed);
-          console.log('✓ AI successfully fixed malformed JSON');
+          logger.debug('AI_SERVICE', '✓ AI successfully fixed malformed JSON');
         } catch (fixError) {
           // Both attempts failed
-          console.error('AI could not fix malformed JSON:', fixError);
+          logger.error('AI_SERVICE', 'AI could not fix malformed JSON:', fixError);
           throw parseError; // throw original error for retry logic
         }
       }
@@ -1148,7 +1149,7 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
 
       // Success! Clear retry count
       this.extractionRetries.delete(url);
-      console.log('AI extraction successful!');
+      logger.debug('AI_SERVICE', 'AI extraction successful!');
 
       return {
         title: metadata.title.trim(),
@@ -1169,16 +1170,16 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
         },
       };
     } catch (error) {
-      console.error(`AI extraction attempt ${currentRetries + 1} failed:`, error);
+      logger.error('AI_SERVICE', `AI extraction attempt ${currentRetries + 1} failed:`, error);
 
       // If we haven't hit max retries, try again
       if (currentRetries + 1 < maxRetries) {
-        console.log(`Will retry with exponential backoff...`);
+        logger.debug('AI_SERVICE', `Will retry with exponential backoff...`);
         return await this.extractPaperMetadata(content, contextId);
       }
 
       // Max retries exceeded
-      console.error(`AI extraction failed after ${maxRetries} attempts`);
+      logger.error('AI_SERVICE', `AI extraction failed after ${maxRetries} attempts`);
       this.extractionRetries.delete(url); // Reset for next time
       return null;
     }
@@ -1192,12 +1193,12 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
     paper: any,
     contextId: string = 'citation-enhancement'
   ): Promise<any> {
-    console.log('[AI] Enhancing metadata for citation:', paper.title);
+    logger.debug('AI_SERVICE', '[AI] Enhancing metadata for citation:', paper.title);
 
     const capabilities = await this.checkAvailability();
 
     if (capabilities.availability !== 'available') {
-      console.log('⚠️ AI not available for metadata enhancement');
+      logger.debug('AI_SERVICE', '⚠️ AI not available for metadata enhancement');
       return null;
     }
 
@@ -1245,7 +1246,7 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
 
       const enhanced = JSON.parse(jsonStr);
 
-      console.log('✓ Enhanced metadata:', enhanced);
+      logger.debug('AI_SERVICE', '✓ Enhanced metadata:', enhanced);
 
       return {
         ...enhanced,
@@ -1253,7 +1254,7 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
         enhancedAt: Date.now(),
       };
     } catch (error) {
-      console.error('Error enhancing metadata:', error);
+      logger.error('AI_SERVICE', 'Error enhancing metadata:', error);
       return {
         metadataEnhanced: true,
         enhancedAt: Date.now(),
@@ -1276,7 +1277,7 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
    */
   async initializeAI(): Promise<{ success: boolean; message: string }> {
     try {
-      console.log('Initializing AI...');
+      logger.debug('AI_SERVICE', 'Initializing AI...');
 
       const capabilities = await this.checkAvailability();
 
@@ -1316,12 +1317,12 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
       });
 
       if (created) {
-        console.log('✓ GeminiNano initialized successfully!');
+        logger.debug('AI_SERVICE', '✓ GeminiNano initialized successfully!');
 
         // Now download embedding model (sequential - after GeminiNano completes)
         // We trigger this via the offscreen document since embeddings need DOM access
         try {
-          console.log('[AI] Starting embedding model download...');
+          logger.debug('AI_SERVICE', '[AI] Starting embedding model download...');
 
           // Broadcast that embedding download is starting
           chrome.runtime.sendMessage({
@@ -1341,12 +1342,12 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
           await chrome.runtime.sendMessage({
             type: 'PRELOAD_EMBEDDINGS',
           }).catch((error) => {
-            console.warn('[AI] Could not trigger embedding preload:', error);
+            logger.warn('AI_SERVICE', '[AI] Could not trigger embedding preload:', error);
           });
 
-          console.log('✓ Embedding model download triggered');
+          logger.debug('AI_SERVICE', '✓ Embedding model download triggered');
         } catch (embeddingError) {
-          console.warn('[AI] Embedding model download trigger failed (non-critical):', embeddingError);
+          logger.warn('AI_SERVICE', '[AI] Embedding model download trigger failed (non-critical):', embeddingError);
           // Don't fail initialization if embedding download fails
         }
 
@@ -1361,7 +1362,7 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
         };
       }
     } catch (error) {
-      console.error('Error initializing AI:', error);
+      logger.error('AI_SERVICE', 'Error initializing AI:', error);
       return {
         success: false,
         message: `Failed to initialize AI: ${error}`,
@@ -1376,23 +1377,23 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
    */
   async resetAI(): Promise<{ success: boolean; message: string }> {
     try {
-      console.log('[AI Reset] Attempting to reset crashed AI...');
+      logger.debug('AI_SERVICE', '[AI Reset] Attempting to reset crashed AI...');
 
       // Step 1: Destroy all existing sessions
       this.destroyAllSessions();
-      console.log('[AI Reset] ✓ Destroyed all sessions');
+      logger.debug('AI_SERVICE', '[AI Reset] ✓ Destroyed all sessions');
 
       // Step 2: Clear all retry counts
       this.clearRetries();
-      console.log('[AI Reset] ✓ Cleared retry counts');
+      logger.debug('AI_SERVICE', '[AI Reset] ✓ Cleared retry counts');
 
       // Step 3: Clear cached capabilities
       this.capabilities = null;
-      console.log('[AI Reset] ✓ Cleared capabilities cache');
+      logger.debug('AI_SERVICE', '[AI Reset] ✓ Cleared capabilities cache');
 
       // Step 4: Check current AI availability
       const capabilities = await this.checkAvailability();
-      console.log(`[AI Reset] AI availability after reset: ${capabilities.availability}`);
+      logger.debug('AI_SERVICE', `[AI Reset] AI availability after reset: ${capabilities.availability}`);
 
       if (capabilities.availability === 'available') {
         // AI is now available - try to create a session
@@ -1401,45 +1402,45 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
         });
 
         if (created) {
-          console.log('[AI Reset] ✓ AI reset successful!');
+          logger.debug('AI_SERVICE', '[AI Reset] ✓ AI reset successful!');
           return {
             success: true,
             message: 'AI reset successful! Kuma is back and ready to help.',
           };
         } else {
-          console.log('[AI Reset] ⚠️ AI available but session creation failed');
+          logger.debug('AI_SERVICE', '[AI Reset] ⚠️ AI available but session creation failed');
           return {
             success: false,
             message: 'AI is available but session creation failed. Try again.',
           };
         }
       } else if (capabilities.availability === 'downloadable') {
-        console.log('[AI Reset] AI needs to be downloaded');
+        logger.debug('AI_SERVICE', '[AI Reset] AI needs to be downloaded');
         return {
           success: true,
           message: 'AI reset complete. Click "Wake Kuma up" to initialize.',
         };
       } else if (capabilities.availability === 'downloading') {
-        console.log('[AI Reset] AI is downloading');
+        logger.debug('AI_SERVICE', '[AI Reset] AI is downloading');
         return {
           success: true,
           message: 'AI reset complete. Model is downloading...',
         };
       } else if (capabilities.availability === 'unavailable') {
-        console.log('[AI Reset] ❌ AI still unavailable after reset');
+        logger.debug('AI_SERVICE', '[AI Reset] ❌ AI still unavailable after reset');
         return {
           success: false,
           message: 'AI is still crashed. Chrome restart may be required.',
         };
       } else {
-        console.log('[AI Reset] ❌ AI not supported on this device');
+        logger.debug('AI_SERVICE', '[AI Reset] ❌ AI not supported on this device');
         return {
           success: false,
           message: 'Chrome AI is not available on this device.',
         };
       }
     } catch (error) {
-      console.error('[AI Reset] Error during reset:', error);
+      logger.error('AI_SERVICE', '[AI Reset] Error during reset:', error);
       return {
         success: false,
         message: `Reset failed: ${error}`,
@@ -1496,7 +1497,7 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
       const responseBuffer = 400;
       const minRAGTokens = 250; // Minimum 2 chunks
 
-      console.log(`[Methodology Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
+      logger.debug('PROMPT_ENGINEERING', `[Methodology Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
 
       // Find relevant chunks for methodology using semantic search (oversample for trimming)
       const topics = ['methodology', 'methods', 'design', 'procedure', 'participants', 'sample', 'statistical'];
@@ -1510,11 +1511,11 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
         { summary: hierarchicalSummary, recentMessages: [] }
       );
 
-      console.log(`[Methodology Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
-      console.log(`[Methodology Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
+      logger.debug('PROMPT_ENGINEERING', `[Methodology Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
+      logger.debug('PROMPT_ENGINEERING', `[Methodology Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
 
       if (trimmedChunks.length === 0) {
-        console.warn('[Methodology Analysis] No chunks fit within quota - using summary only');
+        logger.warn('PROMPT_ENGINEERING', '[Methodology Analysis] No chunks fit within quota - using summary only');
       }
 
       // Combine hierarchical summary + trimmed chunks
@@ -1564,7 +1565,7 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
           try {
             await this.destroySessionForContext(languageContextId);
           } catch (cleanupError) {
-            console.warn('[Methodology Analysis] Failed to cleanup session:', cleanupError);
+            logger.warn('AI_SERVICE', '[Methodology Analysis] Failed to cleanup session:', cleanupError);
           }
 
           return JSON.parse(response);
@@ -1578,10 +1579,10 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
 
           if (attempt < maxRetries && isRetryableError) {
             const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
-            console.warn(`[Methodology Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            logger.warn('AI_SERVICE', `[Methodology Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
             await new Promise(resolve => setTimeout(resolve, delay));
           } else if (attempt === maxRetries) {
-            console.error(`[Methodology Analysis] Failed after ${attempt} attempts:`, error);
+            logger.error('AI_SERVICE', `[Methodology Analysis] Failed after ${attempt} attempts:`, error);
           }
         }
       }
@@ -1589,7 +1590,7 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
       // If all retries failed, throw to outer catch
       throw lastError;
     } catch (error) {
-      console.error('Methodology analysis failed:', error);
+      logger.error('AI_SERVICE', 'Methodology analysis failed:', error);
       return {
         studyType: 'Unable to analyze',
         studyDesign: 'Unable to analyze',
@@ -1639,7 +1640,7 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
       const estimatedOverhead = 150 + 50 + 100; // system + formatting + schema
       const responseBuffer = 400;
 
-      console.log(`[Confounder Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
+      logger.debug('PROMPT_ENGINEERING', `[Confounder Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
 
       // Find relevant chunks for confounders/biases using semantic search (oversample for trimming)
       const topics = ['bias', 'confound', 'limitation', 'control', 'random', 'blinding', 'selection'];
@@ -1653,11 +1654,11 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
         { summary: hierarchicalSummary, recentMessages: [] }
       );
 
-      console.log(`[Confounder Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
-      console.log(`[Confounder Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
+      logger.debug('PROMPT_ENGINEERING', `[Confounder Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
+      logger.debug('PROMPT_ENGINEERING', `[Confounder Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
 
       if (trimmedChunks.length === 0) {
-        console.warn('[Confounder Analysis] No chunks fit within quota - using summary only');
+        logger.warn('PROMPT_ENGINEERING', '[Confounder Analysis] No chunks fit within quota - using summary only');
       }
 
       // Combine hierarchical summary + trimmed chunks
@@ -1707,7 +1708,7 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
           try {
             await this.destroySessionForContext(languageContextId);
           } catch (cleanupError) {
-            console.warn('[Confounder Analysis] Failed to cleanup session:', cleanupError);
+            logger.warn('AI_SERVICE', '[Confounder Analysis] Failed to cleanup session:', cleanupError);
           }
 
           return JSON.parse(response);
@@ -1721,10 +1722,10 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
 
           if (attempt < maxRetries && isRetryableError) {
             const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
-            console.warn(`[Confounder Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            logger.warn('AI_SERVICE', `[Confounder Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
             await new Promise(resolve => setTimeout(resolve, delay));
           } else if (attempt === maxRetries) {
-            console.error(`[Confounder Analysis] Failed after ${attempt} attempts:`, error);
+            logger.error('AI_SERVICE', `[Confounder Analysis] Failed after ${attempt} attempts:`, error);
           }
         }
       }
@@ -1732,7 +1733,7 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
       // If all retries failed, throw to outer catch
       throw lastError;
     } catch (error) {
-      console.error('Confounder analysis failed:', error);
+      logger.error('AI_SERVICE', 'Confounder analysis failed:', error);
       return {
         identified: [{ name: 'Analysis failed', explanation: 'Could not identify confounders due to an error' }],
         biases: [{ name: 'Could not analyze', explanation: 'An error occurred while analyzing biases' }],
@@ -1778,7 +1779,7 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
       const estimatedOverhead = 150 + 50 + 100; // system + formatting + schema
       const responseBuffer = 400;
 
-      console.log(`[Implications Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
+      logger.debug('PROMPT_ENGINEERING', `[Implications Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
 
       // Find relevant chunks for implications using semantic search (oversample for trimming)
       const topics = ['implication', 'application', 'significance', 'discussion', 'conclusion', 'impact', 'future'];
@@ -1792,11 +1793,11 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
         { summary: hierarchicalSummary, recentMessages: [] }
       );
 
-      console.log(`[Implications Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
-      console.log(`[Implications Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
+      logger.debug('PROMPT_ENGINEERING', `[Implications Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
+      logger.debug('PROMPT_ENGINEERING', `[Implications Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
 
       if (trimmedChunks.length === 0) {
-        console.warn('[Implications Analysis] No chunks fit within quota - using summary only');
+        logger.warn('PROMPT_ENGINEERING', '[Implications Analysis] No chunks fit within quota - using summary only');
       }
 
       // Combine hierarchical summary + trimmed chunks
@@ -1846,7 +1847,7 @@ Provide a comprehensive analysis of real-world applications, significance, and f
           try {
             await this.destroySessionForContext(languageContextId);
           } catch (cleanupError) {
-            console.warn('[Implications Analysis] Failed to cleanup session:', cleanupError);
+            logger.warn('AI_SERVICE', '[Implications Analysis] Failed to cleanup session:', cleanupError);
           }
 
           return JSON.parse(response);
@@ -1860,10 +1861,10 @@ Provide a comprehensive analysis of real-world applications, significance, and f
 
           if (attempt < maxRetries && isRetryableError) {
             const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
-            console.warn(`[Implications Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            logger.warn('AI_SERVICE', `[Implications Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
             await new Promise(resolve => setTimeout(resolve, delay));
           } else if (attempt === maxRetries) {
-            console.error(`[Implications Analysis] Failed after ${attempt} attempts:`, error);
+            logger.error('AI_SERVICE', `[Implications Analysis] Failed after ${attempt} attempts:`, error);
           }
         }
       }
@@ -1871,7 +1872,7 @@ Provide a comprehensive analysis of real-world applications, significance, and f
       // If all retries failed, throw to outer catch
       throw lastError;
     } catch (error) {
-      console.error('Implications analysis failed:', error);
+      logger.error('AI_SERVICE', 'Implications analysis failed:', error);
       return {
         realWorldApplications: ['Analysis failed'],
         significance: 'Could not analyze',
@@ -1917,7 +1918,7 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
       const estimatedOverhead = 150 + 50 + 100; // system + formatting + schema
       const responseBuffer = 400;
 
-      console.log(`[Limitations Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
+      logger.debug('PROMPT_ENGINEERING', `[Limitations Analysis] Pre-flight check - Quota: ${inputQuota}, Summary: ${summaryTokens} tokens, Overhead: ${estimatedOverhead}, Response buffer: ${responseBuffer}`);
 
       // Find relevant chunks for limitations using semantic search (oversample for trimming)
       const topics = ['limitation', 'constraint', 'weakness', 'generalizability', 'caveat', 'shortcoming'];
@@ -1931,11 +1932,11 @@ IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageNa
         { summary: hierarchicalSummary, recentMessages: [] }
       );
 
-      console.log(`[Limitations Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
-      console.log(`[Limitations Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
+      logger.debug('PROMPT_ENGINEERING', `[Limitations Analysis] Budget status - Available: ${budgetStatus.availableTokens}, Used: ${budgetStatus.usedTokens}, MinTokensFit: ${budgetStatus.minTokensFit}`);
+      logger.debug('PROMPT_ENGINEERING', `[Limitations Analysis] Trimmed ${relevantChunks.length} → ${trimmedChunks.length} chunks`);
 
       if (trimmedChunks.length === 0) {
-        console.warn('[Limitations Analysis] No chunks fit within quota - using summary only');
+        logger.warn('PROMPT_ENGINEERING', '[Limitations Analysis] No chunks fit within quota - using summary only');
       }
 
       // Combine hierarchical summary + trimmed chunks
@@ -1985,7 +1986,7 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
           try {
             await this.destroySessionForContext(languageContextId);
           } catch (cleanupError) {
-            console.warn('[Limitations Analysis] Failed to cleanup session:', cleanupError);
+            logger.warn('AI_SERVICE', '[Limitations Analysis] Failed to cleanup session:', cleanupError);
           }
 
           return JSON.parse(response);
@@ -1999,10 +2000,10 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
 
           if (attempt < maxRetries && isRetryableError) {
             const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
-            console.warn(`[Limitations Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            logger.warn('AI_SERVICE', `[Limitations Analysis] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
             await new Promise(resolve => setTimeout(resolve, delay));
           } else if (attempt === maxRetries) {
-            console.error(`[Limitations Analysis] Failed after ${attempt} attempts:`, error);
+            logger.error('AI_SERVICE', `[Limitations Analysis] Failed after ${attempt} attempts:`, error);
           }
         }
       }
@@ -2010,7 +2011,7 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
       // If all retries failed, throw to outer catch
       throw lastError;
     } catch (error) {
-      console.error('Limitations analysis failed:', error);
+      logger.error('AI_SERVICE', 'Limitations analysis failed:', error);
       return {
         studyLimitations: ['Analysis failed'],
         generalizability: 'Could not analyze',
@@ -2030,27 +2031,27 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
     onProgress?: (step: number, total: number) => void,
     onSectionComplete?: (section: string, result: any) => void
   ): Promise<PaperAnalysisResult> {
-    console.log('Starting comprehensive paper analysis with hierarchical summary + RAG...');
+    logger.debug('AI_SERVICE', 'Starting comprehensive paper analysis with hierarchical summary + RAG...');
 
     const totalSteps = 4;
 
     // Run analyses sequentially to report progress after each step
-    console.log('[Analysis] Step 1/4: Analyzing methodology...');
+    logger.debug('AI_SERVICE', '[Analysis] Step 1/4: Analyzing methodology...');
     const methodology = await this.analyzeMethodology(paperId, hierarchicalSummary, `${contextId}-methodology`);
     if (onSectionComplete) onSectionComplete('methodology', methodology);
     if (onProgress) onProgress(1, totalSteps);
 
-    console.log('[Analysis] Step 2/4: Identifying confounders...');
+    logger.debug('AI_SERVICE', '[Analysis] Step 2/4: Identifying confounders...');
     const confounders = await this.identifyConfounders(paperId, hierarchicalSummary, `${contextId}-confounders`);
     if (onSectionComplete) onSectionComplete('confounders', confounders);
     if (onProgress) onProgress(2, totalSteps);
 
-    console.log('[Analysis] Step 3/4: Analyzing implications...');
+    logger.debug('AI_SERVICE', '[Analysis] Step 3/4: Analyzing implications...');
     const implications = await this.analyzeImplications(paperId, hierarchicalSummary, `${contextId}-implications`);
     if (onSectionComplete) onSectionComplete('implications', implications);
     if (onProgress) onProgress(3, totalSteps);
 
-    console.log('[Analysis] Step 4/4: Identifying limitations...');
+    logger.debug('AI_SERVICE', '[Analysis] Step 4/4: Identifying limitations...');
     const limitations = await this.identifyLimitations(paperId, hierarchicalSummary, `${contextId}-limitations`);
     if (onSectionComplete) onSectionComplete('limitations', limitations);
     if (onProgress) onProgress(4, totalSteps);
@@ -2080,7 +2081,7 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
     }>,
     contextId: string = 'qa'
   ): Promise<QuestionAnswer> {
-    console.log('Answering question using RAG...');
+    logger.debug('AI_SERVICE', 'Answering question using RAG...');
 
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
@@ -2161,16 +2162,16 @@ Use markdown formatting for better readability:
       const validation = await this.validatePromptSize(session, input);
 
       if (validation.fits) {
-        console.log(`[Q&A] ✓ Prompt validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
+        logger.debug('PROMPT_ENGINEERING', `[Q&A] ✓ Prompt validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
         break;
       }
 
       // Prompt too large - try trimming more chunks
-      console.warn(`[Q&A] Prompt too large (${validation.actualUsage} > ${validation.available}), trimming chunks... (attempt ${attempt}/${MAX_RETRIES})`);
+      logger.warn('PROMPT_ENGINEERING', `[Q&A] Prompt too large (${validation.actualUsage} > ${validation.available}), trimming chunks... (attempt ${attempt}/${MAX_RETRIES})`);
 
       if (attempt >= MAX_RETRIES) {
         // Last attempt - use minimal chunks (just 1-2 most relevant)
-        console.error(`[Q&A] Max retries reached, using minimal chunks`);
+        logger.error('PROMPT_ENGINEERING', `[Q&A] Max retries reached, using minimal chunks`);
         finalContextChunks = contextChunks.slice(0, Math.min(2, contextChunks.length));
       } else {
         // Remove last 2 chunks and retry (but keep at least 1 chunk)
@@ -2231,7 +2232,7 @@ Use markdown formatting for better readability:
         timestamp: Date.now(),
       };
     } catch (error) {
-      console.error('Question answering failed:', error);
+      logger.error('AI_SERVICE', 'Question answering failed:', error);
       return {
         question,
         answer: 'Sorry, I encountered an error while trying to answer this question. Please try again.',
@@ -2251,7 +2252,7 @@ Use markdown formatting for better readability:
     contextId: string = 'extract-terms',
     targetCount: number = 50
   ): Promise<string[]> {
-    console.log('[TermExtraction] Extracting terms from', text.length, 'chars of text');
+    logger.debug('AI_SERVICE', '[TermExtraction] Extracting terms from', text.length, 'chars of text');
 
     // Truncate to ~10k characters
     const truncatedText = text.slice(0, 10000);
@@ -2294,7 +2295,7 @@ Return ONLY the terms as a comma-separated list, in order of importance.
 IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in their original form.`;
 
     try {
-      console.log('[TermExtraction] Sending text to Gemini Nano for term extraction...');
+      logger.debug('AI_SERVICE', '[TermExtraction] Sending text to Gemini Nano for term extraction...');
 
       const response = await this.prompt(
         input,
@@ -2311,12 +2312,12 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
         .map(term => term.trim())
         .filter(term => term.length > 0 && term.length < 100); // Sanity check
 
-      console.log('[TermExtraction] ✓ Extracted', extractedTerms.length, 'terms');
-      console.log('[TermExtraction] Sample terms:', extractedTerms.slice(0, 10).join(', '));
+      logger.debug('AI_SERVICE', '[TermExtraction] ✓ Extracted', extractedTerms.length, 'terms');
+      logger.debug('AI_SERVICE', '[TermExtraction] Sample terms:', extractedTerms.slice(0, 10).join(', '));
 
       return extractedTerms;
     } catch (error) {
-      console.error('[TermExtraction] Failed to extract terms:', error);
+      logger.error('AI_SERVICE', '[TermExtraction] Failed to extract terms:', error);
       return [];
     }
   }
@@ -2332,7 +2333,7 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
     contextId: string = 'definition',
     useKeywordOnly: boolean = false
   ): Promise<GlossaryTerm | null> {
-    console.log('[Definition] Generating definition for keyword:', keyword);
+    logger.debug('AI_SERVICE', '[Definition] Generating definition for keyword:', keyword);
 
     try {
       // Step 1: Find relevant chunks
@@ -2341,7 +2342,7 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
       const allChunks = await getPaperChunks(paperId);
 
       if (allChunks.length === 0) {
-        console.warn('[Definition] No chunks found for paper:', paperId);
+        logger.warn('AI_SERVICE', '[Definition] No chunks found for paper:', paperId);
         return null;
       }
 
@@ -2354,7 +2355,7 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
       // If useKeywordOnly is true, skip semantic search and go straight to keyword search
       // This is faster for exact term matching (e.g., when we already know the exact terms)
       if (useKeywordOnly) {
-        console.log('[Definition] Using keyword-only search for:', keyword);
+        logger.debug('AI_SERVICE', '[Definition] Using keyword-only search for:', keyword);
         const { getRelevantChunks } = await import('./dbService.ts');
         relevantChunks = await getRelevantChunks(paperId, keyword, adaptiveLimit);
       } else {
@@ -2363,7 +2364,7 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
 
         if (hasEmbeddings) {
           try {
-            console.log('[Definition] Attempting semantic search via offscreen document for keyword:', keyword);
+            logger.debug('AI_SERVICE', '[Definition] Attempting semantic search via offscreen document for keyword:', keyword);
 
             // Use offscreen service for semantic search (isolates embedding code from background)
             const { searchSemanticOffscreen } = await import('../background/services/offscreenService.ts');
@@ -2375,18 +2376,18 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
                 .map(chunkId => allChunks.find(c => c.id === chunkId))
                 .filter(c => c !== undefined) as any[];
 
-              console.log('[Definition] Found', relevantChunks.length, 'relevant chunks via semantic search');
+              logger.debug('AI_SERVICE', '[Definition] Found', relevantChunks.length, 'relevant chunks via semantic search');
             } else {
-              console.log('[Definition] Semantic search returned no results, falling back to keyword search');
+              logger.debug('AI_SERVICE', '[Definition] Semantic search returned no results, falling back to keyword search');
             }
           } catch (error) {
-            console.warn('[Definition] Semantic search failed, falling back to keyword search:', error);
+            logger.warn('AI_SERVICE', '[Definition] Semantic search failed, falling back to keyword search:', error);
           }
         }
 
         // Fallback to keyword search if semantic search didn't work
         if (relevantChunks.length === 0) {
-          console.log('[Definition] Using keyword search for:', keyword);
+          logger.debug('AI_SERVICE', '[Definition] Using keyword search for:', keyword);
           const { getRelevantChunks } = await import('./dbService.ts');
           relevantChunks = await getRelevantChunks(paperId, keyword, adaptiveLimit);
         }
@@ -2396,7 +2397,7 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
       const trimmedChunks = await trimChunksByTokenBudget(relevantChunks, 'definition');
 
       if (trimmedChunks.length === 0) {
-        console.warn('[Definition] No relevant chunks found for keyword:', keyword);
+        logger.warn('AI_SERVICE', '[Definition] No relevant chunks found for keyword:', keyword);
         return null;
       }
 
@@ -2520,11 +2521,11 @@ For mathematical expressions in definitions, contexts, or analogies:
       );
 
       const term = JSON.parse(response) as GlossaryTerm;
-      console.log('[Definition] ✓ Definition generated for:', keyword);
+      logger.debug('AI_SERVICE', '[Definition] ✓ Definition generated for:', keyword);
 
       return term;
     } catch (error) {
-      console.error('[Definition] Error generating definition for keyword:', keyword, error);
+      logger.error('AI_SERVICE', '[Definition] Error generating definition for keyword:', keyword, error);
       return null;
     }
   }
@@ -2547,14 +2548,14 @@ For mathematical expressions in definitions, contexts, or analogies:
     contextId: string = 'definition-batch',
     useKeywordOnly: boolean = false
   ): Promise<(GlossaryTerm | null)[]> {
-    console.log(`[DefinitionBatch] Generating definitions for ${keywords.length} terms in single prompt call`);
+    logger.debug('AI_SERVICE', `[DefinitionBatch] Generating definitions for ${keywords.length} terms in single prompt call`);
 
     try {
       // Step 1: Gather RAG context for each keyword (in parallel)
       const { getPaperChunks } = await import('./dbService.ts');
       const allChunks = await getPaperChunks(paperId);
 
-      console.log('[DefinitionBatch] Gathering RAG context for all keywords...');
+      logger.debug('AI_SERVICE', '[DefinitionBatch] Gathering RAG context for all keywords...');
 
       // Get adaptive chunk limit (shared across all keywords in this batch)
       const { getAdaptiveChunkLimit, trimChunksByTokenBudget } = await import('./adaptiveRAGService.ts');
@@ -2583,7 +2584,7 @@ For mathematical expressions in definitions, contexts, or analogies:
                     .filter(c => c !== undefined) as any[];
                 }
               } catch (error) {
-                console.warn('[DefinitionBatch] Semantic search failed for', keyword);
+                logger.warn('AI_SERVICE', '[DefinitionBatch] Semantic search failed for', keyword);
               }
             }
 
@@ -2613,7 +2614,7 @@ For mathematical expressions in definitions, contexts, or analogies:
         })
       );
 
-      console.log('[DefinitionBatch] ✓ RAG context gathered for all keywords');
+      logger.debug('AI_SERVICE', '[DefinitionBatch] ✓ RAG context gathered for all keywords');
 
       // Step 2: Construct single prompt with all keywords and their contexts
       const outputLanguage = await getOutputLanguage();
@@ -2683,11 +2684,11 @@ For mathematical expressions in definitions, contexts, or analogies:
       const parsed = JSON.parse(response);
       const terms = parsed.terms as GlossaryTerm[];
 
-      console.log(`[DefinitionBatch] ✓ Generated ${terms.length} definitions in single call`);
+      logger.debug('AI_SERVICE', `[DefinitionBatch] ✓ Generated ${terms.length} definitions in single call`);
 
       return terms;
     } catch (error) {
-      console.error('[DefinitionBatch] Error generating batch definitions:', error);
+      logger.error('AI_SERVICE', '[DefinitionBatch] Error generating batch definitions:', error);
       // Return array of nulls if batch fails
       return keywords.map(() => null);
     }
@@ -2709,7 +2710,7 @@ For mathematical expressions in definitions, contexts, or analogies:
     targetCount: number = 50,
     contextId: string = 'dedupe-batch'
   ): Promise<string[]> {
-    console.log('[TermDedupe] Deduplicating', terms.length, 'terms, target:', targetCount);
+    logger.debug('AI_SERVICE', '[TermDedupe] Deduplicating', terms.length, 'terms, target:', targetCount);
 
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
@@ -2755,7 +2756,7 @@ Return ONLY the selected terms as a comma-separated list, in order of importance
 IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in their original form.`;
 
     try {
-      console.log('[TermDedupe] Sending terms to Gemini Nano for deduplication...');
+      logger.debug('AI_SERVICE', '[TermDedupe] Sending terms to Gemini Nano for deduplication...');
 
       const response = await this.prompt(
         input,
@@ -2772,14 +2773,14 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
         .map(term => term.trim())
         .filter(term => term.length > 0 && term.length < 100); // Sanity check
 
-      console.log('[TermDedupe] ✓ Deduplicated to', deduplicatedTerms.length, 'unique terms');
-      console.log('[TermDedupe] Sample:', deduplicatedTerms.slice(0, 10).join(', '));
+      logger.debug('AI_SERVICE', '[TermDedupe] ✓ Deduplicated to', deduplicatedTerms.length, 'unique terms');
+      logger.debug('AI_SERVICE', '[TermDedupe] Sample:', deduplicatedTerms.slice(0, 10).join(', '));
 
       return deduplicatedTerms;
     } catch (error) {
-      console.error('[TermDedupe] Error deduplicating terms:', error);
+      logger.error('AI_SERVICE', '[TermDedupe] Error deduplicating terms:', error);
       // Fallback: return unique terms (basic dedup)
-      console.warn('[TermDedupe] Falling back to basic deduplication');
+      logger.warn('AI_SERVICE', '[TermDedupe] Falling back to basic deduplication');
       const uniqueTerms = Array.from(new Set(terms.map(t => t.toLowerCase())))
         .slice(0, targetCount);
       return uniqueTerms;
@@ -2805,15 +2806,15 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
     contextId: string = 'hierarchical-summary',
     onProgress?: (current: number, total: number) => void
   ): Promise<{ summary: string; chunkTerms: string[][] }> {
-    console.log('[Hierarchical Summary] Starting hierarchical summarization...');
-    console.log('[Hierarchical Summary] Document length:', fullText.length, 'chars');
+    logger.debug('AI_SERVICE', '[Hierarchical Summary] Starting hierarchical summarization...');
+    logger.debug('AI_SERVICE', '[Hierarchical Summary] Document length:', fullText.length, 'chars');
 
     // Import chunking utility
     const { chunkContent } = await import('./contentExtractor.ts');
 
     // Step 1: Split into chunks (5000 chars, 1000 char overlap for speed and context)
     const chunks = chunkContent(fullText, 5000, 1000);
-    console.log('[Hierarchical Summary] Split into', chunks.length, 'chunks');
+    logger.debug('AI_SERVICE', '[Hierarchical Summary] Split into', chunks.length, 'chunks');
 
     const chunkSummarySystemPrompt = `You are a research paper summarizer. Create concise summaries that capture key information AND extract technical terms.
 CRITICAL:
@@ -2831,16 +2832,16 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
 
     // If document is already small enough, just return a single summary with terms
     if (chunks.length === 1) {
-      console.log('[Hierarchical Summary] Document is small, creating single summary with terms');
+      logger.debug('AI_SERVICE', '[Hierarchical Summary] Document is small, creating single summary with terms');
       const input = `Summarize this research paper content concisely, capturing all important points. Also extract the 5-10 most important technical terms and acronyms:\n\n${fullText.slice(0, 6000)}`;
       const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, contextId);
       const parsed = JSON.parse(response);
-      console.log('[Hierarchical Summary] Single summary created:', parsed.summary.length, 'chars,', parsed.terms.length, 'terms');
+      logger.debug('AI_SERVICE', '[Hierarchical Summary] Single summary created:', parsed.summary.length, 'chars,', parsed.terms.length, 'terms');
       return { summary: parsed.summary, chunkTerms: [parsed.terms] };
     }
 
     // Step 2: Summarize each chunk SEQUENTIALLY with retry logic and progress tracking
-    console.log('[Hierarchical Summary] Summarizing chunks sequentially with retry logic...');
+    logger.debug('AI_SERVICE', '[Hierarchical Summary] Summarizing chunks sequentially with retry logic...');
 
     // Report initial progress
     if (onProgress) {
@@ -2863,13 +2864,13 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
           const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, chunkContextId);
           const parsed = JSON.parse(response);
 
-          console.log(`[Hierarchical Summary] Chunk ${index + 1}/${chunks.length} summarized:`, parsed.summary.length, 'chars,', parsed.terms.length, 'terms');
+          logger.debug('AI_SERVICE', `[Hierarchical Summary] Chunk ${index + 1}/${chunks.length} summarized:`, parsed.summary.length, 'chars,', parsed.terms.length, 'terms');
 
           // Clean up session immediately after successful use
           try {
             await this.destroySessionForContext(chunkContextId);
           } catch (cleanupError) {
-            console.warn(`[Hierarchical Summary] Failed to cleanup session for chunk ${index}:`, cleanupError);
+            logger.warn('AI_SERVICE', `[Hierarchical Summary] Failed to cleanup session for chunk ${index}:`, cleanupError);
           }
 
           return { summary: parsed.summary, terms: parsed.terms };
@@ -2882,10 +2883,10 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
 
           if (attempt < maxRetries && isRetryableError) {
             const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
-            console.warn(`[Hierarchical Summary] Chunk ${index + 1} failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            logger.warn('AI_SERVICE', `[Hierarchical Summary] Chunk ${index + 1} failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
             await new Promise(resolve => setTimeout(resolve, delay));
           } else {
-            console.error(`[Hierarchical Summary] Chunk ${index + 1} failed after ${attempt} attempts:`, error);
+            logger.error('AI_SERVICE', `[Hierarchical Summary] Chunk ${index + 1} failed after ${attempt} attempts:`, error);
             // Return original chunk content truncated if all retries fail
             return { summary: chunk.content.slice(0, 500), terms: [] };
           }
@@ -2912,26 +2913,26 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       }
     }
 
-    console.log('[Hierarchical Summary] All chunks summarized and terms extracted');
+    logger.debug('AI_SERVICE', '[Hierarchical Summary] All chunks summarized and terms extracted');
 
     // Separate summaries and terms
     const chunkSummaries = chunkResults.map(result => result.summary);
     const chunkTerms = chunkResults.map(result => result.terms);
-    console.log('[Hierarchical Summary] Extracted', chunkTerms.flat().length, 'total terms from all chunks');
+    logger.debug('AI_SERVICE', '[Hierarchical Summary] Extracted', chunkTerms.flat().length, 'total terms from all chunks');
 
     // Step 3: Combine chunk summaries
     const combinedSummaries = chunkSummaries.join('\n\n');
-    console.log('[Hierarchical Summary] Combined summaries length:', combinedSummaries.length, 'chars');
+    logger.debug('AI_SERVICE', '[Hierarchical Summary] Combined summaries length:', combinedSummaries.length, 'chars');
 
     // Step 4: Create final meta-summary
     // If combined summaries are small enough, return as-is with terms
     if (combinedSummaries.length <= 8000) {
-      console.log('[Hierarchical Summary] Combined summaries already compact');
+      logger.debug('AI_SERVICE', '[Hierarchical Summary] Combined summaries already compact');
       return { summary: combinedSummaries, chunkTerms };
     }
 
     // Otherwise, create a meta-summary
-    console.log('[Hierarchical Summary] Creating meta-summary from', chunkSummaries.length, 'chunk summaries...');
+    logger.debug('AI_SERVICE', '[Hierarchical Summary] Creating meta-summary from', chunkSummaries.length, 'chunk summaries...');
     const metaSystemPrompt = `You are a research paper summarizer.
 Create a comprehensive but concise summary from multiple section summaries.
 CRITICAL:
@@ -2945,10 +2946,10 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
 
     try {
       const finalSummary = await this.prompt(metaInput, metaSystemPrompt, undefined, `${contextId}-meta`);
-      console.log('[Hierarchical Summary] ✓ Meta-summary created:', finalSummary.length, 'chars');
+      logger.debug('AI_SERVICE', '[Hierarchical Summary] ✓ Meta-summary created:', finalSummary.length, 'chars');
       return { summary: finalSummary, chunkTerms };
     } catch (error) {
-      console.error('[Hierarchical Summary] Meta-summary failed, returning truncated combined summaries:', error);
+      logger.error('AI_SERVICE', '[Hierarchical Summary] Meta-summary failed, returning truncated combined summaries:', error);
       // Fallback to truncated combined summaries
       return { summary: combinedSummaries.slice(0, 8000) + '...', chunkTerms };
     }
@@ -2966,7 +2967,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
     paperTitle?: string
   ): Promise<string | null> {
     try {
-      console.log('[Conversation Summarizer] Starting summarization of', messages.length, 'messages');
+      logger.debug('AI_SERVICE', '[Conversation Summarizer] Starting summarization of', messages.length, 'messages');
 
       // Format messages as conversation text
       const conversationText = messages
@@ -2982,7 +2983,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       });
 
       if (!summarizer) {
-        console.warn('[Conversation Summarizer] Failed to create summarizer');
+        logger.warn('AI_SERVICE', '[Conversation Summarizer] Failed to create summarizer');
         return null;
       }
 
@@ -2990,10 +2991,10 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       const summary = await summarizer.summarize(conversationText);
       summarizer.destroy();
 
-      console.log('[Conversation Summarizer] ✓ Summary created:', summary.length, 'chars');
+      logger.debug('AI_SERVICE', '[Conversation Summarizer] ✓ Summary created:', summary.length, 'chars');
       return summary;
     } catch (error) {
-      console.error('[Conversation Summarizer] Error summarizing conversation:', error);
+      logger.error('AI_SERVICE', '[Conversation Summarizer] Error summarizing conversation:', error);
       return null;
     }
   }
@@ -3007,7 +3008,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
     try {
       const session = this.sessions.get(contextId);
       if (!session) {
-        console.warn(`[Session Metadata] No session found for context: ${contextId}`);
+        logger.warn('AI_SERVICE', `[Session Metadata] No session found for context: ${contextId}`);
         return null;
       }
 
@@ -3020,7 +3021,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
         inputUsage = session.inputUsage ?? 0;
         inputQuota = session.inputQuota ?? 0;
       } catch (propertyError) {
-        console.warn('[Session Metadata] Could not access session usage properties:', propertyError);
+        logger.warn('AI_SERVICE', '[Session Metadata] Could not access session usage properties:', propertyError);
         // Continue with default values (0)
       }
 
@@ -3038,7 +3039,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       // Store metadata
       this.sessionMetadata.set(contextId, metadata);
 
-      console.log(`[Session Metadata] ${contextId}:`, {
+      logger.debug('AI_SERVICE', `[Session Metadata] ${contextId}:`, {
         usage: inputUsage,
         quota: inputQuota,
         percentage: usagePercentage.toFixed(2) + '%',
@@ -3047,7 +3048,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
 
       return metadata;
     } catch (error) {
-      console.error('[Session Metadata] Error getting session metadata:', error);
+      logger.error('AI_SERVICE', '[Session Metadata] Error getting session metadata:', error);
       return null;
     }
   }
@@ -3067,8 +3068,8 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
     systemPrompt: string,
     options?: AISessionOptions
   ): Promise<AILanguageModelSession> {
-    console.log('[Session Clone] Cloning session for', contextId);
-    console.log('[Session Clone] Conversation state:', {
+    logger.debug('AI_SERVICE', '[Session Clone] Cloning session for', contextId);
+    logger.debug('AI_SERVICE', '[Session Clone] Conversation state:', {
       hasSummary: !!conversationState.summary,
       recentMessages: conversationState.recentMessages.length,
     });
@@ -3093,7 +3094,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       });
     }
 
-    console.log('[Session Clone] Creating new session with', initialPrompts.length, 'initial prompts');
+    logger.debug('AI_SERVICE', '[Session Clone] Creating new session with', initialPrompts.length, 'initial prompts');
 
     // Destroy old session
     const oldSession = this.sessions.get(contextId);
@@ -3101,7 +3102,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       try {
         oldSession.destroy();
       } catch (error) {
-        console.warn('[Session Clone] Error destroying old session:', error);
+        logger.warn('AI_SERVICE', '[Session Clone] Error destroying old session:', error);
       }
     }
 
@@ -3117,7 +3118,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
     // Reset metadata
     this.sessionMetadata.delete(contextId);
 
-    console.log('[Session Clone] ✓ Session cloned successfully');
+    logger.debug('AI_SERVICE', '[Session Clone] ✓ Session cloned successfully');
     return newSession;
   }
 

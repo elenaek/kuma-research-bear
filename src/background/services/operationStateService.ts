@@ -3,6 +3,7 @@ import { tabPaperTracker } from './tabPaperTracker.ts';
 import { updateContextMenuForPaper, updateContextMenuState } from '../background.ts';
 import { normalizeUrl } from '../../utils/urlUtils.ts';
 import * as iconService from './iconService.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Operation State Service
@@ -171,7 +172,7 @@ export async function broadcastStateChange(state: OperationState): Promise<void>
             });
           } catch (error) {
             // Tab might have been closed or content script not ready
-            console.debug(`[OperationState] Could not send to tab ${tabId}:`, error);
+            logger.debug('BACKGROUND_SCRIPT', `[OperationState] Could not send to tab ${tabId}:`, error);
           }
         })
       );
@@ -187,7 +188,7 @@ export async function broadcastStateChange(state: OperationState): Promise<void>
       await updateContextMenuState();
     }
   } catch (error) {
-    console.error('[OperationState] Error broadcasting state change:', error);
+    logger.error('BACKGROUND_SCRIPT', '[OperationState] Error broadcasting state change:', error);
   }
 }
 

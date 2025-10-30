@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
 import * as ChromeService from '../../services/ChromeService.ts';
 import type { AIAvailability } from '../../types/index.ts';
+import { logger } from '../../utils/logger.ts';
 
 export type AIStatus = 'checking' | 'ready' | 'needsInit' | 'downloading' | 'error';
 export type DownloadingModel = 'gemini' | 'embedding' | null;
@@ -63,7 +64,7 @@ export function useAIStatus(): UseAIStatusReturn {
     const handleMessage = (message: any) => {
       if (message.type === 'MODEL_DOWNLOAD_PROGRESS') {
         const { model, combinedProgress } = message.payload;
-        console.log(`[useAIStatus] Download progress: ${model} - ${combinedProgress.toFixed(1)}%`);
+        logger.debug('UI', `[useAIStatus] Download progress: ${model} - ${combinedProgress.toFixed(1)}%`);
 
         setCurrentDownloadingModel(model);
         setDownloadProgress(combinedProgress);
@@ -73,7 +74,7 @@ export function useAIStatus(): UseAIStatusReturn {
           sessionStorage.setItem('kuma_download_progress', combinedProgress.toString());
           sessionStorage.setItem('kuma_downloading_model', model || '');
         } catch (error) {
-          console.warn('[useAIStatus] Failed to cache progress in listener:', error);
+          logger.warn('UI', '[useAIStatus] Failed to cache progress in listener:', error);
         }
 
         // Update status to downloading if we receive progress updates
@@ -105,7 +106,7 @@ export function useAIStatus(): UseAIStatusReturn {
         try {
           sessionStorage.setItem('kuma_download_progress', response.downloadProgress.toString());
         } catch (error) {
-          console.warn('[useAIStatus] Failed to cache download progress:', error);
+          logger.warn('UI', '[useAIStatus] Failed to cache download progress:', error);
         }
       }
       if (response.currentDownloadingModel !== undefined) {
@@ -114,7 +115,7 @@ export function useAIStatus(): UseAIStatusReturn {
         try {
           sessionStorage.setItem('kuma_downloading_model', response.currentDownloadingModel || '');
         } catch (error) {
-          console.warn('[useAIStatus] Failed to cache downloading model:', error);
+          logger.warn('UI', '[useAIStatus] Failed to cache downloading model:', error);
         }
       }
 
@@ -140,7 +141,7 @@ export function useAIStatus(): UseAIStatusReturn {
     } catch (error) {
       setAiStatus('error');
       setStatusMessage('Error checking Kuma\'s status');
-      console.error('[useAIStatus] Status check failed:', error);
+      logger.error('UI', '[useAIStatus] Status check failed:', error);
       // Even on error, mark initial load as complete
       setIsInitialLoad(false);
     }
@@ -170,7 +171,7 @@ export function useAIStatus(): UseAIStatusReturn {
         alert(`Kuma couldn't wake up. (Failed to initialize AI: ${response.error})`);
       }
     } catch (error) {
-      console.error('[useAIStatus] Initialization failed:', error);
+      logger.error('UI', '[useAIStatus] Initialization failed:', error);
       alert(`Kuma didn't come. (Failed to initialize AI. Please try again.)`);
       setStatusMessage('Kuma didn\'t come. (Initialization failed)');
     } finally {
@@ -194,7 +195,7 @@ export function useAIStatus(): UseAIStatusReturn {
         setStatusMessage(response.error || 'Reset failed');
       }
     } catch (error) {
-      console.error('[useAIStatus] AI reset failed:', error);
+      logger.error('UI', '[useAIStatus] AI reset failed:', error);
       alert('❌ Failed to reset AI. Please try again or restart Chrome.');
       setStatusMessage('Reset failed');
     } finally {

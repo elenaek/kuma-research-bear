@@ -1,4 +1,5 @@
 import { OperationState } from '../../types/index.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Icon Service
@@ -65,7 +66,7 @@ export async function updateIconForTab(tabId: number, state: OperationState): Pr
       iconType = 'stored';
     }
 
-    console.log(`[IconService] Updating icon for tab ${tabId}: ${iconType}, state:`, {
+    logger.debug('BACKGROUND_SCRIPT', `[IconService] Updating icon for tab ${tabId}: ${iconType}, state:`, {
       isDetecting: state.isDetecting,
       isChunking: state.isChunking,
       isExplaining: state.isExplaining,
@@ -111,9 +112,9 @@ export async function updateIconForTab(tabId: number, state: OperationState): Pr
       tabId: tabId,
     });
 
-    console.log(`[IconService] Icon updated successfully for tab ${tabId}: ${iconType}`);
+    logger.debug('BACKGROUND_SCRIPT', `[IconService] Icon updated successfully for tab ${tabId}: ${iconType}`);
   } catch (error) {
-    console.error(`[IconService] Failed to update icon for tab ${tabId}:`, error);
+    logger.error('BACKGROUND_SCRIPT', `[IconService] Failed to update icon for tab ${tabId}:`, error);
     // Fallback to default icon on error
     try {
       await chrome.action.setIcon({
@@ -164,7 +165,7 @@ export async function setDefaultIcon(tabId: number): Promise<void> {
       tabId: tabId,
     });
   } catch (error) {
-    console.error(`[IconService] Failed to set default icon for tab ${tabId}:`, error);
+    logger.error('BACKGROUND_SCRIPT', `[IconService] Failed to set default icon for tab ${tabId}:`, error);
   }
 }
 

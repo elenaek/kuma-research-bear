@@ -3,6 +3,7 @@ import { extractPageText, isPDFPage } from './contentExtractor.ts';
 import { aiService } from './aiService.ts';
 import { getPDFUrl, extractPDFText, extractPDFPages, isScannedPDF } from './pdfExtractor.ts';
 import { normalizeUrl } from './urlUtils.ts';
+import { logger } from './logger.ts';
 
 // Detector for arXiv papers
 export function detectArXivPaper(): ResearchPaper | null {
@@ -37,7 +38,7 @@ export function detectArXivPaper(): ResearchPaper | null {
       },
     };
   } catch (error) {
-    console.error('Error detecting arXiv paper:', error);
+    logger.error('UTILS', 'Error detecting arXiv paper:', error);
     return null;
   }
 }
@@ -81,7 +82,7 @@ export function detectPubMedPaper(): ResearchPaper | null {
       },
     };
   } catch (error) {
-    console.error('Error detecting PubMed paper:', error);
+    logger.error('UTILS', 'Error detecting PubMed paper:', error);
     return null;
   }
 }
@@ -119,7 +120,7 @@ export function detectBioRxivPaper(): ResearchPaper | null {
       },
     };
   } catch (error) {
-    console.error('Error detecting bioRxiv paper:', error);
+    logger.error('UTILS', 'Error detecting bioRxiv paper:', error);
     return null;
   }
 }
@@ -129,27 +130,27 @@ export function detectBioRxivPaper(): ResearchPaper | null {
  * Extracts metadata from PDF and uses AI for title/abstract extraction
  */
 export async function detectPDFPaper(): Promise<ResearchPaper | null> {
-  console.log('[PDF Detector] Starting PDF paper detection...');
+  logger.debug('UTILS', '[PDF Detector] Starting PDF paper detection...');
 
   try {
     // Get the PDF URL
     const pdfUrl = getPDFUrl();
     if (!pdfUrl) {
-      console.log('[PDF Detector] Could not determine PDF URL');
+      logger.debug('UTILS', '[PDF Detector] Could not determine PDF URL');
       return null;
     }
 
-    console.log('[PDF Detector] PDF URL found:', pdfUrl);
+    logger.debug('UTILS', '[PDF Detector] PDF URL found:', pdfUrl);
 
     // Check if it's a scanned PDF (no extractable text)
     const isScanned = await isScannedPDF(pdfUrl);
     if (isScanned) {
-      console.warn('[PDF Detector] This appears to be a scanned PDF with no extractable text');
+      logger.warn('UTILS', '[PDF Detector] This appears to be a scanned PDF with no extractable text');
       return null;
     }
 
     // Extract the first few pages to get title/abstract
-    console.log('[PDF Detector] Extracting first 2 pages for metadata detection...');
+    logger.debug('UTILS', '[PDF Detector] Extracting first 2 pages for metadata detection...');
     const firstPagesText = await extractPDFPages(pdfUrl, 1, 2);
 
     // Clean PDF text for AI processing
@@ -161,7 +162,7 @@ export async function detectPDFPaper(): Promise<ResearchPaper | null> {
       .trim()
       .slice(0, 6000);                // Truncate to 6000 chars for AI
 
-    console.log(`[PDF Detector] Cleaned text: ${cleanedText.length} chars (from ${firstPagesText.length} original)`);
+    logger.debug('UTILS', `[PDF Detector] Cleaned text: ${cleanedText.length} chars (from ${firstPagesText.length} original)`);
 
     // Try to detect arXiv ID from URL or content
     let arxivId: string | undefined;
@@ -182,7 +183,7 @@ export async function detectPDFPaper(): Promise<ResearchPaper | null> {
     const doi = doiMatch ? doiMatch[1] : undefined;
 
     // Use AI to extract structured metadata from the cleaned text
-    console.log('[PDF Detector] Using AI to extract paper metadata from PDF...');
+    logger.debug('UTILS', '[PDF Detector] Using AI to extract paper metadata from PDF...');
     const aiPaper = await aiService.extractPaperMetadata(cleanedText);
 
     if (aiPaper) {
@@ -203,7 +204,7 @@ export async function detectPDFPaper(): Promise<ResearchPaper | null> {
     }
 
     // Fallback: Try to parse title/authors/abstract manually
-    console.log('[PDF Detector] AI extraction failed, trying heuristic extraction...');
+    logger.debug('UTILS', '[PDF Detector] AI extraction failed, trying heuristic extraction...');
     const lines = firstPagesText.split('\n').map(l => l.trim()).filter(Boolean);
 
     // Find title: usually first long line (20-200 chars)
@@ -246,7 +247,7 @@ export async function detectPDFPaper(): Promise<ResearchPaper | null> {
     }
 
     if (potentialTitle) {
-      console.log('[PDF Detector] Extracted via heuristics:', {
+      logger.debug('UTILS', '[PDF Detector] Extracted via heuristics:', {
         title: potentialTitle,
         authors: authors.length,
         abstractLength: abstract.length,
@@ -268,10 +269,10 @@ export async function detectPDFPaper(): Promise<ResearchPaper | null> {
       };
     }
 
-    console.log('[PDF Detector] Could not extract paper metadata from PDF');
+    logger.debug('UTILS', '[PDF Detector] Could not extract paper metadata from PDF');
     return null;
   } catch (error) {
-    console.error('[PDF Detector] Error detecting PDF paper:', error);
+    logger.error('UTILS', '[PDF Detector] Error detecting PDF paper:', error);
     return null;
   }
 }
@@ -308,7 +309,7 @@ export function detectSchemaOrgPaper(): ResearchPaper | null {
 
     return null;
   } catch (error) {
-    console.error('Error detecting schema.org paper:', error);
+    logger.error('UTILS', 'Error detecting schema.org paper:', error);
     return null;
   }
 }
@@ -345,12 +346,12 @@ function isValidPDFPaper(paper: ResearchPaper | null): boolean {
  * Only uses schema.org and site-specific detectors
  */
 export async function detectPaper(): Promise<ResearchPaper | null> {
-  console.log('Starting automatic paper detection (no AI)...');
+  logger.debug('UTILS', 'Starting automatic paper detection (no AI)...');
 
   // Strategy 1: Try schema.org structured data (fast and reliable)
   const schemaPaper = detectSchemaOrgPaper();
   if (isValidPaper(schemaPaper)) {
-    console.log('Paper detected via schema.org:', schemaPaper!.title);
+    logger.debug('UTILS', 'Paper detected via schema.org:', schemaPaper!.title);
     return schemaPaper;
   }
 
@@ -364,13 +365,13 @@ export async function detectPaper(): Promise<ResearchPaper | null> {
   for (const detector of siteDetectors) {
     const paper = detector();
     if (isValidPaper(paper)) {
-      console.log('Paper detected via site-specific detector:', paper!.title);
+      logger.debug('UTILS', 'Paper detected via site-specific detector:', paper!.title);
       return paper;
     }
   }
 
   // No paper detected with non-AI methods
-  console.log('No paper detected automatically. Use "Detect Paper" button to try AI extraction.');
+  logger.debug('UTILS', 'No paper detected automatically. Use "Detect Paper" button to try AI extraction.');
   return null;
 }
 
@@ -380,19 +381,19 @@ export async function detectPaper(): Promise<ResearchPaper | null> {
  * Best used when triggered by user gesture (has access to AI)
  */
 export async function detectPaperWithAI(): Promise<ResearchPaper | null> {
-  console.log('Starting AI-first paper detection...');
+  logger.debug('UTILS', 'Starting AI-first paper detection...');
 
   // Strategy 1: Check if this is a PDF page and handle accordingly
   try {
     // Check if we're on a PDF page
     if (isPDFPage()) {
-      console.log('PDF page detected, using PDF extraction...');
+      logger.debug('UTILS', 'PDF page detected, using PDF extraction...');
       const pdfPaper = await detectPDFPaper();
       if (isValidPDFPaper(pdfPaper)) {
-        console.log('✓ Paper detected from PDF:', pdfPaper!.title);
+        logger.debug('UTILS', '✓ Paper detected from PDF:', pdfPaper!.title);
         return pdfPaper;
       }
-      console.log('Could not extract valid paper from PDF');
+      logger.debug('UTILS', 'Could not extract valid paper from PDF');
       return null;
     }
 
@@ -400,29 +401,29 @@ export async function detectPaperWithAI(): Promise<ResearchPaper | null> {
     const extracted = extractPageText();
 
     if (extracted.text.length >= 100) {
-      console.log('Attempting AI extraction (priority)...');
+      logger.debug('UTILS', 'Attempting AI extraction (priority)...');
 
       // Use AI to extract metadata
       const aiPaper = await aiService.extractPaperMetadata(extracted.text);
 
       if (isValidPaper(aiPaper)) {
-        console.log('✓ Paper detected via AI:', aiPaper!.title);
+        logger.debug('UTILS', '✓ Paper detected via AI:', aiPaper!.title);
         return aiPaper;
       }
 
-      console.log('AI extraction did not return valid paper, trying fallbacks...');
+      logger.debug('UTILS', 'AI extraction did not return valid paper, trying fallbacks...');
     } else {
-      console.log('Not enough content for AI extraction, trying fallbacks...');
+      logger.debug('UTILS', 'Not enough content for AI extraction, trying fallbacks...');
     }
   } catch (error) {
-    console.error('Error during AI extraction:', error);
-    console.log('Falling back to traditional detection methods...');
+    logger.error('UTILS', 'Error during AI extraction:', error);
+    logger.debug('UTILS', 'Falling back to traditional detection methods...');
   }
 
   // Strategy 2: Fall back to schema.org structured data
   const schemaPaper = detectSchemaOrgPaper();
   if (isValidPaper(schemaPaper)) {
-    console.log('Paper detected via schema.org:', schemaPaper!.title);
+    logger.debug('UTILS', 'Paper detected via schema.org:', schemaPaper!.title);
     return schemaPaper;
   }
 
@@ -436,12 +437,12 @@ export async function detectPaperWithAI(): Promise<ResearchPaper | null> {
   for (const detector of siteDetectors) {
     const paper = detector();
     if (isValidPaper(paper)) {
-      console.log('Paper detected via site-specific detector:', paper!.title);
+      logger.debug('UTILS', 'Paper detected via site-specific detector:', paper!.title);
       return paper;
     }
   }
 
-  console.log('❌ No research paper detected on this page');
+  logger.debug('UTILS', '❌ No research paper detected on this page');
   return null;
 }
 
@@ -460,7 +461,7 @@ export function detectPaperSync(): ResearchPaper | null {
   for (const detector of detectors) {
     const paper = detector();
     if (paper) {
-      console.log('Paper detected (sync):', paper.title);
+      logger.debug('UTILS', 'Paper detected (sync):', paper.title);
       return paper;
     }
   }

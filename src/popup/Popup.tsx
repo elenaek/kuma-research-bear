@@ -15,6 +15,7 @@ import { ImageButtonsToggle } from './components/ImageButtonsToggle.tsx';
 import { normalizeUrl } from '../utils/urlUtils.ts';
 import { MessageType } from '../types/index.ts';
 import { getShowImageButtons, setShowImageButtons as saveShowImageButtons } from '../utils/settingsService.ts';
+import { logger } from '../utils/logger.ts';
 
 export function Popup() {
   // Ref for Lottie animation control
@@ -54,7 +55,7 @@ export function Popup() {
           setCurrentTabId(tab.id);
         }
       } catch (error) {
-        console.error('[Popup] Failed to get tab info:', error);
+        logger.error('UI', '[Popup] Failed to get tab info:', error);
       }
     }
 
@@ -73,7 +74,7 @@ export function Popup() {
         const showButtons = await getShowImageButtons();
         setShowImageButtons(showButtons);
       } catch (error) {
-        console.error('[Popup] Failed to load settings:', error);
+        logger.error('UI', '[Popup] Failed to load settings:', error);
       }
     }
     loadSettings();
@@ -135,7 +136,7 @@ export function Popup() {
         setCurrentUrlHasPaper(hasPaper);
       }
     } catch (error) {
-      console.error('[Popup] Error updating sidepanel button state:', error);
+      logger.error('UI', '[Popup] Error updating sidepanel button state:', error);
     }
   }
 
@@ -145,7 +146,7 @@ export function Popup() {
       const isOpen = await ChromeService.getChatboxState(currentTabId);
       setIsChatOpen(isOpen);
     } catch (error) {
-      console.error('[Popup] Error updating chatbox state:', error);
+      logger.error('UI', '[Popup] Error updating chatbox state:', error);
     }
   }
 
@@ -185,7 +186,7 @@ export function Popup() {
       // Step 4: Update chatbox state
       await updateChatboxState();
     } catch (error) {
-      console.error('[Popup] Failed to check initial state:', error);
+      logger.error('UI', '[Popup] Failed to check initial state:', error);
     }
   }
 
@@ -227,7 +228,7 @@ export function Popup() {
       }
       // If successful, state updates will come via OPERATION_STATE_CHANGED listener
     } catch (error: any) {
-      console.error('[Popup] Detection failed:', error);
+      logger.error('UI', '[Popup] Detection failed:', error);
       // Handle content script not ready
       if (error.message?.includes('Receiving end does not exist')) {
         operationState.setDetectionStatus('⚠️ Content script not ready. Please refresh the page and try again.');
@@ -257,7 +258,7 @@ export function Popup() {
         }
       }
     } catch (error) {
-      console.error('[Popup] Failed to open sidepanel:', error);
+      logger.error('UI', '[Popup] Failed to open sidepanel:', error);
     }
   }
 
@@ -270,7 +271,7 @@ export function Popup() {
     try {
       await ChromeService.explainPaperManual(paperStatus.paper.url, currentTabId);
     } catch (error) {
-      console.error('[Popup] Failed to generate explanation:', error);
+      logger.error('UI', '[Popup] Failed to generate explanation:', error);
     }
   }
 
@@ -283,7 +284,7 @@ export function Popup() {
     try {
       await ChromeService.generateSummaryManual(paperStatus.paper.url, currentTabId);
     } catch (error) {
-      console.error('[Popup] Failed to generate summary:', error);
+      logger.error('UI', '[Popup] Failed to generate summary:', error);
     }
   }
 
@@ -296,7 +297,7 @@ export function Popup() {
     try {
       await ChromeService.analyzePaper(paperStatus.paper.url, currentTabId);
     } catch (error) {
-      console.error('[Popup] Failed to generate analysis:', error);
+      logger.error('UI', '[Popup] Failed to generate analysis:', error);
     }
   }
 
@@ -309,7 +310,7 @@ export function Popup() {
     try {
       await ChromeService.generateGlossary(paperStatus.paper.url, currentTabId);
     } catch (error) {
-      console.error('[Popup] Failed to generate glossary:', error);
+      logger.error('UI', '[Popup] Failed to generate glossary:', error);
     }
   }
 
@@ -319,7 +320,7 @@ export function Popup() {
       // Update chatbox state after toggling
       await updateChatboxState();
     } catch (error) {
-      console.error('[Popup] Failed to toggle chatbox:', error);
+      logger.error('UI', '[Popup] Failed to toggle chatbox:', error);
     }
   }
 
@@ -335,7 +336,7 @@ export function Popup() {
     // Get paper ID (stored papers have an id field)
     const paperId = (paperStatus.paper as any).id;
     if (!paperId) {
-      console.error('[Popup] Cannot delete: paper has no ID');
+      logger.error('UI', '[Popup] Cannot delete: paper has no ID');
       return;
     }
 
@@ -343,14 +344,14 @@ export function Popup() {
     try {
       const success = await ChromeService.deletePaper(paperId);
       if (success) {
-        console.log('[Popup] Paper deleted successfully');
+        logger.debug('UI', '[Popup] Paper deleted successfully');
         // State will be cleared by PAPER_DELETED listener
         setShowDeleteConfirm(false);
       } else {
-        console.error('[Popup] Failed to delete paper');
+        logger.error('UI', '[Popup] Failed to delete paper');
       }
     } catch (error) {
-      console.error('[Popup] Error deleting paper:', error);
+      logger.error('UI', '[Popup] Error deleting paper:', error);
     } finally {
       setIsDeleting(false);
     }
@@ -379,7 +380,7 @@ export function Popup() {
         }
       }
     } catch (error) {
-      console.error('[Popup] Failed to toggle image buttons:', error);
+      logger.error('UI', '[Popup] Failed to toggle image buttons:', error);
     }
   }
 

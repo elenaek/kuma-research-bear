@@ -3,6 +3,7 @@ import { ChatBox } from '../components/ChatBox.tsx';
 import { ChatMessage, ChatboxSettings, ChatboxPosition, StoredPaper, ChatTab, ConversationState, SourceInfo } from '../../types/index.ts';
 import * as ChromeService from '../../services/ChromeService.ts';
 import { imageExplanationHandler } from './imageExplanationHandler.ts';
+import { logger } from '../../utils/logger.ts';
 
 // Default position and size
 const DEFAULT_POSITION: ChatboxPosition = {
@@ -95,11 +96,11 @@ class ChatboxInjector {
 
   async initialize() {
     if (this.isInitialized) {
-      console.log('[Kuma Chat] Already initialized');
+      logger.debug('CONTENT_SCRIPT', '[Kuma Chat] Already initialized');
       return;
     }
 
-    console.log('[Kuma Chat] Starting initialization...');
+    logger.debug('CONTENT_SCRIPT', '[Kuma Chat] Starting initialization...');
 
     try {
       // Wait for page to be fully loaded
@@ -150,9 +151,9 @@ class ChatboxInjector {
       // Listen for paper context changes
       this.setupContextListener();
 
-      console.log('[Kuma Chat] ✓ Chatbox injector initialized successfully');
+      logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Chatbox injector initialized successfully');
     } catch (error) {
-      console.error('[Kuma Chat] Failed to initialize:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to initialize:', error);
       throw error;
     }
   }
@@ -197,7 +198,7 @@ class ChatboxInjector {
       }
       throw new Error(`Failed to fetch CSS: ${response.status}`);
     } catch (error) {
-      console.warn('[Kuma Chat] Failed to load external CSS, using inline styles:', error);
+      logger.warn('CONTENT_SCRIPT', '[Kuma Chat] Failed to load external CSS, using inline styles:', error);
       // Fallback: Return minimal inline styles
       return this.getInlineStyles();
     }
@@ -765,7 +766,7 @@ class ChatboxInjector {
         this.settings.position.y = Math.max(0, Math.min(this.settings.position.y, window.innerHeight - this.settings.position.height));
       }
     } catch (error) {
-      console.error('[Kuma Chat] Failed to load settings:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to load settings:', error);
     }
   }
 
@@ -785,9 +786,9 @@ class ChatboxInjector {
       this.settings.activeTabId = this.activeTabId;
 
       await chrome.storage.local.set({ chatboxSettings: this.settings });
-      console.log('[Kuma Chat] Settings saved successfully');
+      logger.debug('CONTENT_SCRIPT', '[Kuma Chat] Settings saved successfully');
     } catch (error) {
-      console.error('[Kuma Chat] Failed to save settings:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to save settings:', error);
     }
   }
 
@@ -806,7 +807,7 @@ class ChatboxInjector {
 
       return null;
     } catch (error) {
-      console.error('[Kuma Chat] Error finding image button:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Error finding image button:', error);
       return null;
     }
   }
@@ -829,7 +830,7 @@ class ChatboxInjector {
         const imageState = imageExplanationHandler.getImageStateByUrl(savedTab.imageUrl);
 
         if (!imageState || !imageState.buttonContainer) {
-          console.warn('[Kuma Chat] Could not find image state for saved tab:', savedTab.title);
+          logger.warn('CONTENT_SCRIPT', '[Kuma Chat] Could not find image state for saved tab:', savedTab.title);
           continue;
         }
 
@@ -881,7 +882,7 @@ class ChatboxInjector {
               if (typeof response.explanation.explanation === 'string') {
                 content = response.explanation.explanation;
               } else {
-                console.warn('[Kuma Chat] explanation is not a string, stringifying:', typeof response.explanation.explanation);
+                logger.warn('CONTENT_SCRIPT', '[Kuma Chat] explanation is not a string, stringifying:', typeof response.explanation.explanation);
                 content = JSON.stringify(response.explanation.explanation);
               }
 
@@ -893,13 +894,13 @@ class ChatboxInjector {
               });
             }
           } catch (error) {
-            console.error('[Kuma Chat] Error loading initial explanation for restored tab:', error);
+            logger.error('CONTENT_SCRIPT', '[Kuma Chat] Error loading initial explanation for restored tab:', error);
           }
         }
 
-        console.log('[Kuma Chat] ✓ Restored tab:', savedTab.title, 'with', imageTab.messages.length, 'messages');
+        logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Restored tab:', savedTab.title, 'with', imageTab.messages.length, 'messages');
       } catch (error) {
-        console.error('[Kuma Chat] Error restoring tab:', savedTab.title, error);
+        logger.error('CONTENT_SCRIPT', '[Kuma Chat] Error restoring tab:', savedTab.title, error);
       }
     }
 
@@ -919,7 +920,7 @@ class ChatboxInjector {
 
     // Render to show restored tabs
     this.render();
-    console.log('[Kuma Chat] ✓ Tabs restored and rendered');
+    logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Tabs restored and rendered');
   }
 
   /**
@@ -951,7 +952,7 @@ class ChatboxInjector {
         paperTab.title = paper?.title || 'Paper Chat';
       }
     } catch (error) {
-      console.error('[Kuma Chat] Failed to load paper chat history:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to load paper chat history:', error);
     }
   }
 
@@ -967,7 +968,7 @@ class ChatboxInjector {
         imageTab.messages = response.chatHistory;
       }
     } catch (error) {
-      console.error('[Kuma Chat] Failed to load image chat history:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to load image chat history:', error);
     }
   }
 
@@ -985,7 +986,7 @@ class ChatboxInjector {
         await ChromeService.updateChatHistory(this.currentPaper.url, paperTab.messages);
       }
     } catch (error) {
-      console.error('[Kuma Chat] Failed to save paper chat history:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to save paper chat history:', error);
     }
   }
 
@@ -999,7 +1000,7 @@ class ChatboxInjector {
         await ChromeService.updateImageChatHistory(paperId, imageUrl, imageTab.messages);
       }
     } catch (error) {
-      console.error('[Kuma Chat] Failed to save image chat history:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to save image chat history:', error);
     }
   }
 
@@ -1178,7 +1179,7 @@ class ChatboxInjector {
    * Closes chatbox and resets state when the current paper is deleted
    */
   async handlePaperDeletion() {
-    console.log('[Kuma Chat] Handling paper deletion, resetting state...');
+    logger.debug('CONTENT_SCRIPT', '[Kuma Chat] Handling paper deletion, resetting state...');
 
     // Hide the chatbox
     this.cleanupCompassTracking();
@@ -1196,7 +1197,7 @@ class ChatboxInjector {
     // Re-render
     this.render();
 
-    console.log('[Kuma Chat] ✓ Chatbox reset after paper deletion');
+    logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Chatbox reset after paper deletion');
   }
 
   async openWithQuery(query: string) {
@@ -1237,7 +1238,7 @@ class ChatboxInjector {
     isGeneratingExplanation: boolean = false
   ): Promise<void> {
     if (!this.currentPaper) {
-      console.error('[Kuma Chat] No paper loaded, cannot open image tab');
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] No paper loaded, cannot open image tab');
       return;
     }
 
@@ -1296,7 +1297,7 @@ class ChatboxInjector {
           content: '___LOADING_EXPLANATION___',
           timestamp: Date.now(),
         });
-        console.log('[Kuma Chat] Added loading message for explanation generation');
+        logger.debug('CONTENT_SCRIPT', '[Kuma Chat] Added loading message for explanation generation');
       } else {
         try {
           const response = await ChromeService.getImageExplanation(this.currentPaper.id, imageUrl);
@@ -1306,7 +1307,7 @@ class ChatboxInjector {
             if (typeof response.explanation.explanation === 'string') {
               content = response.explanation.explanation;
             } else {
-              console.warn('[Kuma Chat] explanation is not a string, stringifying:', typeof response.explanation.explanation);
+              logger.warn('CONTENT_SCRIPT', '[Kuma Chat] explanation is not a string, stringifying:', typeof response.explanation.explanation);
               content = JSON.stringify(response.explanation.explanation);
             }
 
@@ -1316,10 +1317,10 @@ class ChatboxInjector {
               content,
               timestamp: Date.now(),
             });
-            console.log('[Kuma Chat] Seeded initial explanation from cache');
+            logger.debug('CONTENT_SCRIPT', '[Kuma Chat] Seeded initial explanation from cache');
           }
         } catch (error) {
-          console.error('[Kuma Chat] Error loading initial explanation:', error);
+          logger.error('CONTENT_SCRIPT', '[Kuma Chat] Error loading initial explanation:', error);
         }
       }
     }
@@ -1337,7 +1338,7 @@ class ChatboxInjector {
 
     this.render();
 
-    console.log('[Kuma Chat] ✓ Image tab opened:', tabId);
+    logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Image tab opened:', tabId);
   }
 
   /**
@@ -1348,7 +1349,7 @@ class ChatboxInjector {
     const imageTab = this.tabs.find(t => t.type === 'image' && t.imageUrl === imageUrl);
 
     if (!imageTab) {
-      console.warn('[Kuma Chat] Image tab not found for URL:', imageUrl);
+      logger.warn('CONTENT_SCRIPT', '[Kuma Chat] Image tab not found for URL:', imageUrl);
       return;
     }
 
@@ -1374,9 +1375,9 @@ class ChatboxInjector {
       // Re-render to show the updated explanation and title
       this.render();
 
-      console.log('[Kuma Chat] ✓ Updated image tab with generated explanation and title');
+      logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Updated image tab with generated explanation and title');
     } else {
-      console.warn('[Kuma Chat] First message is not a loading message, skipping update');
+      logger.warn('CONTENT_SCRIPT', '[Kuma Chat] First message is not a loading message, skipping update');
     }
   }
 
@@ -1386,13 +1387,13 @@ class ChatboxInjector {
   async closeTab(tabId: string): Promise<void> {
     // Cannot close paper tab
     if (tabId === 'paper') {
-      console.warn('[Kuma Chat] Cannot close paper tab');
+      logger.warn('CONTENT_SCRIPT', '[Kuma Chat] Cannot close paper tab');
       return;
     }
 
     const tabIndex = this.tabs.findIndex(t => t.id === tabId);
     if (tabIndex === -1) {
-      console.warn('[Kuma Chat] Tab not found:', tabId);
+      logger.warn('CONTENT_SCRIPT', '[Kuma Chat] Tab not found:', tabId);
       return;
     }
 
@@ -1416,7 +1417,7 @@ class ChatboxInjector {
     await this.saveSettings();
     this.render();
 
-    console.log('[Kuma Chat] ✓ Tab closed:', tabId);
+    logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Tab closed:', tabId);
   }
 
   /**
@@ -1425,7 +1426,7 @@ class ChatboxInjector {
   async switchTab(tabId: string): Promise<void> {
     const tab = this.tabs.find(t => t.id === tabId);
     if (!tab) {
-      console.warn('[Kuma Chat] Tab not found:', tabId);
+      logger.warn('CONTENT_SCRIPT', '[Kuma Chat] Tab not found:', tabId);
       return;
     }
 
@@ -1437,7 +1438,7 @@ class ChatboxInjector {
 
     this.render();
 
-    console.log('[Kuma Chat] ✓ Switched to tab:', tabId);
+    logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Switched to tab:', tabId);
   }
 
   minimize() {
@@ -1459,20 +1460,20 @@ class ChatboxInjector {
       const paper = await ChromeService.getPaperFromDBByUrl(url);
       this.currentPaper = paper;
     } catch (error) {
-      console.error('[Kuma Chat] Failed to update current paper:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to update current paper:', error);
       this.currentPaper = null;
     }
   }
 
   private async handleSendMessage(message: string) {
     if (!this.currentPaper) {
-      console.error('[Kuma Chat] No paper loaded');
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] No paper loaded');
       return;
     }
 
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
     if (!activeTab) {
-      console.error('[Kuma Chat] Active tab not found');
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Active tab not found');
       return;
     }
 
@@ -1509,7 +1510,7 @@ class ChatboxInjector {
         );
       }
     } catch (error) {
-      console.error('[Kuma Chat] Failed to send message:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to send message:', error);
       activeTab.isStreaming = false;
 
       // Add error message
@@ -1533,13 +1534,13 @@ class ChatboxInjector {
 
   private async handleClearMessages() {
     if (!this.currentPaper) {
-      console.error('[Kuma Chat] No paper loaded');
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] No paper loaded');
       return;
     }
 
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
     if (!activeTab) {
-      console.error('[Kuma Chat] Active tab not found');
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Active tab not found');
       return;
     }
 
@@ -1568,24 +1569,24 @@ class ChatboxInjector {
         await ChromeService.clearImageChatHistory(this.currentPaper.id, activeTab.imageUrl);
       }
 
-      console.log('[Kuma Chat] ✓ Chat history cleared for tab:', activeTab.id);
+      logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Chat history cleared for tab:', activeTab.id);
 
       // Re-render
       this.render();
     } catch (error) {
-      console.error('[Kuma Chat] Failed to clear chat history:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to clear chat history:', error);
     }
   }
 
   private async handleRegenerateExplanation() {
     if (!this.currentPaper) {
-      console.error('[Kuma Chat] No paper loaded');
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] No paper loaded');
       return;
     }
 
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
     if (!activeTab || activeTab.type !== 'image' || !activeTab.imageUrl) {
-      console.error('[Kuma Chat] Active tab is not an image tab');
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Active tab is not an image tab');
       return;
     }
 
@@ -1614,12 +1615,12 @@ class ChatboxInjector {
         // Destroy AI session for fresh conversation context
         await ChromeService.clearImageChatHistory(this.currentPaper.id, activeTab.imageUrl);
 
-        console.log('[Kuma Chat] ✓ Explanation regenerated and conversation cleared');
+        logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Explanation regenerated and conversation cleared');
       } else {
-        console.error('[Kuma Chat] Failed to regenerate explanation');
+        logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to regenerate explanation');
       }
     } catch (error) {
-      console.error('[Kuma Chat] Error regenerating explanation:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Error regenerating explanation:', error);
     } finally {
       // Clear loading state
       this.isRegeneratingExplanation = false;
@@ -1630,14 +1631,14 @@ class ChatboxInjector {
   private handleScrollToImage() {
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
     if (!activeTab || activeTab.type !== 'image' || !activeTab.imageUrl) {
-      console.error('[Kuma Chat] Cannot scroll - not an image tab');
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Cannot scroll - not an image tab');
       return;
     }
 
     // Get image state from image explanation handler
     const imageState = imageExplanationHandler.getImageStateByUrl(activeTab.imageUrl);
     if (!imageState || !imageState.element) {
-      console.error('[Kuma Chat] Image element not found for URL:', activeTab.imageUrl);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Image element not found for URL:', activeTab.imageUrl);
       return;
     }
 
@@ -1660,7 +1661,7 @@ class ChatboxInjector {
       imageState.element.style.outlineOffset = originalOutlineOffset;
     }, 2000);
 
-    console.log('[Kuma Chat] ✓ Scrolled to image:', activeTab.imageUrl);
+    logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Scrolled to image:', activeTab.imageUrl);
   }
 
   private handlePositionChange(position: ChatboxPosition) {
@@ -1790,7 +1791,7 @@ class ChatboxInjector {
   }
 
   private render() {
-    // console.log('[Kuma Chat] Render called, initialized:', this.isInitialized, 'visible:', this.settings.visible);
+    // logger.debug('CONTENT_SCRIPT', '[Kuma Chat] Render called, initialized:', this.isInitialized, 'visible:', this.settings.visible);
 
     if (!this.shadowRoot || !this.isInitialized) {
       return;
@@ -1814,7 +1815,7 @@ class ChatboxInjector {
     // Get active tab
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
     if (!activeTab) {
-      console.error('[Kuma Chat] Active tab not found');
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Active tab not found');
       return;
     }
 
@@ -1831,7 +1832,7 @@ class ChatboxInjector {
     // Calculate compass arrow angle if active tab is an image tab
     const compassArrowAngle = activeTab.type === 'image' ? this.getCompassArrowAngle(activeTab.id) : undefined;
 
-    // console.log('[Kuma Chat] Rendering chatbox, disabled:', isDisabled, 'messages:', activeTab.messages.length);
+    // logger.debug('CONTENT_SCRIPT', '[Kuma Chat] Rendering chatbox, disabled:', isDisabled, 'messages:', activeTab.messages.length);
 
     try {
       render(
@@ -1884,9 +1885,9 @@ class ChatboxInjector {
         }),
         rootElement
       );
-      // console.log('[Kuma Chat] ✓ Chatbox rendered successfully');
+      // logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Chatbox rendered successfully');
     } catch (error) {
-      console.error('[Kuma Chat] Error rendering chatbox:', error);
+      logger.error('CONTENT_SCRIPT', '[Kuma Chat] Error rendering chatbox:', error);
     }
   }
 

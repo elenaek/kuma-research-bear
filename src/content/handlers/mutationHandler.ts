@@ -1,4 +1,5 @@
 import { ResearchPaper } from '../../types/index.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Mutation Handler
@@ -21,7 +22,7 @@ export function createMutationObserver(
 
     // Only check IndexedDB if there's no current paper and the page changed significantly
     if (significantChange && !getCurrentPaper()) {
-      console.log('[MutationHandler] Significant page change detected, checking IndexedDB...');
+      logger.debug('CONTENT_SCRIPT', '[MutationHandler] Significant page change detected, checking IndexedDB...');
 
       // Check IndexedDB for stored paper (no automatic detection)
       (async () => {
@@ -31,12 +32,12 @@ export function createMutationObserver(
 
           if (storedPaper) {
             setCurrentPaper(storedPaper);
-            console.log('[MutationHandler] Found stored paper after page mutation:', storedPaper.title);
+            logger.debug('CONTENT_SCRIPT', '[MutationHandler] Found stored paper after page mutation:', storedPaper.title);
           } else {
-            console.log('[MutationHandler] No stored paper found for new page');
+            logger.debug('CONTENT_SCRIPT', '[MutationHandler] No stored paper found for new page');
           }
         } catch (error) {
-          console.error('[MutationHandler] Error checking stored paper after mutation:', error);
+          logger.error('CONTENT_SCRIPT', '[MutationHandler] Error checking stored paper after mutation:', error);
         }
       })();
     }
@@ -53,5 +54,5 @@ export function startObserving(observer: MutationObserver): void {
     childList: true,
     subtree: true,
   });
-  console.log('[MutationHandler] MutationObserver started');
+  logger.debug('CONTENT_SCRIPT', '[MutationHandler] MutationObserver started');
 }

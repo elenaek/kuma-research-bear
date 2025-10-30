@@ -6,6 +6,7 @@ import { chatboxInjector } from './services/chatboxInjector.ts';
 import { textSelectionHandler } from './services/textSelectionHandler.ts';
 import { imageExplanationHandler } from './services/imageExplanationHandler.ts';
 import { normalizeUrl } from '../utils/urlUtils.ts';
+import { logger } from '../utils/logger.ts';
 
 /**
  * Content Script
@@ -29,23 +30,23 @@ function setCurrentPaper(paper: ResearchPaper | null): void {
  * Check for stored papers (no automatic detection)
  */
 async function init() {
-  console.log('[Content] Initializing content script...');
+  logger.debug('CONTENT_SCRIPT', '[Content] Initializing content script...');
 
   try {
     // Only check IndexedDB for existing stored papers
     // No automatic detection - users must press "Detect Paper" button
-    console.log('[Content] Checking IndexedDB for stored paper...');
+    logger.debug('CONTENT_SCRIPT', '[Content] Checking IndexedDB for stored paper...');
     const { getPaperByUrl } = await import('../services/ChromeService.ts');
     const storedPaper = await getPaperByUrl(window.location.href);
 
     if (storedPaper) {
       currentPaper = storedPaper;
-      console.log('[Content] ✓ Found stored paper in IndexedDB:', storedPaper.title);
+      logger.debug('CONTENT_SCRIPT', '[Content] ✓ Found stored paper in IndexedDB:', storedPaper.title);
     } else {
-      console.log('[Content] No stored paper found. Use "Detect Paper" button to add papers.');
+      logger.debug('CONTENT_SCRIPT', '[Content] No stored paper found. Use "Detect Paper" button to add papers.');
     }
   } catch (error) {
-    console.error('[Content] Error during initialization:', error);
+    logger.error('CONTENT_SCRIPT', '[Content] Error during initialization:', error);
   }
 }
 
@@ -61,13 +62,13 @@ function setupMessageListener() {
   chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     // Handle paper deletion
     if (message.type === 'PAPER_DELETED') {
-      console.log('[Content] Paper deleted:', message.payload);
+      logger.debug('CONTENT_SCRIPT', '[Content] Paper deleted:', message.payload);
 
       // If deleted paper URL matches current page, clean up everything
       const currentPageUrl = normalizeUrl(window.location.href);
       const deletedPaperUrl = normalizeUrl(message.payload.paperUrl);
       if (deletedPaperUrl === currentPageUrl) {
-        console.log('[Content] Current page paper was deleted, cleaning up...');
+        logger.debug('CONTENT_SCRIPT', '[Content] Current page paper was deleted, cleaning up...');
 
         // Destroy image buttons
         imageExplanationHandler.destroy();
@@ -75,7 +76,7 @@ function setupMessageListener() {
         // Close chatbox and reset state
         await chatboxInjector.handlePaperDeletion();
 
-        console.log('[Content] ✓ Cleanup complete');
+        logger.debug('CONTENT_SCRIPT', '[Content] ✓ Cleanup complete');
       }
     }
 
@@ -90,7 +91,7 @@ function setupMessageListener() {
       if (statePaperUrl === currentPageUrl) {
         // Initialize image explanation buttons when imageExplanationReady becomes true
         if (state.imageExplanationReady) {
-          console.log('[Content] Image explanations ready, initializing image buttons');
+          logger.debug('CONTENT_SCRIPT', '[Content] Image explanations ready, initializing image buttons');
 
           // Get fresh paper data from DB
           const { getPaperFromDBByUrl } = await import('../services/ChromeService.ts');
@@ -99,19 +100,19 @@ function setupMessageListener() {
           if (storedPaper && storedPaper.id) {
             // imageExplanationHandler.initialize() will check if already initialized and skip if so
             await imageExplanationHandler.initialize(storedPaper);
-            console.log('[Content] ✓ Image buttons initialized after embeddings complete');
+            logger.debug('CONTENT_SCRIPT', '[Content] ✓ Image buttons initialized after embeddings complete');
 
             // Update chatbox paper context directly
             // This ensures chatbox.currentPaper is set for newly detected papers
             await chatboxInjector.updatePaperContext(storedPaper);
-            console.log('[Content] ✓ Chatbox paper context updated');
+            logger.debug('CONTENT_SCRIPT', '[Content] ✓ Chatbox paper context updated');
           }
         }
       }
     }
   });
 
-  console.log('[Content] Message listener registered');
+  logger.debug('CONTENT_SCRIPT', '[Content] Message listener registered');
 }
 
 /**
@@ -130,9 +131,9 @@ function setupMutationObserver() {
 async function setupChatbox() {
   try {
     await chatboxInjector.initialize();
-    console.log('[Content] ✓ Chatbox initialized');
+    logger.debug('CONTENT_SCRIPT', '[Content] ✓ Chatbox initialized');
   } catch (error) {
-    console.error('[Content] Error initializing chatbox:', error);
+    logger.error('CONTENT_SCRIPT', '[Content] Error initializing chatbox:', error);
   }
 }
 
@@ -143,9 +144,9 @@ async function setupChatbox() {
 async function setupTextSelection() {
   try {
     await textSelectionHandler.initialize(chatboxInjector);
-    console.log('[Content] ✓ Text selection handler initialized');
+    logger.debug('CONTENT_SCRIPT', '[Content] ✓ Text selection handler initialized');
   } catch (error) {
-    console.error('[Content] Error initializing text selection handler:', error);
+    logger.error('CONTENT_SCRIPT', '[Content] Error initializing text selection handler:', error);
   }
 }
 
@@ -169,7 +170,7 @@ async function waitForPageReady(): Promise<void> {
  * This ensures detectImages() won't filter them out due to 0 width/height
  */
 async function waitForImagesToLoad(): Promise<void> {
-  console.log('[Content] Waiting for images to load...');
+  logger.debug('CONTENT_SCRIPT', '[Content] Waiting for images to load...');
 
   // Find main content area (same logic as imageDetectionService)
   const MAIN_CONTENT_SELECTORS = [
@@ -194,10 +195,10 @@ async function waitForImagesToLoad(): Promise<void> {
 
   // Get all images in main content
   const images = Array.from(mainContent.querySelectorAll('img'));
-  console.log('[Content] Found', images.length, 'images to wait for');
+  logger.debug('CONTENT_SCRIPT', '[Content] Found', images.length, 'images to wait for');
 
   if (images.length === 0) {
-    console.log('[Content] No images found, skipping wait');
+    logger.debug('CONTENT_SCRIPT', '[Content] No images found, skipping wait');
     return;
   }
 
@@ -212,7 +213,7 @@ async function waitForImagesToLoad(): Promise<void> {
 
       // Set up timeout (5 seconds per image)
       const timeout = setTimeout(() => {
-        console.log('[Content] Image load timeout:', img.src);
+        logger.debug('CONTENT_SCRIPT', '[Content] Image load timeout:', img.src);
         resolve(); // Resolve anyway to not block forever
       }, 5000);
 
@@ -225,7 +226,7 @@ async function waitForImagesToLoad(): Promise<void> {
       // Handle errors
       img.addEventListener('error', () => {
         clearTimeout(timeout);
-        console.log('[Content] Image load error:', img.src);
+        logger.debug('CONTENT_SCRIPT', '[Content] Image load error:', img.src);
         resolve(); // Resolve anyway to continue
       }, { once: true });
     });
@@ -233,7 +234,7 @@ async function waitForImagesToLoad(): Promise<void> {
 
   // Wait for all images (or timeouts)
   await Promise.all(imagePromises);
-  console.log('[Content] ✓ All images loaded or timed out');
+  logger.debug('CONTENT_SCRIPT', '[Content] ✓ All images loaded or timed out');
 }
 
 /**
@@ -243,20 +244,20 @@ async function waitForImagesToLoad(): Promise<void> {
  * IMPORTANT: Must be called AFTER page is fully loaded so images are ready
  */
 async function initializeImageButtonsForStoredPaper() {
-  console.log('[Content] Checking if image buttons should be initialized for stored paper...');
+  logger.debug('CONTENT_SCRIPT', '[Content] Checking if image buttons should be initialized for stored paper...');
 
   // Wait for page to be fully loaded
   await waitForPageReady();
-  console.log('[Content] Page fully loaded');
+  logger.debug('CONTENT_SCRIPT', '[Content] Page fully loaded');
 
   // CRITICAL: Wait for images to actually load their natural dimensions
   // Without this, detectImages() will filter them out as "too small"
   await waitForImagesToLoad();
-  console.log('[Content] Images fully loaded, proceeding with image button check');
+  logger.debug('CONTENT_SCRIPT', '[Content] Images fully loaded, proceeding with image button check');
 
   // Check if we have a current paper
   if (!currentPaper) {
-    console.log('[Content] No current paper, skipping image button initialization');
+    logger.debug('CONTENT_SCRIPT', '[Content] No current paper, skipping image button initialization');
     return;
   }
 
@@ -266,11 +267,11 @@ async function initializeImageButtonsForStoredPaper() {
 
   // If paper is stored and has chunks, initialize image buttons
   if (storedPaper && storedPaper.chunkCount && storedPaper.chunkCount > 0) {
-    console.log('[Content] Paper already chunked, initializing image buttons');
+    logger.debug('CONTENT_SCRIPT', '[Content] Paper already chunked, initializing image buttons');
     await imageExplanationHandler.initialize(storedPaper);
-    console.log('[Content] ✓ Image buttons initialized for already-chunked paper');
+    logger.debug('CONTENT_SCRIPT', '[Content] ✓ Image buttons initialized for already-chunked paper');
   } else {
-    console.log('[Content] Paper not yet chunked, image buttons will be initialized when chunking completes');
+    logger.debug('CONTENT_SCRIPT', '[Content] Paper not yet chunked, image buttons will be initialized when chunking completes');
   }
 }
 
@@ -303,11 +304,11 @@ async function initializeImageButtonsForStoredPaper() {
   // This waits for page load internally to ensure images are ready
   // MUST run BEFORE restoreTabs() so image states exist for tab restoration
   await initializeImageButtonsForStoredPaper();
-  console.log('[Content] ✓ Image buttons initialized');
+  logger.debug('CONTENT_SCRIPT', '[Content] ✓ Image buttons initialized');
 
   // Restore chatbox tabs (depends on image buttons being created first)
   await chatboxInjector.restoreTabs();
-  console.log('[Content] ✓ Tabs restored');
+  logger.debug('CONTENT_SCRIPT', '[Content] ✓ Tabs restored');
 
-  console.log('[Content] ✓ Content script initialized successfully');
+  logger.debug('CONTENT_SCRIPT', '[Content] ✓ Content script initialized successfully');
 })();

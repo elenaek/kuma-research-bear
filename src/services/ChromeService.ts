@@ -1,5 +1,6 @@
 import { MessageType, StoredPaper, QuestionAnswer, PaperAnalysisResult, GlossaryResult, ChatMessage, ImageExplanation } from '../types/index.ts';
 import { normalizeUrl } from '../utils/urlUtils.ts';
+import { logger } from '../utils/logger.ts';
 
 /**
  * ChromeService - Centralized service for all Chrome runtime messaging operations
@@ -23,7 +24,7 @@ export interface ChromeMessageResponse<T = any> {
  */
 export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
   const normalizedUrl = normalizeUrl(url);
-  console.log('[ChromeService] Requesting paper from background worker:', url, '(normalized:', normalizedUrl, ')');
+  logger.debug('SERVICE', '[ChromeService] Requesting paper from background worker:', url, '(normalized:', normalizedUrl, ')');
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -32,14 +33,14 @@ export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
     });
 
     if (response.success) {
-      console.log('[ChromeService] Paper retrieval result:', response.paper ? 'Found' : 'Not found');
+      logger.debug('SERVICE', '[ChromeService] Paper retrieval result:', response.paper ? 'Found' : 'Not found');
       return response.paper || null;
     } else {
-      console.error('[ChromeService] Failed to get paper:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to get paper:', response.error);
       return null;
     }
   } catch (error) {
-    console.error('[ChromeService] Error getting paper by URL:', error);
+    logger.error('SERVICE', '[ChromeService] Error getting paper by URL:', error);
     return null;
   }
 }
@@ -48,7 +49,7 @@ export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
  * Get all papers from IndexedDB
  */
 export async function getAllPapers(): Promise<StoredPaper[]> {
-  console.log('[ChromeService] Requesting all papers from background worker');
+  logger.debug('SERVICE', '[ChromeService] Requesting all papers from background worker');
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -57,14 +58,14 @@ export async function getAllPapers(): Promise<StoredPaper[]> {
     });
 
     if (response.success) {
-      console.log('[ChromeService] Retrieved', response.papers?.length || 0, 'papers');
+      logger.debug('SERVICE', '[ChromeService] Retrieved', response.papers?.length || 0, 'papers');
       return response.papers || [];
     } else {
-      console.error('[ChromeService] Failed to get all papers:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to get all papers:', response.error);
       return [];
     }
   } catch (error) {
-    console.error('[ChromeService] Error getting all papers:', error);
+    logger.error('SERVICE', '[ChromeService] Error getting all papers:', error);
     return [];
   }
 }
@@ -73,7 +74,7 @@ export async function getAllPapers(): Promise<StoredPaper[]> {
  * Update Q&A history for a paper in IndexedDB
  */
 export async function updatePaperQAHistory(paperId: string, qaHistory: QuestionAnswer[]): Promise<boolean> {
-  console.log('[ChromeService] Updating Q&A history for paper:', paperId);
+  logger.debug('SERVICE', '[ChromeService] Updating Q&A history for paper:', paperId);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -82,14 +83,14 @@ export async function updatePaperQAHistory(paperId: string, qaHistory: QuestionA
     });
 
     if (response.success) {
-      console.log('[ChromeService] Q&A history updated successfully');
+      logger.debug('SERVICE', '[ChromeService] Q&A history updated successfully');
       return true;
     } else {
-      console.error('[ChromeService] Failed to update Q&A history:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to update Q&A history:', response.error);
       return false;
     }
   } catch (error) {
-    console.error('[ChromeService] Error updating Q&A history:', error);
+    logger.error('SERVICE', '[ChromeService] Error updating Q&A history:', error);
     return false;
   }
 }
@@ -98,7 +99,7 @@ export async function updatePaperQAHistory(paperId: string, qaHistory: QuestionA
  * Delete a paper from IndexedDB
  */
 export async function deletePaper(paperId: string): Promise<boolean> {
-  console.log('[ChromeService] Deleting paper:', paperId);
+  logger.debug('SERVICE', '[ChromeService] Deleting paper:', paperId);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -107,14 +108,14 @@ export async function deletePaper(paperId: string): Promise<boolean> {
     });
 
     if (response.success) {
-      console.log('[ChromeService] Paper deleted successfully');
+      logger.debug('SERVICE', '[ChromeService] Paper deleted successfully');
       return true;
     } else {
-      console.error('[ChromeService] Failed to delete paper:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to delete paper:', response.error);
       return false;
     }
   } catch (error) {
-    console.error('[ChromeService] Error deleting paper:', error);
+    logger.error('SERVICE', '[ChromeService] Error deleting paper:', error);
     return false;
   }
 }
@@ -136,7 +137,7 @@ export async function storePaperInDB(
     metadata: { averageChunkSize?: number };
   }
 ): Promise<StorePaperResponse> {
-  console.log('[ChromeService] Storing paper in IndexedDB:', paper.title);
+  logger.debug('SERVICE', '[ChromeService] Storing paper in IndexedDB:', paper.title);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -145,14 +146,14 @@ export async function storePaperInDB(
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Paper stored successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Paper stored successfully');
       return { success: true, paper: response.paper };
     } else {
-      console.error('[ChromeService] Failed to store paper:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to store paper:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error storing paper:', error);
+    logger.error('SERVICE', '[ChromeService] Error storing paper:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -171,7 +172,7 @@ export interface AnalysisResponse {
  * Trigger paper analysis
  */
 export async function analyzePaper(paperUrl: string, tabId?: number): Promise<AnalysisResponse> {
-  console.log('[ChromeService] Starting paper analysis for:', paperUrl, 'tabId:', tabId);
+  logger.debug('SERVICE', '[ChromeService] Starting paper analysis for:', paperUrl, 'tabId:', tabId);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -180,14 +181,14 @@ export async function analyzePaper(paperUrl: string, tabId?: number): Promise<An
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Paper analysis completed successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Paper analysis completed successfully');
       return { success: true, analysis: response.analysis };
     } else {
-      console.error('[ChromeService] Analysis failed:', response.error);
+      logger.error('SERVICE', '[ChromeService] Analysis failed:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error triggering analysis:', error);
+    logger.error('SERVICE', '[ChromeService] Error triggering analysis:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -202,7 +203,7 @@ export interface GlossaryResponse {
  * Generate glossary for a paper
  */
 export async function generateGlossary(paperUrl: string, tabId?: number): Promise<GlossaryResponse> {
-  console.log('[ChromeService] Starting glossary generation for:', paperUrl, 'tabId:', tabId);
+  logger.debug('SERVICE', '[ChromeService] Starting glossary generation for:', paperUrl, 'tabId:', tabId);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -211,14 +212,14 @@ export async function generateGlossary(paperUrl: string, tabId?: number): Promis
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Glossary generated successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Glossary generated successfully');
       return { success: true, glossary: response.glossary };
     } else {
-      console.error('[ChromeService] Glossary generation failed:', response.error);
+      logger.error('SERVICE', '[ChromeService] Glossary generation failed:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error generating glossary:', error);
+    logger.error('SERVICE', '[ChromeService] Error generating glossary:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -233,7 +234,7 @@ export interface ExplanationResponse {
  * Generate explanation for a paper manually
  */
 export async function explainPaperManual(paperUrl: string, tabId?: number): Promise<ExplanationResponse> {
-  console.log('[ChromeService] Starting explanation generation for:', paperUrl, 'tabId:', tabId);
+  logger.debug('SERVICE', '[ChromeService] Starting explanation generation for:', paperUrl, 'tabId:', tabId);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -242,14 +243,14 @@ export async function explainPaperManual(paperUrl: string, tabId?: number): Prom
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Explanation generated successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Explanation generated successfully');
       return { success: true, explanation: response.explanation };
     } else {
-      console.error('[ChromeService] Explanation generation failed:', response.error);
+      logger.error('SERVICE', '[ChromeService] Explanation generation failed:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error generating explanation:', error);
+    logger.error('SERVICE', '[ChromeService] Error generating explanation:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -264,7 +265,7 @@ export interface SummaryResponse {
  * Generate summary for a paper manually
  */
 export async function generateSummaryManual(paperUrl: string, tabId?: number): Promise<SummaryResponse> {
-  console.log('[ChromeService] Starting summary generation for:', paperUrl, 'tabId:', tabId);
+  logger.debug('SERVICE', '[ChromeService] Starting summary generation for:', paperUrl, 'tabId:', tabId);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -273,14 +274,14 @@ export async function generateSummaryManual(paperUrl: string, tabId?: number): P
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Summary generated successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Summary generated successfully');
       return { success: true, summary: response.summary };
     } else {
-      console.error('[ChromeService] Summary generation failed:', response.error);
+      logger.error('SERVICE', '[ChromeService] Summary generation failed:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error generating summary:', error);
+    logger.error('SERVICE', '[ChromeService] Error generating summary:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -295,7 +296,7 @@ export interface QuestionResponse {
  * Ask a question about a paper
  */
 export async function askQuestion(paperUrl: string, question: string): Promise<QuestionResponse> {
-  console.log('[ChromeService] Asking question:', question);
+  logger.debug('SERVICE', '[ChromeService] Asking question:', question);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -307,14 +308,14 @@ export async function askQuestion(paperUrl: string, question: string): Promise<Q
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Question answered successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Question answered successfully');
       return { success: true, answer: response.answer };
     } else {
-      console.error('[ChromeService] Question answering failed:', response.error);
+      logger.error('SERVICE', '[ChromeService] Question answering failed:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error asking question:', error);
+    logger.error('SERVICE', '[ChromeService] Error asking question:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -333,7 +334,7 @@ export interface OperationStateResponse {
  * Get current operation state for a tab
  */
 export async function getOperationState(tabId: number): Promise<OperationStateResponse> {
-  console.log('[ChromeService] Getting operation state for tab:', tabId);
+  logger.debug('SERVICE', '[ChromeService] Getting operation state for tab:', tabId);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -342,14 +343,14 @@ export async function getOperationState(tabId: number): Promise<OperationStateRe
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Operation state retrieved successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Operation state retrieved successfully');
       return { success: true, state: response.state };
     } else {
-      console.error('[ChromeService] Failed to get operation state:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to get operation state:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error getting operation state:', error);
+    logger.error('SERVICE', '[ChromeService] Error getting operation state:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -359,7 +360,7 @@ export async function getOperationState(tabId: number): Promise<OperationStateRe
  * Used by sidepanel which tracks papers independently of tabs
  */
 export async function getOperationStateByPaper(paperUrl: string): Promise<OperationStateResponse> {
-  console.log('[ChromeService] Getting operation state for paper:', paperUrl);
+  logger.debug('SERVICE', '[ChromeService] Getting operation state for paper:', paperUrl);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -368,14 +369,14 @@ export async function getOperationStateByPaper(paperUrl: string): Promise<Operat
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Operation state retrieved for paper');
+      logger.debug('SERVICE', '[ChromeService] ✓ Operation state retrieved for paper');
       return { success: true, state: response.state };
     } else {
-      console.error('[ChromeService] Failed to get operation state by paper:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to get operation state by paper:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error getting operation state by paper:', error);
+    logger.error('SERVICE', '[ChromeService] Error getting operation state by paper:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -393,7 +394,7 @@ export interface ExplainPaperResponse {
  * Request explanation for a paper
  */
 export async function explainPaper(paper: any): Promise<ExplainPaperResponse> {
-  console.log('[ChromeService] Requesting paper explanation for:', paper.title);
+  logger.debug('SERVICE', '[ChromeService] Requesting paper explanation for:', paper.title);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -402,14 +403,14 @@ export async function explainPaper(paper: any): Promise<ExplainPaperResponse> {
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Paper explanation requested successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Paper explanation requested successfully');
       return { success: true };
     } else {
-      console.error('[ChromeService] Paper explanation request failed:', response.error);
+      logger.error('SERVICE', '[ChromeService] Paper explanation request failed:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error requesting paper explanation:', error);
+    logger.error('SERVICE', '[ChromeService] Error requesting paper explanation:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -423,7 +424,7 @@ export interface DetectAndExplainResponse {
  * Start the detect and explain flow for a tab
  */
 export async function startDetectAndExplain(tabId: number): Promise<DetectAndExplainResponse> {
-  console.log('[ChromeService] Starting detect and explain for tab:', tabId);
+  logger.debug('SERVICE', '[ChromeService] Starting detect and explain for tab:', tabId);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -432,14 +433,14 @@ export async function startDetectAndExplain(tabId: number): Promise<DetectAndExp
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Detect and explain started successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Detect and explain started successfully');
       return { success: true };
     } else {
-      console.error('[ChromeService] Detect and explain failed:', response.error);
+      logger.error('SERVICE', '[ChromeService] Detect and explain failed:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error starting detect and explain:', error);
+    logger.error('SERVICE', '[ChromeService] Error starting detect and explain:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -449,7 +450,7 @@ export async function startDetectAndExplain(tabId: number): Promise<DetectAndExp
  */
 export async function isPaperStoredInDB(url: string): Promise<boolean> {
   const normalizedUrl = normalizeUrl(url);
-  console.log('[ChromeService] Checking if paper is stored:', url, '(normalized:', normalizedUrl, ')');
+  logger.debug('SERVICE', '[ChromeService] Checking if paper is stored:', url, '(normalized:', normalizedUrl, ')');
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -458,14 +459,14 @@ export async function isPaperStoredInDB(url: string): Promise<boolean> {
     });
 
     if (response.success) {
-      console.log('[ChromeService] Paper stored check result:', response.isStored);
+      logger.debug('SERVICE', '[ChromeService] Paper stored check result:', response.isStored);
       return response.isStored || false;
     } else {
-      console.error('[ChromeService] Failed to check paper storage:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to check paper storage:', response.error);
       return false;
     }
   } catch (error) {
-    console.error('[ChromeService] Error checking paper storage:', error);
+    logger.error('SERVICE', '[ChromeService] Error checking paper storage:', error);
     return false;
   }
 }
@@ -487,7 +488,7 @@ export interface PaperStatusInfo {
  */
 export async function getPaperStatus(url: string): Promise<PaperStatusInfo> {
   const normalizedUrl = normalizeUrl(url);
-  console.log('[ChromeService] Getting paper status for:', url, '(normalized:', normalizedUrl, ')');
+  logger.debug('SERVICE', '[ChromeService] Getting paper status for:', url, '(normalized:', normalizedUrl, ')');
 
   try {
     const paper = await getPaperByUrl(normalizedUrl);
@@ -526,7 +527,7 @@ export async function getPaperStatus(url: string): Promise<PaperStatusInfo> {
       completionPercentage,
     };
   } catch (error) {
-    console.error('[ChromeService] Error getting paper status:', error);
+    logger.error('SERVICE', '[ChromeService] Error getting paper status:', error);
     return {
       isStored: false,
       hasExplanation: false,
@@ -560,7 +561,7 @@ export interface AIStatusResponse {
  * Check AI status and capabilities
  */
 export async function checkAIStatus(): Promise<AIStatusResponse> {
-  console.log('[ChromeService] Checking AI status');
+  logger.debug('SERVICE', '[ChromeService] Checking AI status');
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -569,7 +570,7 @@ export async function checkAIStatus(): Promise<AIStatusResponse> {
 
     if (response) {
       const capabilities = response.capabilities || { availability: 'no' };
-      console.log('[ChromeService] AI status retrieved:', capabilities.availability);
+      logger.debug('SERVICE', '[ChromeService] AI status retrieved:', capabilities.availability);
       return {
         success: true,
         capabilities,
@@ -577,11 +578,11 @@ export async function checkAIStatus(): Promise<AIStatusResponse> {
         currentDownloadingModel: response.currentDownloadingModel
       };
     } else {
-      console.error('[ChromeService] Failed to check AI status');
+      logger.error('SERVICE', '[ChromeService] Failed to check AI status');
       return { success: false, error: 'No response from background' };
     }
   } catch (error) {
-    console.error('[ChromeService] Error checking AI status:', error);
+    logger.error('SERVICE', '[ChromeService] Error checking AI status:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -596,7 +597,7 @@ export interface AIInitResponse {
  * Initialize AI
  */
 export async function initializeAI(): Promise<AIInitResponse> {
-  console.log('[ChromeService] Initializing AI');
+  logger.debug('SERVICE', '[ChromeService] Initializing AI');
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -604,14 +605,14 @@ export async function initializeAI(): Promise<AIInitResponse> {
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ AI initialized successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ AI initialized successfully');
       return { success: true, message: response.message };
     } else {
-      console.error('[ChromeService] AI initialization failed:', response.message);
+      logger.error('SERVICE', '[ChromeService] AI initialization failed:', response.message);
       return { success: false, error: response.message };
     }
   } catch (error) {
-    console.error('[ChromeService] Error initializing AI:', error);
+    logger.error('SERVICE', '[ChromeService] Error initializing AI:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -620,7 +621,7 @@ export async function initializeAI(): Promise<AIInitResponse> {
  * Reset AI
  */
 export async function resetAI(): Promise<AIInitResponse> {
-  console.log('[ChromeService] Resetting AI');
+  logger.debug('SERVICE', '[ChromeService] Resetting AI');
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -628,14 +629,14 @@ export async function resetAI(): Promise<AIInitResponse> {
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ AI reset successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ AI reset successfully');
       return { success: true, message: response.message };
     } else {
-      console.error('[ChromeService] AI reset failed:', response.message);
+      logger.error('SERVICE', '[ChromeService] AI reset failed:', response.message);
       return { success: false, error: response.message };
     }
   } catch (error) {
-    console.error('[ChromeService] Error resetting AI:', error);
+    logger.error('SERVICE', '[ChromeService] Error resetting AI:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -648,7 +649,7 @@ export async function resetAI(): Promise<AIInitResponse> {
  * Check if the sidepanel is currently open
  */
 export async function isSidepanelOpen(): Promise<boolean> {
-  console.log('[ChromeService] Checking if sidepanel is open');
+  logger.debug('SERVICE', '[ChromeService] Checking if sidepanel is open');
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -656,10 +657,10 @@ export async function isSidepanelOpen(): Promise<boolean> {
     });
 
     const isOpen = response?.isOpen || false;
-    console.log('[ChromeService] Sidepanel open status:', isOpen);
+    logger.debug('SERVICE', '[ChromeService] Sidepanel open status:', isOpen);
     return isOpen;
   } catch (error) {
-    console.error('[ChromeService] Error checking sidepanel status:', error);
+    logger.error('SERVICE', '[ChromeService] Error checking sidepanel status:', error);
     return false;
   }
 }
@@ -668,16 +669,16 @@ export async function isSidepanelOpen(): Promise<boolean> {
  * Navigate the sidepanel to a specific paper by URL
  */
 export async function navigateSidepanelToPaper(url: string): Promise<void> {
-  console.log('[ChromeService] Navigating sidepanel to paper:', url);
+  logger.debug('SERVICE', '[ChromeService] Navigating sidepanel to paper:', url);
 
   try {
     await chrome.runtime.sendMessage({
       type: MessageType.NAVIGATE_TO_PAPER,
       payload: { url },
     });
-    console.log('[ChromeService] ✓ Navigation message sent');
+    logger.debug('SERVICE', '[ChromeService] ✓ Navigation message sent');
   } catch (error) {
-    console.error('[ChromeService] Error navigating sidepanel:', error);
+    logger.error('SERVICE', '[ChromeService] Error navigating sidepanel:', error);
   }
 }
 
@@ -695,7 +696,7 @@ export interface SendChatMessageResponse {
  * Returns immediately - streaming responses are sent via CHAT_STREAM_CHUNK messages
  */
 export async function sendChatMessage(paperUrl: string, message: string): Promise<SendChatMessageResponse> {
-  console.log('[ChromeService] Sending chat message:', message);
+  logger.debug('SERVICE', '[ChromeService] Sending chat message:', message);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -707,14 +708,14 @@ export async function sendChatMessage(paperUrl: string, message: string): Promis
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Chat message sent successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Chat message sent successfully');
       return { success: true };
     } else {
-      console.error('[ChromeService] Chat message failed:', response.error);
+      logger.error('SERVICE', '[ChromeService] Chat message failed:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error sending chat message:', error);
+    logger.error('SERVICE', '[ChromeService] Error sending chat message:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -728,7 +729,7 @@ export interface UpdateChatHistoryResponse {
  * Update chat history for a paper in IndexedDB
  */
 export async function updateChatHistory(paperUrl: string, chatHistory: ChatMessage[]): Promise<UpdateChatHistoryResponse> {
-  console.log('[ChromeService] Updating chat history for paper:', paperUrl);
+  logger.debug('SERVICE', '[ChromeService] Updating chat history for paper:', paperUrl);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -737,14 +738,14 @@ export async function updateChatHistory(paperUrl: string, chatHistory: ChatMessa
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Chat history updated successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Chat history updated successfully');
       return { success: true };
     } else {
-      console.error('[ChromeService] Failed to update chat history:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to update chat history:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error updating chat history:', error);
+    logger.error('SERVICE', '[ChromeService] Error updating chat history:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -759,7 +760,7 @@ export interface GetChatHistoryResponse {
  * Get chat history for a paper from IndexedDB
  */
 export async function getChatHistory(paperUrl: string): Promise<GetChatHistoryResponse> {
-  console.log('[ChromeService] Getting chat history for paper:', paperUrl);
+  logger.debug('SERVICE', '[ChromeService] Getting chat history for paper:', paperUrl);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -768,14 +769,14 @@ export async function getChatHistory(paperUrl: string): Promise<GetChatHistoryRe
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Chat history retrieved successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Chat history retrieved successfully');
       return { success: true, chatHistory: response.chatHistory || [] };
     } else {
-      console.error('[ChromeService] Failed to get chat history:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to get chat history:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error getting chat history:', error);
+    logger.error('SERVICE', '[ChromeService] Error getting chat history:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -784,7 +785,7 @@ export async function getChatHistory(paperUrl: string): Promise<GetChatHistoryRe
  * Clear chat history for a paper
  */
 export async function clearChatHistory(paperUrl: string): Promise<UpdateChatHistoryResponse> {
-  console.log('[ChromeService] Clearing chat history for paper:', paperUrl);
+  logger.debug('SERVICE', '[ChromeService] Clearing chat history for paper:', paperUrl);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -793,14 +794,14 @@ export async function clearChatHistory(paperUrl: string): Promise<UpdateChatHist
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Chat history cleared successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Chat history cleared successfully');
       return { success: true };
     } else {
-      console.error('[ChromeService] Failed to clear chat history:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to clear chat history:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error clearing chat history:', error);
+    logger.error('SERVICE', '[ChromeService] Error clearing chat history:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -824,7 +825,7 @@ export async function sendImageChatMessage(
   imageBlob: Blob,
   message: string
 ): Promise<SendImageChatMessageResponse> {
-  console.log('[ChromeService] Sending image chat message:', message);
+  logger.debug('SERVICE', '[ChromeService] Sending image chat message:', message);
 
   try {
     // Convert Blob to Base64 for Chrome messaging (Chrome uses JSON serialization, not structured cloning)
@@ -841,7 +842,7 @@ export async function sendImageChatMessage(
     }
     const imageDataBase64 = btoa(binaryString);
 
-    console.log('[ChromeService] Converted blob to Base64:', imageDataBase64.length, 'chars, type:', imageMimeType);
+    logger.debug('SERVICE', '[ChromeService] Converted blob to Base64:', imageDataBase64.length, 'chars, type:', imageMimeType);
 
     const response = await chrome.runtime.sendMessage({
       type: MessageType.IMAGE_CHAT_MESSAGE,
@@ -855,14 +856,14 @@ export async function sendImageChatMessage(
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Image chat message sent successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Image chat message sent successfully');
       return { success: true };
     } else {
-      console.error('[ChromeService] Image chat message failed:', response.error);
+      logger.error('SERVICE', '[ChromeService] Image chat message failed:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error sending image chat message:', error);
+    logger.error('SERVICE', '[ChromeService] Error sending image chat message:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -880,7 +881,7 @@ export async function getImageChatHistory(
   paperId: string,
   imageUrl: string
 ): Promise<GetImageChatHistoryResponse> {
-  console.log('[ChromeService] Getting image chat history for image:', imageUrl);
+  logger.debug('SERVICE', '[ChromeService] Getting image chat history for image:', imageUrl);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -889,14 +890,14 @@ export async function getImageChatHistory(
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Image chat history retrieved successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Image chat history retrieved successfully');
       return { success: true, chatHistory: response.chatHistory || [] };
     } else {
-      console.error('[ChromeService] Failed to get image chat history:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to get image chat history:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error getting image chat history:', error);
+    logger.error('SERVICE', '[ChromeService] Error getting image chat history:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -914,7 +915,7 @@ export async function updateImageChatHistory(
   imageUrl: string,
   chatHistory: ChatMessage[]
 ): Promise<UpdateImageChatHistoryResponse> {
-  console.log('[ChromeService] Updating image chat history for image:', imageUrl);
+  logger.debug('SERVICE', '[ChromeService] Updating image chat history for image:', imageUrl);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -923,14 +924,14 @@ export async function updateImageChatHistory(
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Image chat history updated successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Image chat history updated successfully');
       return { success: true };
     } else {
-      console.error('[ChromeService] Failed to update image chat history:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to update image chat history:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error updating image chat history:', error);
+    logger.error('SERVICE', '[ChromeService] Error updating image chat history:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -942,7 +943,7 @@ export async function clearImageChatHistory(
   paperId: string,
   imageUrl: string
 ): Promise<UpdateImageChatHistoryResponse> {
-  console.log('[ChromeService] Clearing image chat history for image:', imageUrl);
+  logger.debug('SERVICE', '[ChromeService] Clearing image chat history for image:', imageUrl);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -951,14 +952,14 @@ export async function clearImageChatHistory(
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Image chat history cleared successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Image chat history cleared successfully');
       return { success: true };
     } else {
-      console.error('[ChromeService] Failed to clear image chat history:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to clear image chat history:', response.error);
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[ChromeService] Error clearing image chat history:', error);
+    logger.error('SERVICE', '[ChromeService] Error clearing image chat history:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -967,7 +968,7 @@ export async function clearImageChatHistory(
  * Toggle the chatbox visibility (content script)
  */
 export async function toggleChatbox(tabId?: number): Promise<void> {
-  console.log('[ChromeService] Toggling chatbox');
+  logger.debug('SERVICE', '[ChromeService] Toggling chatbox');
 
   try {
     if (tabId) {
@@ -983,9 +984,9 @@ export async function toggleChatbox(tabId?: number): Promise<void> {
         });
       }
     }
-    console.log('[ChromeService] ✓ Chatbox toggle message sent');
+    logger.debug('SERVICE', '[ChromeService] ✓ Chatbox toggle message sent');
   } catch (error) {
-    console.error('[ChromeService] Error toggling chatbox:', error);
+    logger.error('SERVICE', '[ChromeService] Error toggling chatbox:', error);
   }
 }
 
@@ -993,7 +994,7 @@ export async function toggleChatbox(tabId?: number): Promise<void> {
  * Get the current chatbox state (open/closed) from content script
  */
 export async function getChatboxState(tabId?: number): Promise<boolean> {
-  console.log('[ChromeService] Getting chatbox state');
+  logger.debug('SERVICE', '[ChromeService] Getting chatbox state');
 
   try {
     let response;
@@ -1010,10 +1011,10 @@ export async function getChatboxState(tabId?: number): Promise<boolean> {
         });
       }
     }
-    console.log('[ChromeService] ✓ Chatbox state received:', response?.isOpen);
+    logger.debug('SERVICE', '[ChromeService] ✓ Chatbox state received:', response?.isOpen);
     return response?.isOpen || false;
   } catch (error) {
-    console.error('[ChromeService] Error getting chatbox state:', error);
+    logger.error('SERVICE', '[ChromeService] Error getting chatbox state:', error);
     return false;
   }
 }
@@ -1055,7 +1056,7 @@ export async function storeImageExplanation(
   explanation: string,
   imageHash?: string
 ): Promise<StoreImageExplanationResponse> {
-  console.log('[ChromeService] Storing image explanation for:', imageUrl);
+  logger.debug('SERVICE', '[ChromeService] Storing image explanation for:', imageUrl);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -1064,14 +1065,14 @@ export async function storeImageExplanation(
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Image explanation stored successfully');
+      logger.debug('SERVICE', '[ChromeService] ✓ Image explanation stored successfully');
       return response;
     } else {
-      console.error('[ChromeService] Failed to store image explanation:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to store image explanation:', response.error);
       return response;
     }
   } catch (error) {
-    console.error('[ChromeService] Error storing image explanation:', error);
+    logger.error('SERVICE', '[ChromeService] Error storing image explanation:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -1083,7 +1084,7 @@ export async function getImageExplanation(
   paperId: string,
   imageUrl: string
 ): Promise<GetImageExplanationResponse> {
-  console.log('[ChromeService] Getting image explanation for:', imageUrl);
+  logger.debug('SERVICE', '[ChromeService] Getting image explanation for:', imageUrl);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -1092,14 +1093,14 @@ export async function getImageExplanation(
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Image explanation retrieved');
+      logger.debug('SERVICE', '[ChromeService] ✓ Image explanation retrieved');
       return response;
     } else {
-      console.error('[ChromeService] Failed to get image explanation:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to get image explanation:', response.error);
       return response;
     }
   } catch (error) {
-    console.error('[ChromeService] Error getting image explanation:', error);
+    logger.error('SERVICE', '[ChromeService] Error getting image explanation:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -1110,7 +1111,7 @@ export async function getImageExplanation(
 export async function getImageExplanationsByPaper(
   paperId: string
 ): Promise<GetImageExplanationsByPaperResponse> {
-  console.log('[ChromeService] Getting all image explanations for paper:', paperId);
+  logger.debug('SERVICE', '[ChromeService] Getting all image explanations for paper:', paperId);
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -1119,14 +1120,14 @@ export async function getImageExplanationsByPaper(
     });
 
     if (response.success) {
-      console.log('[ChromeService] ✓ Retrieved', response.explanations?.length || 0, 'image explanations');
+      logger.debug('SERVICE', '[ChromeService] ✓ Retrieved', response.explanations?.length || 0, 'image explanations');
       return response;
     } else {
-      console.error('[ChromeService] Failed to get image explanations:', response.error);
+      logger.error('SERVICE', '[ChromeService] Failed to get image explanations:', response.error);
       return response;
     }
   } catch (error) {
-    console.error('[ChromeService] Error getting image explanations:', error);
+    logger.error('SERVICE', '[ChromeService] Error getting image explanations:', error);
     return { success: false, error: String(error), explanations: [] };
   }
 }

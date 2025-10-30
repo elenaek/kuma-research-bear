@@ -8,6 +8,7 @@
 
 import { StoredPaper } from '../../types/paper';
 import { normalizeUrl } from '../../utils/urlUtils.ts';
+import { logger } from '../../utils/logger.ts';
 
 class TabPaperTracker {
   // Map: tabId -> paper URL
@@ -38,8 +39,8 @@ class TabPaperTracker {
     }
     this.paperToTabs.get(normalizedUrl)!.add(tabId);
 
-    console.log(`[TabPaperTracker] Registered tab ${tabId} -> paper ${normalizedUrl}`);
-    console.log(`[TabPaperTracker] Paper ${normalizedUrl} now in tabs:`, Array.from(this.paperToTabs.get(normalizedUrl)!));
+    logger.debug('BACKGROUND_SCRIPT', `[TabPaperTracker] Registered tab ${tabId} -> paper ${normalizedUrl}`);
+    logger.debug('BACKGROUND_SCRIPT', `[TabPaperTracker] Paper ${normalizedUrl} now in tabs:`, Array.from(this.paperToTabs.get(normalizedUrl)!));
   }
 
   /**
@@ -55,14 +56,14 @@ class TabPaperTracker {
       tabSet.delete(tabId);
       if (tabSet.size === 0) {
         this.paperToTabs.delete(paperUrl);
-        console.log(`[TabPaperTracker] No more tabs viewing paper ${paperUrl}`);
+        logger.debug('BACKGROUND_SCRIPT', `[TabPaperTracker] No more tabs viewing paper ${paperUrl}`);
       }
     }
 
     // Remove from tab -> paper mapping
     this.tabToPaper.delete(tabId);
 
-    console.log(`[TabPaperTracker] Unregistered tab ${tabId}`);
+    logger.debug('BACKGROUND_SCRIPT', `[TabPaperTracker] Unregistered tab ${tabId}`);
   }
 
   /**
@@ -138,7 +139,7 @@ class TabPaperTracker {
     const tabSet = this.paperToTabs.get(normalizedUrl);
 
     if (!tabSet) {
-      console.log(`[TabPaperTracker] No tabs viewing paper ${normalizedUrl}`);
+      logger.debug('BACKGROUND_SCRIPT', `[TabPaperTracker] No tabs viewing paper ${normalizedUrl}`);
       return 0;
     }
 
@@ -152,7 +153,7 @@ class TabPaperTracker {
     // Remove paper -> tabs mapping
     this.paperToTabs.delete(normalizedUrl);
 
-    console.log(`[TabPaperTracker] Cleared paper ${normalizedUrl} from ${tabIds.length} tab(s):`, tabIds);
+    logger.debug('BACKGROUND_SCRIPT', `[TabPaperTracker] Cleared paper ${normalizedUrl} from ${tabIds.length} tab(s):`, tabIds);
     return tabIds.length;
   }
 
@@ -164,7 +165,7 @@ class TabPaperTracker {
     if (existed) {
       const paperUrl = this.paperIdToUrl.get(paperId);
       this.paperIdToUrl.delete(paperId);
-      console.log(`[TabPaperTracker] Removed paper ID mapping: ${paperId} -> ${paperUrl}`);
+      logger.debug('BACKGROUND_SCRIPT', `[TabPaperTracker] Removed paper ID mapping: ${paperId} -> ${paperUrl}`);
     }
     return existed;
   }

@@ -8,6 +8,7 @@ import {
   SimilarityScore,
   getOptimalDtype,
 } from '../types/embedding.ts';
+import { logger } from './logger.ts';
 
 /**
  * EmbeddingService: Manages EmbeddingGemma model for semantic search
@@ -63,7 +64,7 @@ class EmbeddingService {
         device: this.device ?? undefined,  // Include backend device if loaded
       };
     } catch (error) {
-      console.error('[Embedding] Error checking availability:', error);
+      logger.error('EMBEDDINGS', '[Embedding] Error checking availability:', error);
       return {
         available: false,
         status: 'unavailable',
@@ -114,34 +115,34 @@ class EmbeddingService {
         try {
           // Check if WebGPU API exists and actually works
           if (typeof navigator !== 'undefined' && 'gpu' in navigator && navigator.gpu) {
-            console.log('[Embedding] WebGPU API detected, testing adapter...');
+            logger.debug('EMBEDDINGS', '[Embedding] WebGPU API detected, testing adapter...');
             const adapter = await navigator.gpu.requestAdapter();
 
             if (adapter) {
               targetDevice = 'webgpu';
-              console.log('[Embedding] ✓ WebGPU adapter available, will attempt GPU acceleration');
+              logger.debug('EMBEDDINGS', '[Embedding] ✓ WebGPU adapter available, will attempt GPU acceleration');
             } else {
-              console.log('[Embedding] WebGPU adapter request failed, using WASM backend');
+              logger.debug('EMBEDDINGS', '[Embedding] WebGPU adapter request failed, using WASM backend');
             }
           } else {
-            console.log('[Embedding] WebGPU not available, using WASM backend');
+            logger.debug('EMBEDDINGS', '[Embedding] WebGPU not available, using WASM backend');
           }
         } catch (e) {
-          console.log('[Embedding] Error testing WebGPU adapter, falling back to WASM:', e);
+          logger.debug('EMBEDDINGS', '[Embedding] Error testing WebGPU adapter, falling back to WASM:', e);
         }
 
         // Select optimal dtype for the target device
         const optimalDtype = getOptimalDtype(targetDevice);
-        console.log(`[Embedding] 📦 Loading model with ${optimalDtype} quantization for ${targetDevice.toUpperCase()}`);
-        console.log(`[Embedding] Model ID: ${this.config.modelId}`);
+        logger.debug('EMBEDDINGS', `[Embedding] 📦 Loading model with ${optimalDtype} quantization for ${targetDevice.toUpperCase()}`);
+        logger.debug('EMBEDDINGS', `[Embedding] Model ID: ${this.config.modelId}`);
 
         // Estimated model sizes: fp32 (~300MB) for WebGPU, q4 (~80MB) for WASM
         const estimatedSize = optimalDtype === 'fp32' ? '~300MB' : '~80MB';
-        console.log(`[Embedding] Estimated download size: ${estimatedSize}`);
+        logger.debug('EMBEDDINGS', `[Embedding] Estimated download size: ${estimatedSize}`);
 
         // Try loading with optimal settings for detected backend
         try {
-          console.log(`[Embedding] ⏳ Downloading and initializing model... (this may take a minute)`);
+          logger.debug('EMBEDDINGS', `[Embedding] ⏳ Downloading and initializing model... (this may take a minute)`);
 
           // Track all file downloads for cumulative progress
           const fileProgress: Record<string, { loaded: number; total: number }> = {};
@@ -155,7 +156,7 @@ class EmbeddingService {
                 const percent = progress.loaded && progress.total
                   ? ((progress.loaded / progress.total) * 100).toFixed(1)
                   : '?';
-                console.log(`[Embedding] 📥 Downloading ${progress.file}: ${percent}%`);
+                logger.debug('EMBEDDINGS', `[Embedding] 📥 Downloading ${progress.file}: ${percent}%`);
 
                 // Track progress for all files (not just onnx files)
                 if (progress.file && progress.loaded !== undefined && progress.total !== undefined) {
@@ -177,7 +178,7 @@ class EmbeddingService {
                   // Map embedding progress to 80-100% of combined progress
                   const combinedProgress = 80 + (cumulativeProgress * 20);
 
-                  console.log(`[Embedding] Overall progress: ${(cumulativeProgress * 100).toFixed(1)}% (${totalLoaded}/${totalSize} bytes across ${Object.keys(fileProgress).length} files)`);
+                  logger.debug('EMBEDDINGS', `[Embedding] Overall progress: ${(cumulativeProgress * 100).toFixed(1)}% (${totalLoaded}/${totalSize} bytes across ${Object.keys(fileProgress).length} files)`);
 
                   chrome.runtime.sendMessage({
                     type: 'MODEL_DOWNLOAD_PROGRESS',
@@ -191,22 +192,22 @@ class EmbeddingService {
                   });
                 }
               } else if (progress.status === 'done') {
-                console.log(`[Embedding] ✓ Downloaded ${progress.file}`);
+                logger.debug('EMBEDDINGS', `[Embedding] ✓ Downloaded ${progress.file}`);
               }
             },
           });
 
           this.device = targetDevice;
           this.status = 'ready';
-          console.log(`[Embedding] ✅ Model loaded successfully with ${targetDevice.toUpperCase()} backend (${optimalDtype})`);
-          console.log(`[Embedding] 🚀 Ready for inference!`);
+          logger.debug('EMBEDDINGS', `[Embedding] ✅ Model loaded successfully with ${targetDevice.toUpperCase()} backend (${optimalDtype})`);
+          logger.debug('EMBEDDINGS', `[Embedding] 🚀 Ready for inference!`);
         } catch (modelError) {
           // If WebGPU fails, fallback to WASM with q4
           if (targetDevice === 'webgpu') {
-            console.warn('[Embedding] ❌ WebGPU model loading failed, falling back to WASM:', modelError);
+            logger.warn('EMBEDDINGS', '[Embedding] ❌ WebGPU model loading failed, falling back to WASM:', modelError);
 
             const wasmDtype = getOptimalDtype('wasm');
-            console.log(`[Embedding] 🔄 Retrying with WASM backend (${wasmDtype})...`);
+            logger.debug('EMBEDDINGS', `[Embedding] 🔄 Retrying with WASM backend (${wasmDtype})...`);
 
             // Track all file downloads for cumulative progress (fallback path)
             const fileProgressFallback: Record<string, { loaded: number; total: number }> = {};
@@ -219,7 +220,7 @@ class EmbeddingService {
                   const percent = progress.loaded && progress.total
                     ? ((progress.loaded / progress.total) * 100).toFixed(1)
                     : '?';
-                  console.log(`[Embedding] 📥 Downloading ${progress.file}: ${percent}%`);
+                  logger.debug('EMBEDDINGS', `[Embedding] 📥 Downloading ${progress.file}: ${percent}%`);
 
                   // Track progress for all files (fallback path)
                   if (progress.file && progress.loaded !== undefined && progress.total !== undefined) {
@@ -241,7 +242,7 @@ class EmbeddingService {
                     // Map embedding progress to 80-100% of combined progress
                     const combinedProgress = 80 + (cumulativeProgress * 20);
 
-                    console.log(`[Embedding] Overall progress: ${(cumulativeProgress * 100).toFixed(1)}% (${totalLoaded}/${totalSize} bytes across ${Object.keys(fileProgressFallback).length} files)`);
+                    logger.debug('EMBEDDINGS', `[Embedding] Overall progress: ${(cumulativeProgress * 100).toFixed(1)}% (${totalLoaded}/${totalSize} bytes across ${Object.keys(fileProgressFallback).length} files)`);
 
                     chrome.runtime.sendMessage({
                       type: 'MODEL_DOWNLOAD_PROGRESS',
@@ -255,21 +256,21 @@ class EmbeddingService {
                     });
                   }
                 } else if (progress.status === 'done') {
-                  console.log(`[Embedding] ✓ Downloaded ${progress.file}`);
+                  logger.debug('EMBEDDINGS', `[Embedding] ✓ Downloaded ${progress.file}`);
                 }
               },
             });
 
             this.device = 'wasm';
             this.status = 'ready';
-            console.log(`[Embedding] ✅ Model loaded successfully with WASM backend (${wasmDtype}, fallback)`);
+            logger.debug('EMBEDDINGS', `[Embedding] ✅ Model loaded successfully with WASM backend (${wasmDtype}, fallback)`);
           } else {
             throw modelError;
           }
         }
       } catch (error) {
         this.status = 'error';
-        console.error('[Embedding] Failed to load model:', error);
+        logger.error('EMBEDDINGS', '[Embedding] Failed to load model:', error);
         throw error;
       }
     })();
@@ -317,7 +318,7 @@ class EmbeddingService {
 
       return embedding;
     } catch (error) {
-      console.error('[Embedding] Error generating embedding:', error);
+      logger.error('EMBEDDINGS', '[Embedding] Error generating embedding:', error);
       throw error;
     }
   }
@@ -364,7 +365,7 @@ class EmbeddingService {
 
       return embeddings;
     } catch (error) {
-      console.error('[Embedding] Error generating batch embeddings:', error);
+      logger.error('EMBEDDINGS', '[Embedding] Error generating batch embeddings:', error);
       throw error;
     }
   }
@@ -468,7 +469,7 @@ class EmbeddingService {
 
     // If model is loaded and config changed, reload
     if (this.status === 'ready' && JSON.stringify(oldConfig) !== JSON.stringify(this.config)) {
-      console.log('[Embedding] Config changed, reloading model...');
+      logger.debug('EMBEDDINGS', '[Embedding] Config changed, reloading model...');
       this.unloadModel();
       await this.loadModel();
     }
@@ -483,7 +484,7 @@ class EmbeddingService {
     this.status = 'not-loaded';
     this.loadPromise = null;
     this.device = null;
-    console.log('[Embedding] Model unloaded');
+    logger.debug('EMBEDDINGS', '[Embedding] Model unloaded');
   }
 }
 

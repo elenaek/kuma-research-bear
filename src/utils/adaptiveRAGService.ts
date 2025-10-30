@@ -6,6 +6,7 @@
 
 import { inputQuotaService } from './inputQuotaService.ts';
 import { getPaperById } from './dbService.ts';
+import { logger } from './logger.ts';
 
 /**
  * Get optimal number of RAG chunks to retrieve for a given use case
@@ -88,7 +89,7 @@ export async function getAdaptiveChunkLimit(
 
   const adaptiveLimit = Math.min(oversampledCount, dynamicCap);
 
-  console.log(`[Adaptive RAG] Paper avgChunkSize=${avgChunkSize}, multiplier=${multiplier}x, limit=${adaptiveLimit} (optimal=${optimalCount}, cap=${dynamicCap})`);
+  logger.debug('RAG', `[Adaptive RAG] Paper avgChunkSize=${avgChunkSize}, multiplier=${multiplier}x, limit=${adaptiveLimit} (optimal=${optimalCount}, cap=${dynamicCap})`);
 
   return adaptiveLimit;
 }
@@ -139,8 +140,8 @@ export async function calculateAvailableRAGBudget(
   const MIN_TOKENS = 1000;
   const targetRAGTokens = Math.max(MIN_TOKENS, Math.floor(availableForRAG * 0.5));
 
-  console.log(`[Budget] Quota=${inputQuota}, SessionUsage=${sessionUsage}, Conversation=${conversationTokens}, Buffer=${responseBuffer}`);
-  console.log(`[Budget] AvailableForRAG=${availableForRAG}, Target=${targetRAGTokens} (50% or min ${MIN_TOKENS})`);
+  logger.debug('RAG', `[Budget] Quota=${inputQuota}, SessionUsage=${sessionUsage}, Conversation=${conversationTokens}, Buffer=${responseBuffer}`);
+  logger.debug('RAG', `[Budget] AvailableForRAG=${availableForRAG}, Target=${targetRAGTokens} (50% or min ${MIN_TOKENS})`);
 
   return {
     targetRAGTokens,
@@ -243,8 +244,8 @@ export async function trimChunksByTokenBudget(
   const safetyMargin = useCase === 'chat' ? 0.75 : 0.65;
   const conservativeTokens = Math.floor(availableTokens * safetyMargin);
 
-  console.log(`[Adaptive RAG] InputQuota=${inputQuota}, Prompt breakdown: system=${breakdown.system}, summary=${breakdown.summary}, messages=${breakdown.messages}, overhead=${breakdown.overhead}`);
-  console.log(`[Adaptive RAG] Available tokens: ${availableTokens}, Conservative (${Math.floor(safetyMargin * 100)}%): ${conservativeTokens}`);
+  logger.debug('RAG', `[Adaptive RAG] InputQuota=${inputQuota}, Prompt breakdown: system=${breakdown.system}, summary=${breakdown.summary}, messages=${breakdown.messages}, overhead=${breakdown.overhead}`);
+  logger.debug('RAG', `[Adaptive RAG] Available tokens: ${availableTokens}, Conservative (${Math.floor(safetyMargin * 100)}%): ${conservativeTokens}`);
 
   // Add chunks in relevance order until budget exhausted
   const selectedChunks: import('../types/index.ts').ContentChunk[] = [];
@@ -272,7 +273,7 @@ export async function trimChunksByTokenBudget(
         currentTokens += totalChunkCost;
       } else {
         // Even minimum would blow budget - stop here
-        console.warn(`[Adaptive RAG] Cannot fit minimum tokens - budget too tight (need ${currentTokens + totalChunkCost}, have ${conservativeTokens})`);
+        logger.warn('RAG', `[Adaptive RAG] Cannot fit minimum tokens - budget too tight (need ${currentTokens + totalChunkCost}, have ${conservativeTokens})`);
         break;
       }
       continue;
@@ -293,11 +294,11 @@ export async function trimChunksByTokenBudget(
   const conversationTokens = breakdown.summary + breakdown.messages;
   const recentMessageCount = conversationState?.recentMessages?.length || 0;
 
-  console.log(`[Adaptive RAG] Trimmed ${chunks.length} → ${selectedChunks.length} chunks (${currentTokens}/${conservativeTokens} conservative, ${availableTokens} available)`);
-  console.log(`[Adaptive RAG] minTokensFit=${minTokensFit} (${currentTokens} >= ${MIN_TOKENS}), conversationTokens=${conversationTokens}, recentMsgCount=${recentMessageCount}`);
+  logger.debug('RAG', `[Adaptive RAG] Trimmed ${chunks.length} → ${selectedChunks.length} chunks (${currentTokens}/${conservativeTokens} conservative, ${availableTokens} available)`);
+  logger.debug('RAG', `[Adaptive RAG] minTokensFit=${minTokensFit} (${currentTokens} >= ${MIN_TOKENS}), conversationTokens=${conversationTokens}, recentMsgCount=${recentMessageCount}`);
 
   if (!minTokensFit) {
-    console.warn(`[Adaptive RAG] Only ${currentTokens} tokens fit (need ${MIN_TOKENS}) - conversation reduction recommended`);
+    logger.warn('RAG', `[Adaptive RAG] Only ${currentTokens} tokens fit (need ${MIN_TOKENS}) - conversation reduction recommended`);
   }
 
   return {
@@ -346,13 +347,13 @@ export async function trimChunksWithProgressiveFallback(
   let result = await trimChunksByTokenBudget(chunks, useCase, conversationState);
 
   if (result.budgetStatus.minTokensFit) {
-    console.log('[Adaptive RAG] Level 1: Full conversation history - chunks fit ✓');
+    logger.debug('RAG', '[Adaptive RAG] Level 1: Full conversation history - chunks fit ✓');
     return result;
   }
 
   // Level 2: Reduce to 3 recent messages
   if (conversationState?.recentMessages && conversationState.recentMessages.length > 3) {
-    console.log('[Adaptive RAG] Level 2: Reducing to 3 recent messages...');
+    logger.debug('RAG', '[Adaptive RAG] Level 2: Reducing to 3 recent messages...');
     const reducedState = {
       ...conversationState,
       recentMessages: conversationState.recentMessages.slice(-3),
@@ -360,14 +361,14 @@ export async function trimChunksWithProgressiveFallback(
     result = await trimChunksByTokenBudget(chunks, useCase, reducedState);
 
     if (result.budgetStatus.minTokensFit) {
-      console.log('[Adaptive RAG] Level 2: Reduced to 3 messages - chunks fit ✓');
+      logger.debug('RAG', '[Adaptive RAG] Level 2: Reduced to 3 messages - chunks fit ✓');
       return { ...result, reducedRecentMessages: 3 };
     }
   }
 
   // Level 3: Reduce to 1 recent message
   if (conversationState?.recentMessages && conversationState.recentMessages.length > 1) {
-    console.log('[Adaptive RAG] Level 3: Reducing to 1 recent message...');
+    logger.debug('RAG', '[Adaptive RAG] Level 3: Reducing to 1 recent message...');
     const reducedState = {
       ...conversationState,
       recentMessages: conversationState.recentMessages.slice(-1),
@@ -375,14 +376,14 @@ export async function trimChunksWithProgressiveFallback(
     result = await trimChunksByTokenBudget(chunks, useCase, reducedState);
 
     if (result.budgetStatus.minTokensFit) {
-      console.log('[Adaptive RAG] Level 3: Reduced to 1 message - chunks fit ✓');
+      logger.debug('RAG', '[Adaptive RAG] Level 3: Reduced to 1 message - chunks fit ✓');
       return { ...result, reducedRecentMessages: 1 };
     }
   }
 
   // Level 4: Summary only (no recent messages)
   if (conversationState?.recentMessages && conversationState.recentMessages.length > 0) {
-    console.log('[Adaptive RAG] Level 4: Summary only (no recent messages)...');
+    logger.debug('RAG', '[Adaptive RAG] Level 4: Summary only (no recent messages)...');
     const reducedState = {
       ...conversationState,
       recentMessages: [],
@@ -390,13 +391,13 @@ export async function trimChunksWithProgressiveFallback(
     result = await trimChunksByTokenBudget(chunks, useCase, reducedState);
 
     if (result.budgetStatus.minTokensFit) {
-      console.log('[Adaptive RAG] Level 4: Summary only - chunks fit ✓');
+      logger.debug('RAG', '[Adaptive RAG] Level 4: Summary only - chunks fit ✓');
       return { ...result, reducedRecentMessages: 0 };
     }
   }
 
   // All fallback levels exhausted - return best effort result
-  console.warn('[Adaptive RAG] All fallback levels exhausted - returning best effort result');
+  logger.warn('RAG', '[Adaptive RAG] All fallback levels exhausted - returning best effort result');
   return result;
 }
 

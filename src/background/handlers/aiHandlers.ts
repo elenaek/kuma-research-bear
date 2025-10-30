@@ -5,6 +5,7 @@ import * as operationStateService from '../services/operationStateService.ts';
 import * as requestDeduplicationService from '../services/requestDeduplicationService.ts';
 import * as paperStatusService from '../services/paperStatusService.ts';
 import { getOptimalRAGChunkCount } from '../../utils/adaptiveRAGService.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * AI Message Handlers
@@ -49,9 +50,9 @@ export async function handleAIStatus(): Promise<any> {
 export async function handleInitializeAI(): Promise<any> {
   // Trigger initialization in background without blocking the response
   aiService.initializeAI().then((result) => {
-    console.log('[aiHandlers] Initialization completed:', result);
+    logger.debug('BACKGROUND_SCRIPT', '[aiHandlers] Initialization completed:', result);
   }).catch((error) => {
-    console.error('[aiHandlers] Initialization failed:', error);
+    logger.error('BACKGROUND_SCRIPT', '[aiHandlers] Initialization failed:', error);
   });
 
   // Return immediately so popup isn't blocked
@@ -101,9 +102,9 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
       storedPaper.fullText.length > THRESHOLD;
 
     if (shouldUseHierarchicalSummary) {
-      console.log(`[AIHandlers] Paper is large (${storedPaper.fullText.length} chars), using hierarchical summary for comprehensive explanation`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Paper is large (${storedPaper.fullText.length} chars), using hierarchical summary for comprehensive explanation`);
     } else {
-      console.log(`[AIHandlers] Paper is small (${storedPaper.fullText.length} chars), using abstract-only approach`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Paper is small (${storedPaper.fullText.length} chars), using abstract-only approach`);
     }
 
     // Generate explanation and summary (with hierarchical summary for large papers)
@@ -134,7 +135,7 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
 
     const { updatePaperExplanation } = await import('../../utils/dbService.ts');
     await updatePaperExplanation(storedPaper.id, explanation, summary, outputLanguage);
-    console.log('[AIHandlers] ✓ Explanation stored in IndexedDB');
+    logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Explanation stored in IndexedDB');
 
     // Update completion tracking in operation state
     if (tabId) {
@@ -146,7 +147,7 @@ export async function handleExplainPaper(payload: any, tabId?: number): Promise<
         hasGlossary: status.hasGlossary,
         completionPercentage: status.completionPercentage,
       });
-      console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
     }
 
     return { success: true, explanation, summary };
@@ -178,7 +179,7 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
   try {
     // Check for existing active request
     if (requestDeduplicationService.hasRequest(requestKey)) {
-      console.log(`[AIHandlers] Reusing existing explanation request for ${requestKey}`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Reusing existing explanation request for ${requestKey}`);
       const existingExplanation = await requestDeduplicationService.getRequest(requestKey);
       return { success: true, explanation: existingExplanation };
     }
@@ -208,7 +209,7 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
         });
       }
 
-      console.log(`[AIHandlers] Generating explanation for paper: ${storedPaper.title} with context: ${contextId}`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Generating explanation for paper: ${storedPaper.title} with context: ${contextId}`);
 
       // Determine if we should use hierarchical summary (for large papers)
       const THRESHOLD = 6000;
@@ -217,7 +218,7 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
         storedPaper.fullText.length > THRESHOLD;
 
       if (shouldUseHierarchicalSummary) {
-        console.log(`[AIHandlers] Paper is large (${storedPaper.fullText.length} chars), using hierarchical summary for comprehensive explanation`);
+        logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Paper is large (${storedPaper.fullText.length} chars), using hierarchical summary for comprehensive explanation`);
       }
 
       // Generate explanation
@@ -246,7 +247,7 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
         explanation,
         explanationLanguage: outputLanguage,
       });
-      console.log('[AIHandlers] ✓ Explanation stored in IndexedDB');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Explanation stored in IndexedDB');
 
       // Update completion tracking in operation state
       if (tabId) {
@@ -258,7 +259,7 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
           hasGlossary: status.hasGlossary,
           completionPercentage: status.completionPercentage,
         });
-        console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
       }
 
       // Update operation state to show completion
@@ -277,10 +278,10 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
         }, 5000);
       }
 
-      console.log('[AIHandlers] ✓ Paper explanation complete');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Paper explanation complete');
       return { success: true, explanation };
     } catch (explanationError) {
-      console.error('[AIHandlers] Error generating explanation:', explanationError);
+      logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Error generating explanation:', explanationError);
 
       // Update operation state to show error
       if (tabId) {
@@ -300,7 +301,7 @@ export async function handleExplainPaperManual(payload: any, tabId?: number): Pr
       requestDeduplicationService.deleteRequest(requestKey);
     }
   } catch (error) {
-    console.error('[AIHandlers] Error in explanation setup:', error);
+    logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Error in explanation setup:', error);
 
     // Update operation state to show error
     if (tabId) {
@@ -377,7 +378,7 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
   try {
     // Check for existing active request
     if (requestDeduplicationService.hasRequest(requestKey)) {
-      console.log(`[AIHandlers] Reusing existing summary request for ${requestKey}`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Reusing existing summary request for ${requestKey}`);
       const existingSummary = await requestDeduplicationService.getRequest(requestKey);
       return { success: true, summary: existingSummary };
     }
@@ -407,7 +408,7 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
         });
       }
 
-      console.log(`[AIHandlers] Generating summary for paper: ${storedPaper.title} with context: ${contextId}`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Generating summary for paper: ${storedPaper.title} with context: ${contextId}`);
 
       // Determine if we should use hierarchical summary (for large papers)
       const THRESHOLD = 6000;
@@ -416,7 +417,7 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
         storedPaper.fullText.length > THRESHOLD;
 
       if (shouldUseHierarchicalSummary) {
-        console.log(`[AIHandlers] Paper is large (${storedPaper.fullText.length} chars), using hierarchical summary for comprehensive summary`);
+        logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Paper is large (${storedPaper.fullText.length} chars), using hierarchical summary for comprehensive summary`);
       }
 
       // Generate summary
@@ -446,7 +447,7 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
         summary,
         summaryLanguage: outputLanguage,
       });
-      console.log('[AIHandlers] ✓ Summary stored in IndexedDB');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Summary stored in IndexedDB');
 
       // Update completion tracking in operation state
       if (tabId) {
@@ -458,7 +459,7 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
           hasGlossary: status.hasGlossary,
           completionPercentage: status.completionPercentage,
         });
-        console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
       }
 
       // Update operation state to show completion
@@ -477,10 +478,10 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
         }, 5000);
       }
 
-      console.log('[AIHandlers] ✓ Paper summary complete');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Paper summary complete');
       return { success: true, summary };
     } catch (summaryError) {
-      console.error('[AIHandlers] Error generating summary:', summaryError);
+      logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Error generating summary:', summaryError);
 
       // Update operation state to show error
       if (tabId) {
@@ -500,7 +501,7 @@ export async function handleGenerateSummaryManual(payload: any, tabId?: number):
       requestDeduplicationService.deleteRequest(requestKey);
     }
   } catch (error) {
-    console.error('[AIHandlers] Error in summary generation setup:', error);
+    logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Error in summary generation setup:', error);
 
     // Update operation state to show error
     if (tabId) {
@@ -533,7 +534,7 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
   try {
     // Check for existing active request
     if (requestDeduplicationService.hasRequest(requestKey)) {
-      console.log(`[AIHandlers] Reusing existing analysis request for ${requestKey}`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Reusing existing analysis request for ${requestKey}`);
 
       // Update operation state to indicate cached request
       if (tabId) {
@@ -573,12 +574,12 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
         });
       }
 
-      console.log(`[AIHandlers] Analyzing paper: ${storedPaper.title} with context: ${analysisContextId}`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Analyzing paper: ${storedPaper.title} with context: ${analysisContextId}`);
 
       // Check if hierarchical summary exists, if not create it
       let hierarchicalSummary = storedPaper.hierarchicalSummary;
       if (!hierarchicalSummary) {
-        console.log('[AIHandlers] No hierarchical summary found, generating one...');
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] No hierarchical summary found, generating one...');
         try {
           const fullText = storedPaper.fullText || storedPaper.abstract;
           const result = await aiService.createHierarchicalSummary(
@@ -612,9 +613,9 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
           // Update stored paper with hierarchical summary for future use
           const { updatePaper } = await import('../../utils/dbService.ts');
           await updatePaper(storedPaper.id, { hierarchicalSummary });
-          console.log('[AIHandlers] ✓ Hierarchical summary generated and stored');
+          logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Hierarchical summary generated and stored');
         } catch (error) {
-          console.error('[AIHandlers] Failed to generate hierarchical summary, using truncated content:', error);
+          logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Failed to generate hierarchical summary, using truncated content:', error);
           // Fallback to truncated content
           hierarchicalSummary = (storedPaper.fullText || storedPaper.abstract).slice(0, 2000);
         }
@@ -647,7 +648,7 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
         },
         async (section, result) => {
           // Section completion handler - broadcast partial results
-          console.log(`[Analysis] Section complete: ${section}`);
+          logger.debug('BACKGROUND_SCRIPT', `[Analysis] Section complete: ${section}`);
 
           // Broadcast section completion to sidepanel
           chrome.runtime.sendMessage({
@@ -658,7 +659,7 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
               result,
             },
           }).catch((error) => {
-            console.warn('[Analysis] Failed to broadcast section completion:', error);
+            logger.warn('BACKGROUND_SCRIPT', '[Analysis] Failed to broadcast section completion:', error);
           });
 
           // Update partial analysis in IndexedDB
@@ -668,7 +669,7 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
             const outputLanguage = await getOutputLanguage();
             await updatePartialPaperAnalysis(storedPaper.id, section, result, outputLanguage);
           } catch (error) {
-            console.warn(`[Analysis] Failed to store partial ${section} analysis:`, error);
+            logger.warn('BACKGROUND_SCRIPT', `[Analysis] Failed to store partial ${section} analysis:`, error);
           }
         }
       );
@@ -697,7 +698,7 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
 
       const { updatePaperAnalysis } = await import('../../utils/dbService.ts');
       await updatePaperAnalysis(storedPaper.id, analysis, outputLanguage);
-      console.log('[AIHandlers] ✓ Analysis stored in IndexedDB');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Analysis stored in IndexedDB');
 
       // Update completion tracking in operation state
       if (tabId) {
@@ -709,7 +710,7 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
           hasGlossary: status.hasGlossary,
           completionPercentage: status.completionPercentage,
         });
-        console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
       }
 
       // Update operation state to show completion
@@ -731,10 +732,10 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
         }, 5000);
       }
 
-      console.log('[AIHandlers] ✓ Paper analysis complete');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Paper analysis complete');
       return { success: true, analysis };
     } catch (analysisError) {
-      console.error('[AIHandlers] Error analyzing paper:', analysisError);
+      logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Error analyzing paper:', analysisError);
 
       // Update operation state to show error
       if (tabId) {
@@ -757,7 +758,7 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
       requestDeduplicationService.deleteRequest(requestKey);
     }
   } catch (error) {
-    console.error('[AIHandlers] Error in analysis setup:', error);
+    logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Error in analysis setup:', error);
 
     // Update operation state to show error
     if (tabId) {
@@ -833,7 +834,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
   try {
     // Check for existing active request
     if (requestDeduplicationService.hasRequest(requestKey)) {
-      console.log(`[AIHandlers] Reusing existing manual glossary request for ${requestKey}`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Reusing existing manual glossary request for ${requestKey}`);
       const existingGlossary = await requestDeduplicationService.getRequest(requestKey);
       return { success: true, glossary: existingGlossary };
     }
@@ -847,7 +848,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
         throw new Error('Paper not found in storage. Please store the paper first.');
       }
 
-      console.log(`[AIHandlers] Generating glossary manually for paper: ${storedPaper.title}`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Generating glossary manually for paper: ${storedPaper.title}`);
 
       // Update operation state to show glossary generation is in progress
       if (tabId) {
@@ -861,7 +862,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
 
       // Step 1: Aggregate terms from chunks
       sendProgress('extracting');
-      console.log('[AIHandlers] Step 1: Aggregating terms from chunks...');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Step 1: Aggregating terms from chunks...');
 
       const { getPaperChunks } = await import('../../utils/dbService.ts');
       const chunks = await getPaperChunks(storedPaper.id);
@@ -873,7 +874,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
 
       if (!hasTerms) {
         // Fallback to Gemini-based extraction for legacy papers without pre-extracted chunk terms
-        console.warn('[AIHandlers] Chunks do not have terms. Using Gemini fallback for legacy paper...');
+        logger.warn('BACKGROUND_SCRIPT', '[AIHandlers] Chunks do not have terms. Using Gemini fallback for legacy paper...');
         sendProgress('extracting');
 
         const paperContent = storedPaper.fullText || storedPaper.abstract;
@@ -893,7 +894,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
           new Map(extractedTerms.map(term => [term.toLowerCase(), term])).values()
         );
 
-        console.log('[AIHandlers] ✓ Gemini fallback extraction complete:', deduplicatedTerms.length, 'terms');
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Gemini fallback extraction complete:', deduplicatedTerms.length, 'terms');
       } else {
         // New approach: Collect all terms from all chunks
         const allTerms: string[] = [];
@@ -903,8 +904,8 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
           }
         });
 
-        console.log('[AIHandlers] ✓ Aggregated', allTerms.length, 'terms from', chunks.length, 'chunks');
-        console.log('[AIHandlers] Sample terms:', allTerms.slice(0, 10).join(', '));
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Aggregated', allTerms.length, 'terms from', chunks.length, 'chunks');
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Sample terms:', allTerms.slice(0, 10).join(', '));
 
         if (allTerms.length === 0) {
           throw new Error('No terms found in chunks');
@@ -912,14 +913,14 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
 
         // Step 2: Batched deduplication (200 terms per batch to avoid context limits)
         sendProgress('filtering-terms');
-        console.log('[AIHandlers] Step 2: Deduplicating terms in batches...');
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Step 2: Deduplicating terms in batches...');
 
         const batchSize = 200;
         const deduplicatedBatches: string[] = [];
 
         for (let i = 0; i < allTerms.length; i += batchSize) {
           const batch = allTerms.slice(i, i + batchSize);
-          console.log(`[AIHandlers] Deduplicating batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allTerms.length / batchSize)} (${batch.length} terms)...`);
+          logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Deduplicating batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allTerms.length / batchSize)} (${batch.length} terms)...`);
 
           try {
             const deduped = await aiService.deduplicateTermsBatch(
@@ -930,16 +931,16 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
             );
             deduplicatedBatches.push(...deduped);
           } catch (error) {
-            console.error(`[AIHandlers] Error deduplicating batch:`, error);
+            logger.error('BACKGROUND_SCRIPT', `[AIHandlers] Error deduplicating batch:`, error);
             // Continue with next batch
           }
         }
 
-        console.log('[AIHandlers] ✓ After batched deduplication:', deduplicatedBatches.length, 'terms');
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ After batched deduplication:', deduplicatedBatches.length, 'terms');
 
         // Final deduplication pass if we have too many terms
         if (deduplicatedBatches.length > 40) {
-          console.log('[AIHandlers] Running final deduplication pass...');
+          logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Running final deduplication pass...');
           deduplicatedTerms = await aiService.deduplicateTermsBatch(
             deduplicatedBatches,
             storedPaper.title,
@@ -950,13 +951,13 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
           deduplicatedTerms = deduplicatedBatches;
         }
 
-        console.log('[AIHandlers] ✓ Final deduplicated terms:', deduplicatedTerms.length);
-        console.log('[AIHandlers] Terms:', deduplicatedTerms.slice(0, 10).join(', '));
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Final deduplicated terms:', deduplicatedTerms.length);
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Terms:', deduplicatedTerms.slice(0, 10).join(', '));
       }
 
       // Step 3: Generate definitions for each technical term using RAG + GeminiNano
       sendProgress('generating-definitions', 0, deduplicatedTerms.length);
-      console.log('[AIHandlers] Step 3: Generating definitions for technical terms...');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Step 3: Generating definitions for technical terms...');
 
       const glossaryTerms: GlossaryTerm[] = [];
       let successCount = 0;
@@ -969,7 +970,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
         const batch = deduplicatedTerms.slice(i, i + batchSize);
 
         try {
-          console.log(`[AIHandlers] Generating ${batch.length} definitions in single prompt call (batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(totalTerms / batchSize)})...`);
+          logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Generating ${batch.length} definitions in single prompt call (batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(totalTerms / batchSize)})...`);
 
           // Generate all definitions in the batch with a SINGLE prompt call
           const batchTerms = await aiService.generateDefinitionsBatchWithRAG(
@@ -985,15 +986,15 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
             if (term) {
               glossaryTerms.push(term);
               successCount++;
-              console.log(`[AIHandlers] ✓ Definition generated for: ${batch[idx]}`);
+              logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] ✓ Definition generated for: ${batch[idx]}`);
             } else {
-              console.warn(`[AIHandlers] ✗ Failed to generate definition for: ${batch[idx]}`);
+              logger.warn('BACKGROUND_SCRIPT', `[AIHandlers] ✗ Failed to generate definition for: ${batch[idx]}`);
             }
           });
 
-          console.log(`[AIHandlers] Batch complete: ${batchTerms.filter(t => t !== null).length}/${batch.length} successful`);
+          logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Batch complete: ${batchTerms.filter(t => t !== null).length}/${batch.length} successful`);
         } catch (error) {
-          console.error(`[AIHandlers] Error generating batch definitions:`, error);
+          logger.error('BACKGROUND_SCRIPT', `[AIHandlers] Error generating batch definitions:`, error);
           // Continue to next batch on error
         }
 
@@ -1006,7 +1007,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
         }
       }
 
-      console.log(`[AIHandlers] Generated ${successCount}/${deduplicatedTerms.length} definitions successfully`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Generated ${successCount}/${deduplicatedTerms.length} definitions successfully`);
 
       // Static deduplication: Remove any duplicate terms by acronym (case-insensitive)
       // This catches duplicates that Gemini Nano missed (e.g., "Dark Energy" appearing 4 times)
@@ -1016,11 +1017,11 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
         if (!seenAcronyms.has(key)) {
           seenAcronyms.set(key, term);
         } else {
-          console.log(`[AIHandlers] Removing duplicate term: ${term.acronym}`);
+          logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Removing duplicate term: ${term.acronym}`);
         }
       });
       const finalGlossaryTerms = Array.from(seenAcronyms.values());
-      console.log(`[AIHandlers] After static deduplication: ${finalGlossaryTerms.length} unique terms (removed ${glossaryTerms.length - finalGlossaryTerms.length} duplicates)`);
+      logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] After static deduplication: ${finalGlossaryTerms.length} unique terms (removed ${glossaryTerms.length - finalGlossaryTerms.length} duplicates)`);
 
       // Sort terms alphabetically
       finalGlossaryTerms.sort((a, b) => a.acronym.localeCompare(b.acronym));
@@ -1051,7 +1052,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
 
       const { updatePaperGlossary } = await import('../../utils/dbService.ts');
       await updatePaperGlossary(storedPaper.id, glossary, outputLanguage);
-      console.log('[AIHandlers] ✓ Glossary stored in IndexedDB');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Glossary stored in IndexedDB');
 
       // Update completion tracking in operation state
       if (tabId) {
@@ -1063,7 +1064,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
           hasGlossary: status.hasGlossary,
           completionPercentage: status.completionPercentage,
         });
-        console.log('[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Completion status updated:', status.completionPercentage + '%');
       }
 
       // Update operation state to show completion
@@ -1088,10 +1089,10 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
         }, 5000);
       }
 
-      console.log('[AIHandlers] ✓ Manual glossary generation complete');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Manual glossary generation complete');
       return { success: true, glossary };
     } catch (glossaryError) {
-      console.error('[AIHandlers] Error generating manual glossary:', glossaryError);
+      logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Error generating manual glossary:', glossaryError);
 
       // Update operation state to show error
       if (tabId) {
@@ -1114,7 +1115,7 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
       requestDeduplicationService.deleteRequest(requestKey);
     }
   } catch (error) {
-    console.error('[AIHandlers] Error in manual glossary generation setup:', error);
+    logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Error in manual glossary generation setup:', error);
 
     // Update operation state to show error
     if (tabId) {
@@ -1155,7 +1156,7 @@ export async function handleAskQuestion(payload: any, tabId?: number): Promise<a
       };
     }
 
-    console.log(`[AIHandlers] Answering question about paper: ${paperUrl} with context: ${qaContextId}`);
+    logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Answering question about paper: ${paperUrl} with context: ${qaContextId}`);
 
     // Retrieve paper from IndexedDB
     const storedPaper = await getPaperByUrl(paperUrl);
@@ -1178,8 +1179,8 @@ export async function handleAskQuestion(payload: any, tabId?: number): Promise<a
 
     // Log warning if minimum chunks don't fit (Q&A doesn't have conversation history to summarize)
     if (!budgetStatus.minChunksFit) {
-      console.warn(`[AIHandlers] Insufficient space for minimum RAG chunks - budget: ${budgetStatus.usedTokens}/${budgetStatus.availableTokens} tokens`);
-      console.warn('[AIHandlers] Consider using a model with larger context window for better results');
+      logger.warn('BACKGROUND_SCRIPT', `[AIHandlers] Insufficient space for minimum RAG chunks - budget: ${budgetStatus.usedTokens}/${budgetStatus.availableTokens} tokens`);
+      logger.warn('BACKGROUND_SCRIPT', '[AIHandlers] Consider using a model with larger context window for better results');
     }
 
     if (trimmedChunks.length === 0) {
@@ -1189,7 +1190,7 @@ export async function handleAskQuestion(payload: any, tabId?: number): Promise<a
       };
     }
 
-    console.log(`[AIHandlers] Found ${trimmedChunks.length} relevant chunks for question (retrieved ${relevantChunks.length}, trimmed by token budget)`);
+    logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Found ${trimmedChunks.length} relevant chunks for question (retrieved ${relevantChunks.length}, trimmed by token budget)`);
 
     // Format chunks for AI with position and hierarchy
     const contextChunks = trimmedChunks.map(chunk => ({
@@ -1207,10 +1208,10 @@ export async function handleAskQuestion(payload: any, tabId?: number): Promise<a
     // Use AI to answer the question with context ID
     const qaResult: QuestionAnswer = await aiService.answerQuestion(question, contextChunks, qaContextId);
 
-    console.log('[AIHandlers] ✓ Question answered successfully');
+    logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Question answered successfully');
     return { success: true, answer: qaResult };
   } catch (qaError) {
-    console.error('[AIHandlers] Error answering question:', qaError);
+    logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Error answering question:', qaError);
     return {
       success: false,
       error: `Failed to answer question: ${String(qaError)}`

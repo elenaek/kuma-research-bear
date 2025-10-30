@@ -8,6 +8,8 @@
  * This utility detects and repairs such corruption within math delimiters ($...$, $$...$$).
  */
 
+import { logger } from './logger.ts';
+
 /**
  * Dictionary of LaTeX commands that contain characters that look like JS escape sequences.
  * Organized by the escape character they contain.
@@ -121,27 +123,27 @@ function repairMathContent(mathContent: string): string {
 
   // Handle \t (tab) - U+0009
   repaired = repaired.replace(/\t(\w+)/g, (match, remainder) => {
-    console.log('[LaTeX Repair] Tab match:', { match: match.replace(/\t/g, '[TAB]'), remainder });
+    logger.debug('LATEX_REPAIR', 'Tab match:', { match: match.replace(/\t/g, '[TAB]'), remainder });
     const cmd = tryReconstructCommand('t', 't' + remainder);
     if (cmd) {
       const result = '\\' + cmd + remainder.slice(cmd.length - 1);
-      console.log('[LaTeX Repair] Tab reconstructed:', cmd, '→', result);
+      logger.debug('LATEX_REPAIR', 'Tab reconstructed:', cmd, '→', result);
       return result;
     }
-    console.log('[LaTeX Repair] Tab not reconstructed');
+    logger.debug('LATEX_REPAIR', 'Tab not reconstructed');
     return match; // Keep original if can't reconstruct
   });
 
   // Handle \n (newline) - U+000A
   repaired = repaired.replace(/\n(\w+)/g, (match, remainder) => {
-    console.log('[LaTeX Repair] Newline match:', { match: match.replace(/\n/g, '[NL]'), remainder });
+    logger.debug('LATEX_REPAIR', 'Newline match:', { match: match.replace(/\n/g, '[NL]'), remainder });
     const cmd = tryReconstructCommand('n', 'n' + remainder);
     if (cmd) {
       const result = '\\' + cmd + remainder.slice(cmd.length - 1);
-      console.log('[LaTeX Repair] Newline reconstructed:', cmd, '→', result);
+      logger.debug('LATEX_REPAIR', 'Newline reconstructed:', cmd, '→', result);
       return result;
     }
-    console.log('[LaTeX Repair] Newline not reconstructed');
+    logger.debug('LATEX_REPAIR', 'Newline not reconstructed');
     return match;
   });
 
@@ -183,18 +185,18 @@ function repairMathContent(mathContent: string): string {
  * @returns Text with repaired LaTeX commands
  */
 export function repairLatexCommands(text: string): string {
-  console.log('[LaTeX Repair] Input text:', text.substring(0, 200));
+  logger.debug('LATEX_REPAIR', 'Input text:', text.substring(0, 200));
 
   // Check if there are any corrupted characters
   const hasCorruption = /[\t\n\r\b\f]/.test(text);
-  console.log('[LaTeX Repair] Has corruption characters:', hasCorruption);
+  logger.debug('LATEX_REPAIR', 'Has corruption characters:', hasCorruption);
 
   if (hasCorruption) {
     // Log the specific characters found
     const tabs = (text.match(/\t/g) || []).length;
     const newlines = (text.match(/\n/g) || []).length;
     const returns = (text.match(/\r/g) || []).length;
-    console.log('[LaTeX Repair] Found:', { tabs, newlines, returns });
+    logger.debug('LATEX_REPAIR', 'Found:', { tabs, newlines, returns });
   }
 
   let result = text;
@@ -203,7 +205,7 @@ export function repairLatexCommands(text: string): string {
   result = result.replace(/\$\$([\s\S]*?)\$\$/g, (match, content) => {
     const repaired = repairMathContent(content);
     if (repaired !== content) {
-      console.log('[LaTeX Repair] Display math repaired:', { before: content, after: repaired });
+      logger.debug('LATEX_REPAIR', 'Display math repaired:', { before: content, after: repaired });
     }
     return '$$' + repaired + '$$';
   });
@@ -213,15 +215,15 @@ export function repairLatexCommands(text: string): string {
   result = result.replace(/(?<!\$)\$(?!\$)((?:(?!\$\$)[^\$])+?)\$(?!\$)/g, (match, content) => {
     const repaired = repairMathContent(content);
     if (repaired !== content) {
-      console.log('[LaTeX Repair] Inline math repaired:', { before: content, after: repaired });
+      logger.debug('LATEX_REPAIR', 'Inline math repaired:', { before: content, after: repaired });
     }
     return '$' + repaired + '$';
   });
 
   if (result !== text) {
-    console.log('[LaTeX Repair] Output text:', result.substring(0, 200));
+    logger.debug('LATEX_REPAIR', 'Output text:', result.substring(0, 200));
   } else {
-    console.log('[LaTeX Repair] No changes made');
+    logger.debug('LATEX_REPAIR', 'No changes made');
   }
 
   return result;

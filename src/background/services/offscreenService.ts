@@ -4,6 +4,7 @@
  */
 
 import { MessageType } from '../../types/index.ts';
+import { logger } from '../../utils/logger.ts';
 
 const OFFSCREEN_DOCUMENT_PATH = '/src/offscreen/offscreen.html';
 let creating: Promise<void> | null = null;
@@ -48,9 +49,9 @@ export async function setupOffscreenDocument(): Promise<void> {
 export async function closeOffscreenDocument(): Promise<void> {
   try {
     await chrome.offscreen.closeDocument();
-    console.log('[Offscreen] Document closed');
+    logger.debug('BACKGROUND_SCRIPT', '[Offscreen] Document closed');
   } catch (error) {
-    console.log('[Offscreen] No document to close or already closed');
+    logger.debug('BACKGROUND_SCRIPT', '[Offscreen] No document to close or already closed');
   }
 }
 
@@ -74,19 +75,19 @@ export async function generateEmbeddingsOffscreen(
     });
 
     if (!response) {
-      console.error('[Offscreen] No response from offscreen document for embedding generation');
+      logger.error('BACKGROUND_SCRIPT', '[Offscreen] No response from offscreen document for embedding generation');
       return { success: false, error: 'Offscreen document not responding' };
     }
 
     if (response.success) {
       const backendUsed = response.device === 'webgpu' ? 'WebGPU (GPU-accelerated)' : 'WASM (CPU)';
-      console.log(`[Offscreen] ✓ Generated ${response.count} embeddings using ${backendUsed}`);
+      logger.debug('BACKGROUND_SCRIPT', `[Offscreen] ✓ Generated ${response.count} embeddings using ${backendUsed}`);
       return { success: true, count: response.count, device: response.device };
     } else {
       return { success: false, error: response.error };
     }
   } catch (error) {
-    console.error('[Offscreen] Error generating embeddings:', error);
+    logger.error('BACKGROUND_SCRIPT', '[Offscreen] Error generating embeddings:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -111,7 +112,7 @@ export async function searchSemanticOffscreen(
     });
 
     if (!response) {
-      console.error('[Offscreen] No response from offscreen document for semantic search');
+      logger.error('BACKGROUND_SCRIPT', '[Offscreen] No response from offscreen document for semantic search');
       return { success: false, chunkIds: [], error: 'Offscreen document not responding' };
     }
 
@@ -121,7 +122,7 @@ export async function searchSemanticOffscreen(
       return { success: false, chunkIds: [], error: response.error };
     }
   } catch (error) {
-    console.error('[Offscreen] Error in semantic search:', error);
+    logger.error('BACKGROUND_SCRIPT', '[Offscreen] Error in semantic search:', error);
     return { success: false, chunkIds: [], error: String(error) };
   }
 }
@@ -152,7 +153,7 @@ export async function searchHybridOffscreen(
     });
 
     if (!response) {
-      console.error('[Offscreen] No response from offscreen document for hybrid search');
+      logger.error('BACKGROUND_SCRIPT', '[Offscreen] No response from offscreen document for hybrid search');
       return { success: false, chunkIds: [], error: 'Offscreen document not responding' };
     }
 
@@ -162,7 +163,7 @@ export async function searchHybridOffscreen(
       return { success: false, chunkIds: [], error: response.error };
     }
   } catch (error) {
-    console.error('[Offscreen] Error in hybrid search:', error);
+    logger.error('BACKGROUND_SCRIPT', '[Offscreen] Error in hybrid search:', error);
     return { success: false, chunkIds: [], error: String(error) };
   }
 }
@@ -192,10 +193,10 @@ export async function extractPaperFromHTMLOffscreen(
       payload: { paperHtml, paperUrl, paper }
     });
 
-    console.log('[Offscreen] ✓ Extraction triggered for:', paperUrl);
+    logger.debug('BACKGROUND_SCRIPT', '[Offscreen] ✓ Extraction triggered for:', paperUrl);
     return { success: true };
   } catch (error) {
-    console.error('[Offscreen] Error triggering extraction:', error);
+    logger.error('BACKGROUND_SCRIPT', '[Offscreen] Error triggering extraction:', error);
     return { success: false, error: String(error) };
   }
 }

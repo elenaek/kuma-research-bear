@@ -5,6 +5,7 @@ import * as iconService from '../services/iconService.ts';
 import { tabPaperTracker } from '../services/tabPaperTracker.ts';
 import { MessageType } from '../../types/index.ts';
 import { normalizeUrl } from '../../utils/urlUtils.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Database Message Handlers
@@ -16,7 +17,7 @@ import { normalizeUrl } from '../../utils/urlUtils.ts';
  */
 export async function handleStorePaper(payload: any, tabId?: number): Promise<any> {
   try {
-    console.log('[DBHandlers] Storing paper in IndexedDB:', payload.paper.title);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Storing paper in IndexedDB:', payload.paper.title);
 
     // Update state to show chunking/summarization is starting
     if (tabId) {
@@ -85,7 +86,7 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
 
         if (result.success) {
           const backendUsed = result.device === 'webgpu' ? 'WebGPU (GPU-accelerated)' : 'WASM (CPU)';
-          console.log(`[DBHandlers] ✅ Generated ${result.count} embeddings using ${backendUsed}`);
+          logger.debug('BACKGROUND_SCRIPT', `[DBHandlers] ✅ Generated ${result.count} embeddings using ${backendUsed}`);
 
           // Update state to mark embeddings as complete
           if (tabId) {
@@ -105,7 +106,7 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
             });
           }
         } else {
-          console.log('[DBHandlers] Could not generate embeddings, will use keyword search:', result.error);
+          logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Could not generate embeddings, will use keyword search:', result.error);
 
           // Even if embeddings fail, enable image explanations (they can still work with keyword search)
           if (tabId) {
@@ -118,7 +119,7 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
           }
         }
       } catch (error) {
-        console.log('[DBHandlers] Error triggering embedding generation:', error);
+        logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Error triggering embedding generation:', error);
 
         // On error, still enable image explanations
         if (tabId) {
@@ -134,7 +135,7 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
 
     return { success: true, paper: storedPaper };
   } catch (dbError) {
-    console.error('[DBHandlers] Failed to store paper:', dbError);
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to store paper:', dbError);
 
     // Clear chunking state on error
     if (tabId) {
@@ -155,12 +156,12 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
  */
 export async function handleGetPaperByUrl(payload: any): Promise<any> {
   try {
-    console.log('[DBHandlers] Getting paper by URL:', payload.url);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Getting paper by URL:', payload.url);
     const paper = await getPaperByUrl(payload.url);
-    console.log('[DBHandlers] Paper retrieval result:', paper ? 'Found' : 'Not found');
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Paper retrieval result:', paper ? 'Found' : 'Not found');
     return { success: true, paper };
   } catch (dbError) {
-    console.error('[DBHandlers] Failed to get paper:', dbError);
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to get paper:', dbError);
     return { success: false, error: String(dbError), paper: null };
   }
 }
@@ -170,13 +171,13 @@ export async function handleGetPaperByUrl(payload: any): Promise<any> {
  */
 export async function handleIsPaperStored(payload: any): Promise<any> {
   try {
-    console.log('[DBHandlers] Checking if paper is stored:', payload.url);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Checking if paper is stored:', payload.url);
     const { isPaperStored } = await import('../../utils/dbService.ts');
     const isStored = await isPaperStored(payload.url);
-    console.log('[DBHandlers] Paper stored check result:', isStored);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Paper stored check result:', isStored);
     return { success: true, isStored };
   } catch (dbError) {
-    console.error('[DBHandlers] Failed to check if paper stored:', dbError);
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to check if paper stored:', dbError);
     return { success: false, error: String(dbError), isStored: false };
   }
 }
@@ -186,13 +187,13 @@ export async function handleIsPaperStored(payload: any): Promise<any> {
  */
 export async function handleGetAllPapers(): Promise<any> {
   try {
-    console.log('[DBHandlers] Getting all papers from IndexedDB');
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Getting all papers from IndexedDB');
     const { getAllPapers } = await import('../../utils/dbService.ts');
     const papers = await getAllPapers();
-    console.log('[DBHandlers] Retrieved', papers.length, 'papers');
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Retrieved', papers.length, 'papers');
     return { success: true, papers };
   } catch (dbError) {
-    console.error('[DBHandlers] Failed to get all papers:', dbError);
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to get all papers:', dbError);
     return { success: false, error: String(dbError), papers: [] };
   }
 }
@@ -202,7 +203,7 @@ export async function handleGetAllPapers(): Promise<any> {
  */
 export async function handleDeletePaper(payload: any): Promise<any> {
   try {
-    console.log('[DBHandlers] Deleting paper:', payload.paperId);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Deleting paper:', payload.paperId);
 
     // Get paper URL before deletion for cleanup
     const { getPaperById, deletePaper } = await import('../../utils/dbService.ts');
@@ -210,18 +211,18 @@ export async function handleDeletePaper(payload: any): Promise<any> {
     const deletedPaperUrl = paperToDelete?.url;
 
     if (!deletedPaperUrl) {
-      console.warn('[DBHandlers] Paper not found or has no URL');
+      logger.warn('BACKGROUND_SCRIPT', '[DBHandlers] Paper not found or has no URL');
       return { success: false, error: 'Paper not found' };
     }
 
     // 1. Clean up all resources (AI sessions, requests, states, tab mappings, chat sessions) before deletion
-    console.log('[DBHandlers] Cleaning up resources for paper:', deletedPaperUrl);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Cleaning up resources for paper:', deletedPaperUrl);
     const cleanupSummary = await paperCleanupService.cleanupPaper(deletedPaperUrl, undefined, payload.paperId);
-    console.log('[DBHandlers] Cleanup summary:', cleanupSummary);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Cleanup summary:', cleanupSummary);
 
     // 2. Delete the paper from database
     const deleted = await deletePaper(payload.paperId);
-    console.log('[DBHandlers] Paper deletion result:', deleted);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Paper deletion result:', deleted);
 
     // 3. Update icons for tabs showing this paper's URL
     if (deleted) {
@@ -233,12 +234,12 @@ export async function handleDeletePaper(payload: any): Promise<any> {
         for (const tab of matchingTabs) {
           if (tab.id !== undefined) {
             await iconService.setDefaultIcon(tab.id);
-            console.log(`[DBHandlers] ✓ Icon reset for tab ${tab.id}`);
+            logger.debug('BACKGROUND_SCRIPT', `[DBHandlers] ✓ Icon reset for tab ${tab.id}`);
           }
         }
 
         if (matchingTabs.length > 0) {
-          console.log(`[DBHandlers] ✓ Icons updated for ${matchingTabs.length} tab(s)`);
+          logger.debug('BACKGROUND_SCRIPT', `[DBHandlers] ✓ Icons updated for ${matchingTabs.length} tab(s)`);
         }
 
         // Update context menus if active tab was viewing this paper
@@ -249,13 +250,13 @@ export async function handleDeletePaper(payload: any): Promise<any> {
             await chrome.contextMenus.update('open-chat', { enabled: false });
             await chrome.contextMenus.update('chat-with-kuma-page', { enabled: false });
             await chrome.contextMenus.update('detect-paper-page', { enabled: true });
-            console.log('[DBHandlers] ✓ Context menus updated after paper deletion');
+            logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] ✓ Context menus updated after paper deletion');
           } catch (menuError) {
-            console.warn('[DBHandlers] Failed to update context menus:', menuError);
+            logger.warn('BACKGROUND_SCRIPT', '[DBHandlers] Failed to update context menus:', menuError);
           }
         }
       } catch (iconError) {
-        console.warn('[DBHandlers] Failed to update icons:', iconError);
+        logger.warn('BACKGROUND_SCRIPT', '[DBHandlers] Failed to update icons:', iconError);
         // Don't fail the deletion if icon update fails
       }
     }
@@ -269,7 +270,7 @@ export async function handleDeletePaper(payload: any): Promise<any> {
       }).catch(() => {
         // No listeners, that's ok
       });
-      console.log('[DBHandlers] ✓ PAPER_DELETED broadcast sent to extension');
+      logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] ✓ PAPER_DELETED broadcast sent to extension');
 
       // BUG FIX: Also send to content scripts in all tabs with matching URL
       try {
@@ -285,22 +286,22 @@ export async function handleDeletePaper(payload: any): Promise<any> {
             }).catch(() => {
               // Content script might not be loaded, that's ok
             });
-            console.log(`[DBHandlers] ✓ PAPER_DELETED sent to content script in tab ${tab.id}`);
+            logger.debug('BACKGROUND_SCRIPT', `[DBHandlers] ✓ PAPER_DELETED sent to content script in tab ${tab.id}`);
           }
         }
 
         if (matchingTabs.length > 0) {
-          console.log(`[DBHandlers] ✓ PAPER_DELETED sent to ${matchingTabs.length} matching tab(s)`);
+          logger.debug('BACKGROUND_SCRIPT', `[DBHandlers] ✓ PAPER_DELETED sent to ${matchingTabs.length} matching tab(s)`);
         }
       } catch (tabError) {
-        console.warn('[DBHandlers] Failed to send PAPER_DELETED to tabs:', tabError);
+        logger.warn('BACKGROUND_SCRIPT', '[DBHandlers] Failed to send PAPER_DELETED to tabs:', tabError);
         // Don't fail the deletion if tab messaging fails
       }
     }
 
     return { success: deleted, cleanupSummary };
   } catch (dbError) {
-    console.error('[DBHandlers] Failed to delete paper:', dbError);
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to delete paper:', dbError);
     return { success: false, error: String(dbError) };
   }
 }
@@ -310,13 +311,13 @@ export async function handleDeletePaper(payload: any): Promise<any> {
  */
 export async function handleUpdateQAHistory(payload: any): Promise<any> {
   try {
-    console.log('[DBHandlers] Updating Q&A history for paper:', payload.paperId);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Updating Q&A history for paper:', payload.paperId);
     const { updatePaperQAHistory } = await import('../../utils/dbService.ts');
     const updated = await updatePaperQAHistory(payload.paperId, payload.qaHistory);
-    console.log('[DBHandlers] Q&A history update result:', updated);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Q&A history update result:', updated);
     return { success: updated };
   } catch (dbError) {
-    console.error('[DBHandlers] Failed to update Q&A history:', dbError);
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to update Q&A history:', dbError);
     return { success: false, error: String(dbError) };
   }
 }
@@ -330,7 +331,7 @@ export async function handleUpdateQAHistory(payload: any): Promise<any> {
  */
 export async function handleStoreImageExplanation(payload: any): Promise<any> {
   try {
-    console.log('[DBHandlers] Storing image explanation for:', payload.imageUrl);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Storing image explanation for:', payload.imageUrl);
     const { storeImageExplanation } = await import('../../utils/dbService.ts');
     const explanation = await storeImageExplanation(
       payload.paperId,
@@ -339,10 +340,10 @@ export async function handleStoreImageExplanation(payload: any): Promise<any> {
       payload.explanation,
       payload.imageHash
     );
-    console.log('[DBHandlers] ✓ Image explanation stored');
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] ✓ Image explanation stored');
     return { success: true, explanation };
   } catch (dbError) {
-    console.error('[DBHandlers] Failed to store image explanation:', dbError);
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to store image explanation:', dbError);
     return { success: false, error: String(dbError) };
   }
 }
@@ -352,13 +353,13 @@ export async function handleStoreImageExplanation(payload: any): Promise<any> {
  */
 export async function handleGetImageExplanation(payload: any): Promise<any> {
   try {
-    console.log('[DBHandlers] Getting image explanation for:', payload.imageUrl);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Getting image explanation for:', payload.imageUrl);
     const { getImageExplanation } = await import('../../utils/dbService.ts');
     const explanation = await getImageExplanation(payload.paperId, payload.imageUrl);
-    console.log('[DBHandlers] Image explanation result:', explanation ? 'Found' : 'Not found');
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Image explanation result:', explanation ? 'Found' : 'Not found');
     return { success: true, explanation };
   } catch (dbError) {
-    console.error('[DBHandlers] Failed to get image explanation:', dbError);
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to get image explanation:', dbError);
     return { success: false, error: String(dbError) };
   }
 }
@@ -368,13 +369,13 @@ export async function handleGetImageExplanation(payload: any): Promise<any> {
  */
 export async function handleGetImageExplanationsByPaper(payload: any): Promise<any> {
   try {
-    console.log('[DBHandlers] Getting all image explanations for paper:', payload.paperId);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Getting all image explanations for paper:', payload.paperId);
     const { getImageExplanationsByPaper } = await import('../../utils/dbService.ts');
     const explanations = await getImageExplanationsByPaper(payload.paperId);
-    console.log('[DBHandlers] ✓ Retrieved', explanations.length, 'image explanations');
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] ✓ Retrieved', explanations.length, 'image explanations');
     return { success: true, explanations };
   } catch (dbError) {
-    console.error('[DBHandlers] Failed to get image explanations:', dbError);
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to get image explanations:', dbError);
     return { success: false, error: String(dbError), explanations: [] };
   }
 }
@@ -385,7 +386,7 @@ export async function handleGetImageExplanationsByPaper(payload: any): Promise<a
  */
 export async function handleExtractPaperHTML(payload: any): Promise<any> {
   try {
-    console.log('[DBHandlers] Triggering offscreen extraction for:', payload.paperUrl);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Triggering offscreen extraction for:', payload.paperUrl);
 
     const { extractPaperFromHTMLOffscreen } = await import('../services/offscreenService.ts');
     const result = await extractPaperFromHTMLOffscreen(
@@ -395,14 +396,14 @@ export async function handleExtractPaperHTML(payload: any): Promise<any> {
     );
 
     if (result.success) {
-      console.log('[DBHandlers] ✓ Offscreen extraction triggered');
+      logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] ✓ Offscreen extraction triggered');
       return { success: true };
     } else {
-      console.error('[DBHandlers] Failed to trigger offscreen extraction:', result.error);
+      logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to trigger offscreen extraction:', result.error);
       return { success: false, error: result.error };
     }
   } catch (error) {
-    console.error('[DBHandlers] Error triggering offscreen extraction:', error);
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Error triggering offscreen extraction:', error);
     return { success: false, error: String(error) };
   }
 }

@@ -2,6 +2,7 @@ import { Citation, StoredPaper } from '../types/index.ts';
 import { aiService } from './aiService.ts';
 import { generateCitationId } from '../services/citationsStorage.ts';
 import { extractPageNumber } from './pageNumberExtractor.ts';
+import { logger } from './logger.ts';
 
 /**
  * Citation Generator - Hybrid approach
@@ -35,15 +36,15 @@ export async function generateCitation(
   paper: StoredPaper,
   sectionName?: string
 ): Promise<Citation> {
-  console.log('[Citation Generator] Generating citation for:', paper.title);
+  logger.debug('UTILS', '[Citation Generator] Generating citation for:', paper.title);
 
   // Step 1: Extract page number (if available from PDF viewer)
   let pageNumber: string | number | undefined;
   try {
     pageNumber = extractPageNumber();
-    console.log('[Citation Generator] Page number:', pageNumber || 'Not available (using section name)');
+    logger.debug('UTILS', '[Citation Generator] Page number:', pageNumber || 'Not available (using section name)');
   } catch (error) {
-    console.log('[Citation Generator] Could not extract page number, will use section name');
+    logger.debug('UTILS', '[Citation Generator] Could not extract page number, will use section name');
   }
 
   // Use section name if no page number available
@@ -56,7 +57,7 @@ export async function generateCitation(
   const needsEnhancement = !hasCompleteMetadata(paper);
 
   if (needsEnhancement && !paper.metadata?.metadataEnhanced) {
-    console.log('[Citation Generator] Metadata incomplete, attempting AI enhancement...');
+    logger.debug('UTILS', '[Citation Generator] Metadata incomplete, attempting AI enhancement...');
 
     try {
       const enhanced = await aiService.enhanceMetadataForCitation(paper);
@@ -66,18 +67,18 @@ export async function generateCitation(
           ...enhancedMetadata,
           ...enhanced,
         };
-        console.log('[Citation Generator] ✓ Metadata enhanced successfully');
+        logger.debug('UTILS', '[Citation Generator] ✓ Metadata enhanced successfully');
       } else {
-        console.log('[Citation Generator] AI enhancement returned no results, using existing metadata');
+        logger.debug('UTILS', '[Citation Generator] AI enhancement returned no results, using existing metadata');
       }
     } catch (error) {
-      console.error('[Citation Generator] Error during AI enhancement:', error);
-      console.log('[Citation Generator] Proceeding with existing metadata');
+      logger.error('UTILS', '[Citation Generator] Error during AI enhancement:', error);
+      logger.debug('UTILS', '[Citation Generator] Proceeding with existing metadata');
     }
   } else if (paper.metadata?.metadataEnhanced) {
-    console.log('[Citation Generator] Metadata already enhanced, skipping AI call');
+    logger.debug('UTILS', '[Citation Generator] Metadata already enhanced, skipping AI call');
   } else {
-    console.log('[Citation Generator] Metadata complete, no enhancement needed');
+    logger.debug('UTILS', '[Citation Generator] Metadata complete, no enhancement needed');
   }
 
   // Step 3: Build citation object
@@ -98,7 +99,7 @@ export async function generateCitation(
     addedAt: Date.now(),
   };
 
-  console.log('[Citation Generator] ✓ Citation generated:', {
+  logger.debug('UTILS', '[Citation Generator] ✓ Citation generated:', {
     id: citation.id,
     title: citation.paperTitle,
     hasPageNumber: !!citation.pageNumber,
@@ -117,14 +118,14 @@ export async function generateCitationsBatch(
   quotes: Array<{ text: string; section?: string; pageNumber?: string | number }>,
   paper: StoredPaper
 ): Promise<Citation[]> {
-  console.log('[Citation Generator] Batch generating', quotes.length, 'citations');
+  logger.debug('UTILS', '[Citation Generator] Batch generating', quotes.length, 'citations');
 
   // Enhance metadata once if needed
   let enhancedMetadata = paper.metadata || {};
   const needsEnhancement = !hasCompleteMetadata(paper);
 
   if (needsEnhancement && !paper.metadata?.metadataEnhanced) {
-    console.log('[Citation Generator] Enhancing metadata for batch...');
+    logger.debug('UTILS', '[Citation Generator] Enhancing metadata for batch...');
 
     try {
       const enhanced = await aiService.enhanceMetadataForCitation(paper);
@@ -136,7 +137,7 @@ export async function generateCitationsBatch(
         };
       }
     } catch (error) {
-      console.error('[Citation Generator] Error during batch enhancement:', error);
+      logger.error('UTILS', '[Citation Generator] Error during batch enhancement:', error);
     }
   }
 
@@ -164,7 +165,7 @@ export async function generateCitationsBatch(
     citations.push(citation);
   }
 
-  console.log('[Citation Generator] ✓ Batch complete:', citations.length, 'citations generated');
+  logger.debug('UTILS', '[Citation Generator] ✓ Batch complete:', citations.length, 'citations generated');
 
   return citations;
 }

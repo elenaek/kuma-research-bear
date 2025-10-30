@@ -1,4 +1,5 @@
 import * as operationStateService from '../services/operationStateService.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * State Message Handlers
@@ -14,10 +15,10 @@ export async function handleGetOperationState(payload: any, tabId?: number): Pro
       return { success: false, error: 'No tab ID provided' };
     }
     const state = operationStateService.getState(tabId);
-    console.log('[StateHandlers] Returning operation state for tab', tabId, state);
+    logger.debug('BACKGROUND_SCRIPT', '[StateHandlers] Returning operation state for tab', tabId, state);
     return { success: true, state };
   } catch (error) {
-    console.error('[StateHandlers] Error getting operation state:', error);
+    logger.error('BACKGROUND_SCRIPT', '[StateHandlers] Error getting operation state:', error);
     return { success: false, error: String(error) };
   }
 }
@@ -36,14 +37,14 @@ export async function handleGetOperationStateByPaper(payload: any): Promise<any>
     const state = operationStateService.getStateByPaperUrl(paperUrl);
 
     if (state) {
-      console.log('[StateHandlers] Returning operation state for paper', paperUrl, state);
+      logger.debug('BACKGROUND_SCRIPT', '[StateHandlers] Returning operation state for paper', paperUrl, state);
       return { success: true, state };
     } else {
-      console.log('[StateHandlers] No operation state found for paper', paperUrl);
+      logger.debug('BACKGROUND_SCRIPT', '[StateHandlers] No operation state found for paper', paperUrl);
       return { success: true, state: null };
     }
   } catch (error) {
-    console.error('[StateHandlers] Error getting operation state by paper:', error);
+    logger.error('BACKGROUND_SCRIPT', '[StateHandlers] Error getting operation state by paper:', error);
     return { success: false, error: String(error) };
   }
 }

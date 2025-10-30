@@ -3,6 +3,7 @@ import { SelectionToolbar } from '../components/SelectionToolbar.tsx';
 import * as ChromeService from '../../services/ChromeService.ts';
 import { generateCitation } from '../../utils/citationGenerator.ts';
 import { showSuccessToast, showErrorToast } from '../../utils/toast.ts';
+import { logger } from '../../utils/logger.ts';
 
 const MIN_SELECTION_LENGTH = 3;
 const BUTTON_OFFSET_X = 10;
@@ -30,11 +31,11 @@ class TextSelectionHandler {
 
   async initialize(chatboxInjector: any) {
     if (this.isInitialized) {
-      console.log('[Ask Kuma] Already initialized');
+      logger.debug('CONTENT_SCRIPT', '[Ask Kuma] Already initialized');
       return;
     }
 
-    console.log('[Ask Kuma] Initializing text selection handler...');
+    logger.debug('CONTENT_SCRIPT', '[Ask Kuma] Initializing text selection handler...');
     this.chatboxInjector = chatboxInjector;
 
     try {
@@ -68,9 +69,9 @@ class TextSelectionHandler {
       // Initial render
       this.render();
 
-      console.log('[Ask Kuma] ✓ Text selection handler initialized successfully');
+      logger.debug('CONTENT_SCRIPT', '[Ask Kuma] ✓ Text selection handler initialized successfully');
     } catch (error) {
-      console.error('[Ask Kuma] Failed to initialize:', error);
+      logger.error('CONTENT_SCRIPT', '[Ask Kuma] Failed to initialize:', error);
       throw error;
     }
   }
@@ -84,7 +85,7 @@ class TextSelectionHandler {
       }
       throw new Error(`Failed to fetch CSS: ${response.status}`);
     } catch (error) {
-      console.warn('[Selection Toolbar] Failed to load external CSS, using inline styles:', error);
+      logger.warn('CONTENT_SCRIPT', '[Selection Toolbar] Failed to load external CSS, using inline styles:', error);
       return this.getInlineStyles();
     }
   }
@@ -234,31 +235,31 @@ class TextSelectionHandler {
   }
 
   private async updateSelectionState() {
-    console.log('[Ask Kuma] updateSelectionState called');
+    logger.debug('CONTENT_SCRIPT', '[Ask Kuma] updateSelectionState called');
     const selection = window.getSelection();
 
     if (!selection || selection.isCollapsed) {
-      console.log('[Ask Kuma] No selection or collapsed');
+      logger.debug('CONTENT_SCRIPT', '[Ask Kuma] No selection or collapsed');
       this.hideButton();
       return;
     }
 
     const selectedText = selection.toString().trim();
-    console.log('[Ask Kuma] Selected text:', selectedText.substring(0, 50) + (selectedText.length > 50 ? '...' : ''), `(${selectedText.length} chars)`);
+    logger.debug('CONTENT_SCRIPT', '[Ask Kuma] Selected text:', selectedText.substring(0, 50) + (selectedText.length > 50 ? '...' : ''), `(${selectedText.length} chars)`);
 
     // Check minimum length requirement
     if (selectedText.length < MIN_SELECTION_LENGTH) {
-      console.log('[Ask Kuma] Text too short (min:', MIN_SELECTION_LENGTH, 'chars)');
+      logger.debug('CONTENT_SCRIPT', '[Ask Kuma] Text too short (min:', MIN_SELECTION_LENGTH, 'chars)');
       this.hideButton();
       return;
     }
 
     // Check if paper is ready for chat
-    console.log('[Ask Kuma] Checking if paper is ready...');
+    logger.debug('CONTENT_SCRIPT', '[Ask Kuma] Checking if paper is ready...');
     const paperReady = await this.isPaperReady();
-    console.log('[Ask Kuma] Paper ready:', paperReady);
+    logger.debug('CONTENT_SCRIPT', '[Ask Kuma] Paper ready:', paperReady);
     if (!paperReady) {
-      console.log('[Ask Kuma] Paper not ready, hiding button');
+      logger.debug('CONTENT_SCRIPT', '[Ask Kuma] Paper not ready, hiding button');
       this.hideButton();
       return;
     }
@@ -268,7 +269,7 @@ class TextSelectionHandler {
     const rect = range.getBoundingClientRect();
 
     if (rect.width === 0 && rect.height === 0) {
-      console.log('[Ask Kuma] Invalid selection rect');
+      logger.debug('CONTENT_SCRIPT', '[Ask Kuma] Invalid selection rect');
       this.hideButton();
       return;
     }
@@ -277,7 +278,7 @@ class TextSelectionHandler {
     const x = rect.left + (rect.width / 2) + BUTTON_OFFSET_X;
     const y = rect.top + BUTTON_OFFSET_Y;
 
-    console.log('[Ask Kuma] Showing button at position:', { x, y }, 'rect:', rect);
+    logger.debug('CONTENT_SCRIPT', '[Ask Kuma] Showing button at position:', { x, y }, 'rect:', rect);
 
     // Update state and render
     this.selectionState = {
@@ -306,29 +307,29 @@ class TextSelectionHandler {
       // Paper is ready if it exists and has chunks
       return !!(paper && paper.chunkCount && paper.chunkCount > 0);
     } catch (error) {
-      console.error('[Ask Kuma] Error checking paper readiness:', error);
+      logger.error('CONTENT_SCRIPT', '[Ask Kuma] Error checking paper readiness:', error);
       return false;
     }
   }
 
   private handleButtonClick() {
-    console.log('[Ask Kuma] Button clicked');
+    logger.debug('CONTENT_SCRIPT', '[Ask Kuma] Button clicked');
     const selectedText = this.selectionState.text;
 
     if (!selectedText) {
-      console.log('[Ask Kuma] No selected text');
+      logger.debug('CONTENT_SCRIPT', '[Ask Kuma] No selected text');
       return;
     }
 
     // Format the query as context-aware prompt
     const query = `Explain this passage from the paper: "${selectedText}"`;
-    console.log('[Ask Kuma] Opening chat with query:', query.substring(0, 100) + '...');
+    logger.debug('CONTENT_SCRIPT', '[Ask Kuma] Opening chat with query:', query.substring(0, 100) + '...');
 
     // Open chat with prefilled query
     if (this.chatboxInjector && typeof this.chatboxInjector.openWithQuery === 'function') {
       this.chatboxInjector.openWithQuery(query);
     } else {
-      console.error('[Ask Kuma] openWithQuery method not available on chatboxInjector');
+      logger.error('CONTENT_SCRIPT', '[Ask Kuma] openWithQuery method not available on chatboxInjector');
     }
 
     // Hide the button after clicking
@@ -339,11 +340,11 @@ class TextSelectionHandler {
   }
 
   private async handleAddCitation() {
-    console.log('[Citation] Add citation clicked');
+    logger.debug('CONTENT_SCRIPT', '[Citation] Add citation clicked');
     const selectedText = this.selectionState.text;
 
     if (!selectedText) {
-      console.log('[Citation] No selected text');
+      logger.debug('CONTENT_SCRIPT', '[Citation] No selected text');
       return;
     }
 
@@ -353,12 +354,12 @@ class TextSelectionHandler {
       const paper = await ChromeService.getPaperFromDBByUrl(currentUrl);
 
       if (!paper) {
-        console.error('[Citation] No paper found for current URL');
+        logger.error('CONTENT_SCRIPT', '[Citation] No paper found for current URL');
         showErrorToast('Paper not found. Please store the paper first.');
         return;
       }
 
-      console.log('[Citation] Generating citation for paper:', paper.title);
+      logger.debug('CONTENT_SCRIPT', '[Citation] Generating citation for paper:', paper.title);
 
       // Show loading toast (info type)
       showSuccessToast('Generating citation...', 1500);
@@ -366,7 +367,7 @@ class TextSelectionHandler {
       // Generate citation (includes AI enhancement if needed)
       const citation = await generateCitation(selectedText, paper);
 
-      console.log('[Citation] Citation generated, sending to background for storage...');
+      logger.debug('CONTENT_SCRIPT', '[Citation] Citation generated, sending to background for storage...');
 
       // Send to background service worker for storage
       chrome.runtime.sendMessage({
@@ -374,21 +375,21 @@ class TextSelectionHandler {
         payload: { citation: citation },
       }, (response) => {
         if (chrome.runtime.lastError) {
-          console.error('[Citation] Error sending to background:', chrome.runtime.lastError);
+          logger.error('CONTENT_SCRIPT', '[Citation] Error sending to background:', chrome.runtime.lastError);
           showErrorToast('Failed to add citation. Please try again.');
           return;
         }
 
         if (response && response.success) {
-          console.log('[Citation] ✓ Citation added successfully via background');
+          logger.debug('CONTENT_SCRIPT', '[Citation] ✓ Citation added successfully via background');
           showSuccessToast('Citation added successfully!');
         } else {
-          console.error('[Citation] Background failed to add citation');
+          logger.error('CONTENT_SCRIPT', '[Citation] Background failed to add citation');
           showErrorToast('Failed to add citation. Please try again.');
         }
       });
     } catch (error) {
-      console.error('[Citation] Error adding citation:', error);
+      logger.error('CONTENT_SCRIPT', '[Citation] Error adding citation:', error);
       showErrorToast('Failed to add citation. Please try again.');
     }
 

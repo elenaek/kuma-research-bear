@@ -4,6 +4,7 @@ import { aiService } from '../../utils/aiService.ts';
 import { getOptimalRAGChunkCount } from '../../utils/adaptiveRAGService.ts';
 import { inputQuotaService } from '../../utils/inputQuotaService.ts';
 import { JSONSchema } from '../../utils/typeToSchema.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Chat Message Handlers
@@ -163,7 +164,7 @@ async function sendChatChunk(tabId: number, chunk: string): Promise<void> {
   try {
     // Validate tab exists before sending
     if (!await isTabValid(tabId)) {
-      console.warn('[ChatHandlers] Tab', tabId, 'no longer exists, skipping chunk');
+      logger.warn('CHATBOX', '[ChatHandlers] Tab', tabId, 'no longer exists, skipping chunk');
       return;
     }
 
@@ -172,7 +173,7 @@ async function sendChatChunk(tabId: number, chunk: string): Promise<void> {
       payload: chunk,
     });
   } catch (error) {
-    console.error('[ChatHandlers] Error sending chat chunk to tab:', error);
+    logger.error('CHATBOX', '[ChatHandlers] Error sending chat chunk to tab:', error);
   }
 }
 
@@ -183,7 +184,7 @@ async function sendChatEnd(tabId: number, fullMessage: string, sources?: string[
   try {
     // Validate tab exists before sending
     if (!await isTabValid(tabId)) {
-      console.warn('[ChatHandlers] Tab', tabId, 'no longer exists, skipping stream end');
+      logger.warn('CHATBOX', '[ChatHandlers] Tab', tabId, 'no longer exists, skipping stream end');
       return;
     }
 
@@ -192,7 +193,7 @@ async function sendChatEnd(tabId: number, fullMessage: string, sources?: string[
       payload: { fullMessage, sources, sourceInfo },
     });
   } catch (error) {
-    console.error('[ChatHandlers] Error sending chat end to tab:', error);
+    logger.error('CHATBOX', '[ChatHandlers] Error sending chat end to tab:', error);
   }
 }
 
@@ -231,15 +232,15 @@ async function performPreSummarization(
   const inputQuota = await inputQuotaService.getInputQuota();
   const QUOTA_THRESHOLD = Math.floor(inputQuota * 0.85);
 
-  console.log(`[Pre-Summarization] Estimated tokens: ${estimatedTokens}, Threshold: ${QUOTA_THRESHOLD} (85% of ${inputQuota})`);
+  logger.debug('CHATBOX', `[Pre-Summarization] Estimated tokens: ${estimatedTokens}, Threshold: ${QUOTA_THRESHOLD} (85% of ${inputQuota})`);
 
   // If estimated usage is below threshold, no summarization needed
   if (estimatedTokens < QUOTA_THRESHOLD) {
-    console.log('[Pre-Summarization] Below threshold, no summarization needed');
+    logger.debug('CHATBOX', '[Pre-Summarization] Below threshold, no summarization needed');
     return conversationState;
   }
 
-  console.log('[Pre-Summarization] Above threshold, performing summarization...');
+  logger.debug('CHATBOX', '[Pre-Summarization] Above threshold, performing summarization...');
 
   // Determine which messages to summarize
   // If we have a summary, only summarize messages after lastSummarizedIndex
@@ -249,17 +250,17 @@ async function performPreSummarization(
     : chatHistory.slice(0, -6);
 
   if (messagesToSummarize.length === 0) {
-    console.log('[Pre-Summarization] No messages to summarize');
+    logger.debug('CHATBOX', '[Pre-Summarization] No messages to summarize');
     return conversationState;
   }
 
-  console.log(`[Pre-Summarization] Summarizing ${messagesToSummarize.length} messages...`);
+  logger.debug('CHATBOX', `[Pre-Summarization] Summarizing ${messagesToSummarize.length} messages...`);
 
   // Perform summarization
   const newSummary = await aiService.summarizeConversation(messagesToSummarize, paperTitle);
 
   if (!newSummary) {
-    console.warn('[Pre-Summarization] Summarization failed, using original state');
+    logger.warn('CHATBOX', '[Pre-Summarization] Summarization failed, using original state');
     return conversationState;
   }
 
@@ -269,7 +270,7 @@ async function performPreSummarization(
 
   if (conversationState.summary && conversationState.summaryCount >= 2) {
     // Re-summarize the combined summary to prevent unbounded growth
-    console.log('[Pre-Summarization] Re-summarizing combined summaries (count >= 2)');
+    logger.debug('CHATBOX', '[Pre-Summarization] Re-summarizing combined summaries (count >= 2)');
     const combinedText = `${conversationState.summary}\n\n${newSummary}`;
 
     // Create a temporary array with combined summary for re-summarization
@@ -302,7 +303,7 @@ async function performPreSummarization(
     conversationState: newConversationState,
   });
 
-  console.log(`[Pre-Summarization] ✓ Summarization complete (summaryCount: ${summaryCount})`);
+  logger.debug('CHATBOX', `[Pre-Summarization] ✓ Summarization complete (summaryCount: ${summaryCount})`);
 
   return newConversationState;
 }
@@ -317,7 +318,7 @@ async function processAndStreamResponse(
   tabId: number
 ): Promise<void> {
   try {
-    console.log(`[ChatHandlers] Processing chat message for paper: ${paperUrl}`);
+    logger.debug('CHATBOX', `[ChatHandlers] Processing chat message for paper: ${paperUrl}`);
 
     // Retrieve paper from IndexedDB
     const storedPaper = await getPaperByUrl(paperUrl);
@@ -357,7 +358,7 @@ async function processAndStreamResponse(
       };
     }
 
-    console.log(`[ChatHandlers] Found ${relevantChunks.length} relevant chunks for chat message`);
+    logger.debug('CHATBOX', `[ChatHandlers] Found ${relevantChunks.length} relevant chunks for chat message`);
 
     // Format context from chunks with position and hierarchy
     const contextChunks = relevantChunks.map(chunk => ({
@@ -481,11 +482,11 @@ Paper title: ${storedPaper.title}`;
       const quota = session.inputQuota ?? 0;
       const usagePercentage = quota > 0 ? (currentUsage / quota) * 100 : 0;
 
-      console.log(`[ChatHandlers] Existing session usage: ${currentUsage}/${quota} (${usagePercentage.toFixed(1)}%)`);
+      logger.debug('CHATBOX', `[ChatHandlers] Existing session usage: ${currentUsage}/${quota} (${usagePercentage.toFixed(1)}%)`);
 
       // If session usage is high (>70%), summarize and recreate session
       if (usagePercentage > 70 && chatHistory.length > 0) {
-        console.log('[ChatHandlers] Session usage >70%, triggering summarization and session recreation...');
+        logger.debug('CHATBOX', '[ChatHandlers] Session usage >70%, triggering summarization and session recreation...');
 
         // Perform summarization
         const updatedConversationState = await performPreSummarization(
@@ -526,7 +527,7 @@ Paper title: ${storedPaper.title}`;
         }
 
         session = await aiService.getOrCreateSession(contextId, { initialPrompts });
-        console.log('[ChatHandlers] ✓ Session recreated after summarization');
+        logger.debug('CHATBOX', '[ChatHandlers] ✓ Session recreated after summarization');
       }
     } else if (chatHistory.length > 0) {
       // No session but have history - create with pre-summarization
@@ -538,7 +539,7 @@ Paper title: ${storedPaper.title}`;
       );
 
       // Create new session with conversation history
-      console.log('[ChatHandlers] Creating new session with', chatHistory.length, 'historical messages');
+      logger.debug('CHATBOX', '[ChatHandlers] Creating new session with', chatHistory.length, 'historical messages');
 
       // Combine system prompt and conversation summary into single system message
       // (Prompt API only allows one system message at the first position)
@@ -563,7 +564,7 @@ Paper title: ${storedPaper.title}`;
       session = await aiService.getOrCreateSession(contextId, { initialPrompts });
     } else {
       // First message - create fresh session
-      console.log('[ChatHandlers] Creating fresh session (first message)');
+      logger.debug('CHATBOX', '[ChatHandlers] Creating fresh session (first message)');
       session = await aiService.getOrCreateSession(contextId, {
         initialPrompts: [{ role: 'system', content: systemPrompt }]
       });
@@ -585,16 +586,16 @@ User question: ${message}`;
       const validation = await aiService.validatePromptSize(session, promptWithContext);
 
       if (validation.fits) {
-        console.log(`[ChatHandlers] ✓ Prompt validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
+        logger.debug('CHATBOX', `[ChatHandlers] ✓ Prompt validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
         break;
       }
 
       // Prompt too large - try strategies in order: summarize first, then trim chunks
-      console.warn(`[ChatHandlers] Prompt too large (${validation.actualUsage} > ${validation.available}) on attempt ${attempt}/${MAX_RETRIES}`);
+      logger.warn('CHATBOX', `[ChatHandlers] Prompt too large (${validation.actualUsage} > ${validation.available}) on attempt ${attempt}/${MAX_RETRIES}`);
 
       // Strategy 1: Summarize conversation (attempt 1 only, if we have history and haven't summarized yet)
       if (attempt === 1 && chatHistory.length > 3 && !hasSummarized) {
-        console.log('[ChatHandlers] Attempting summarization to free up space for RAG context...');
+        logger.debug('CHATBOX', '[ChatHandlers] Attempting summarization to free up space for RAG context...');
 
         // Perform summarization
         const updatedConversationState = await performPreSummarization(
@@ -632,24 +633,24 @@ User question: ${message}`;
 
         session = await aiService.getOrCreateSession(contextId, { initialPrompts });
         hasSummarized = true;
-        console.log('[ChatHandlers] ✓ Summarization complete, session recreated. Retrying validation...');
+        logger.debug('CHATBOX', '[ChatHandlers] ✓ Summarization complete, session recreated. Retrying validation...');
         continue; // Retry validation with same chunks but new session
       }
 
       // Strategy 2: Trim chunks (attempts 2-3)
       if (attempt < MAX_RETRIES) {
-        console.log(`[ChatHandlers] Trimming chunks (attempt ${attempt})...`);
+        logger.debug('CHATBOX', `[ChatHandlers] Trimming chunks (attempt ${attempt})...`);
         // Remove last 2 chunks and retry (but keep at least 1 chunk)
         const newLength = Math.max(1, finalContextChunks.length - 2);
         finalContextChunks = finalContextChunks.slice(0, newLength);
       } else {
         // Strategy 3: Final fallback - use minimal chunks (just 1-2 most relevant)
-        console.error(`[ChatHandlers] Max retries reached, using minimal chunks`);
+        logger.error('CHATBOX', `[ChatHandlers] Max retries reached, using minimal chunks`);
         finalContextChunks = contextChunks.slice(0, Math.min(2, contextChunks.length));
       }
 
       if (finalContextChunks.length === 0) {
-        console.error('[ChatHandlers] No chunks remaining after trimming');
+        logger.error('CHATBOX', '[ChatHandlers] No chunks remaining after trimming');
         return {
           success: false,
           error: 'Context too large even after aggressive trimming. Try a shorter question or use a model with larger context.'
@@ -698,7 +699,7 @@ User question: ${message}`;
     let extractedSources: string[] = [];
     let shouldStopDisplaying = false; // Flag to stop sending to user but continue accumulating JSON
 
-    console.log('[ChatHandlers] 🔄 Starting structured streaming...');
+    logger.debug('CHATBOX', '[ChatHandlers] 🔄 Starting structured streaming...');
 
     for await (const chunk of stream) {
       fullResponseJSON += chunk;
@@ -763,7 +764,7 @@ User question: ${message}`;
       // If less than 11 chars accumulated, keep buffering (don't send yet)
     }
 
-    console.log('[ChatHandlers] ✓ Chat response streamed successfully');
+    logger.debug('CHATBOX', '[ChatHandlers] ✓ Chat response streamed successfully');
 
     // Parse final JSON to extract sources
     try {
@@ -777,9 +778,9 @@ User question: ${message}`;
         answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
       }
       extractedSources = parsed.sources || [];
-      console.log('[ChatHandlers] Parsed sources:', extractedSources);
+      logger.debug('CHATBOX', '[ChatHandlers] Parsed sources:', extractedSources);
     } catch (error) {
-      console.error('[ChatHandlers] Failed to parse final JSON:', error);
+      logger.error('CHATBOX', '[ChatHandlers] Failed to parse final JSON:', error);
       // Use streamed answer, empty sources
       extractedSources = [];
     }
@@ -793,7 +794,7 @@ User question: ${message}`;
       })
       .filter((info): info is SourceInfo => info !== undefined);
 
-    console.log('[ChatHandlers] Mapped sourceInfo:', sourceInfoArray.length, 'out of', extractedSources.length);
+    logger.debug('CHATBOX', '[ChatHandlers] Mapped sourceInfo:', sourceInfoArray.length, 'out of', extractedSources.length);
 
     // Send end signal with final answer and sources
     await sendChatEnd(tabId, answer.trim(), extractedSources, sourceInfoArray);
@@ -805,11 +806,11 @@ User question: ${message}`;
       const metadata = aiService.getSessionMetadata(contextId);
 
       if (metadata) {
-        console.log(`[ChatHandlers] Token usage: ${metadata.usagePercentage.toFixed(2)}% (${metadata.inputUsage}/${metadata.inputQuota})`);
+        logger.debug('CHATBOX', `[ChatHandlers] Token usage: ${metadata.usagePercentage.toFixed(2)}% (${metadata.inputUsage}/${metadata.inputQuota})`);
 
         // Check if we need to summarize and clone session
         if (metadata.needsSummarization) {
-          console.log('[ChatHandlers] Token threshold reached (>= 80%), triggering summarization...');
+          logger.debug('CHATBOX', '[ChatHandlers] Token threshold reached (>= 80%), triggering summarization...');
 
           // Update chat history with new messages
           const newChatHistory: ChatMessage[] = [
@@ -825,7 +826,7 @@ User question: ${message}`;
           );
 
           if (messagesToSummarize.length > 0) {
-            console.log(`[ChatHandlers] Summarizing ${messagesToSummarize.length} messages...`);
+            logger.debug('CHATBOX', `[ChatHandlers] Summarizing ${messagesToSummarize.length} messages...`);
 
             const newSummary = await aiService.summarizeConversation(
               messagesToSummarize,
@@ -838,7 +839,7 @@ User question: ${message}`;
 
             if (conversationState.summary && conversationState.summaryCount >= 2) {
               // Re-summarize the combined summary to prevent unbounded growth
-              console.log('[Post-Stream] Re-summarizing combined summaries (count >= 2)');
+              logger.debug('CHATBOX', '[Post-Stream] Re-summarizing combined summaries (count >= 2)');
               const combinedText = `${conversationState.summary}\n\n${newSummary}`;
 
               // Create a temporary array with combined summary for re-summarization
@@ -880,19 +881,19 @@ User question: ${message}`;
               conversationState: newConversationState,
             });
 
-            console.log('[ChatHandlers] ✓ Session cloned with summarized history');
+            logger.debug('CHATBOX', '[ChatHandlers] ✓ Session cloned with summarized history');
           }
         }
       }
     } catch (postProcessError) {
       // Log post-processing errors but don't fail the request
       // The stream was successful and user already received their response
-      console.error('[ChatHandlers] Post-stream processing error (non-critical):', postProcessError);
-      console.error('[ChatHandlers] Token tracking or summarization failed, but message was delivered successfully');
+      logger.error('CHATBOX', '[ChatHandlers] Post-stream processing error (non-critical):', postProcessError);
+      logger.error('CHATBOX', '[ChatHandlers] Token tracking or summarization failed, but message was delivered successfully');
     }
 
   } catch (error) {
-    console.error('[ChatHandlers] Error processing chat message:', error);
+    logger.error('CHATBOX', '[ChatHandlers] Error processing chat message:', error);
 
     // Send error as a message to the chat
     await sendChatEnd(
@@ -928,7 +929,7 @@ export async function handleSendChatMessage(payload: any, sender: chrome.runtime
 
   // Start streaming in background (don't block on it)
   processAndStreamResponse(paperUrl, message, tabId).catch(error => {
-    console.error('[ChatHandlers] Unhandled streaming error:', error);
+    logger.error('CHATBOX', '[ChatHandlers] Unhandled streaming error:', error);
   });
 
   // Return success immediately to prevent message channel timeout
@@ -950,7 +951,7 @@ export async function handleUpdateChatHistory(payload: any): Promise<any> {
   }
 
   try {
-    console.log(`[ChatHandlers] Updating chat history for paper: ${paperUrl}`);
+    logger.debug('CHATBOX', `[ChatHandlers] Updating chat history for paper: ${paperUrl}`);
 
     // Get the paper
     const storedPaper = await getPaperByUrl(paperUrl);
@@ -965,10 +966,10 @@ export async function handleUpdateChatHistory(payload: any): Promise<any> {
     // Update the chat history
     await updatePaper(storedPaper.id, { chatHistory });
 
-    console.log('[ChatHandlers] ✓ Chat history updated successfully');
+    logger.debug('CHATBOX', '[ChatHandlers] ✓ Chat history updated successfully');
     return { success: true };
   } catch (error) {
-    console.error('[ChatHandlers] Error updating chat history:', error);
+    logger.error('CHATBOX', '[ChatHandlers] Error updating chat history:', error);
     return {
       success: false,
       error: `Failed to update chat history: ${String(error)}`,
@@ -990,7 +991,7 @@ export async function handleGetChatHistory(payload: any): Promise<any> {
   }
 
   try {
-    console.log(`[ChatHandlers] Getting chat history for paper: ${paperUrl}`);
+    logger.debug('CHATBOX', `[ChatHandlers] Getting chat history for paper: ${paperUrl}`);
 
     // Get the paper
     const storedPaper = await getPaperByUrl(paperUrl);
@@ -1003,11 +1004,11 @@ export async function handleGetChatHistory(payload: any): Promise<any> {
     }
 
     const chatHistory = storedPaper.chatHistory || [];
-    console.log(`[ChatHandlers] ✓ Retrieved ${chatHistory.length} chat messages`);
+    logger.debug('CHATBOX', `[ChatHandlers] ✓ Retrieved ${chatHistory.length} chat messages`);
 
     return { success: true, chatHistory };
   } catch (error) {
-    console.error('[ChatHandlers] Error getting chat history:', error);
+    logger.error('CHATBOX', '[ChatHandlers] Error getting chat history:', error);
     return {
       success: false,
       error: `Failed to get chat history: ${String(error)}`,
@@ -1030,7 +1031,7 @@ export async function handleClearChatHistory(payload: any): Promise<any> {
   }
 
   try {
-    console.log(`[ChatHandlers] Clearing chat history for paper: ${paperUrl}`);
+    logger.debug('CHATBOX', `[ChatHandlers] Clearing chat history for paper: ${paperUrl}`);
 
     // Get the paper
     const storedPaper = await getPaperByUrl(paperUrl);
@@ -1057,10 +1058,10 @@ export async function handleClearChatHistory(payload: any): Promise<any> {
     const contextId = `chat-${storedPaper.id}`;
     aiService.destroySessionForContext(contextId);
 
-    console.log('[ChatHandlers] ✓ Chat history cleared and session destroyed');
+    logger.debug('CHATBOX', '[ChatHandlers] ✓ Chat history cleared and session destroyed');
     return { success: true };
   } catch (error) {
-    console.error('[ChatHandlers] Error clearing chat history:', error);
+    logger.error('CHATBOX', '[ChatHandlers] Error clearing chat history:', error);
     return {
       success: false,
       error: `Failed to clear chat history: ${String(error)}`,
@@ -1085,7 +1086,7 @@ async function processAndStreamImageChatResponse(
   tabId: number
 ): Promise<void> {
   try {
-    console.log(`[ImageChatHandlers] Processing image chat message for paper: ${paperId}, image: ${imageUrl}`);
+    logger.debug('CHATBOX', `[ImageChatHandlers] Processing image chat message for paper: ${paperId}, image: ${imageUrl}`);
 
     // Retrieve paper from IndexedDB
     const storedPaper = await getPaperByUrl(imageUrl); // Will fail, need to get by ID
@@ -1108,7 +1109,7 @@ async function processAndStreamImageChatResponse(
       return;
     }
 
-    console.log(`[ImageChatHandlers] Found ${relevantChunks.length} relevant chunks for image chat message`);
+    logger.debug('CHATBOX', `[ImageChatHandlers] Found ${relevantChunks.length} relevant chunks for image chat message`);
 
     // Format context from chunks with position and hierarchy
     const contextChunks = relevantChunks.map(chunk => ({
@@ -1249,11 +1250,11 @@ Paper title: ${paper.title}`;
       const quota = session.inputQuota ?? 0;
       const usagePercentage = quota > 0 ? (currentUsage / quota) * 100 : 0;
 
-      console.log(`[ImageChatHandlers] Existing session usage: ${currentUsage}/${quota} (${usagePercentage.toFixed(1)}%)`);
+      logger.debug('CHATBOX', `[ImageChatHandlers] Existing session usage: ${currentUsage}/${quota} (${usagePercentage.toFixed(1)}%)`);
 
       // If session usage is high (>70%), summarize and recreate session
       if (usagePercentage > 70 && imageChatHistory.length > 0) {
-        console.log('[ImageChatHandlers] Session usage >70%, triggering summarization and session recreation...');
+        logger.debug('CHATBOX', '[ImageChatHandlers] Session usage >70%, triggering summarization and session recreation...');
 
         // Perform summarization
         const updatedConversationState = await performPreSummarization(
@@ -1294,7 +1295,7 @@ Paper title: ${paper.title}`;
           initialPrompts,
           expectedInputs: [{ type: 'image', languages: ['en'] }]
         });
-        console.log('[ImageChatHandlers] ✓ Session recreated after summarization');
+        logger.debug('CHATBOX', '[ImageChatHandlers] ✓ Session recreated after summarization');
       }
     } else if (imageChatHistory.length > 0) {
       // No session but have history - create with pre-summarization
@@ -1306,7 +1307,7 @@ Paper title: ${paper.title}`;
       );
 
       // Create new multimodal session with conversation history
-      console.log('[ImageChatHandlers] Creating new multimodal session with', imageChatHistory.length, 'historical messages');
+      logger.debug('CHATBOX', '[ImageChatHandlers] Creating new multimodal session with', imageChatHistory.length, 'historical messages');
 
       let systemPromptContent = systemPrompt;
       if (updatedConversationState.summary) {
@@ -1332,7 +1333,7 @@ Paper title: ${paper.title}`;
       });
     } else {
       // First message - create fresh multimodal session
-      console.log('[ImageChatHandlers] Creating fresh multimodal session (first message)');
+      logger.debug('CHATBOX', '[ImageChatHandlers] Creating fresh multimodal session (first message)');
       session = await aiService.getOrCreateSession(contextId, {
         initialPrompts: [{ role: 'system', content: systemPrompt }],
         expectedInputs: [{ type: 'image', languages: ['en'] }] // Enable multimodal
@@ -1356,16 +1357,16 @@ User question: ${message}`;
       const validation = await aiService.validatePromptSize(session, promptWithContext);
 
       if (validation.fits) {
-        console.log(`[ImageChatHandlers] ✓ Prompt validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
+        logger.debug('CHATBOX', `[ImageChatHandlers] ✓ Prompt validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
         break;
       }
 
       // Prompt too large - try strategies in order: summarize first, then trim chunks
-      console.warn(`[ImageChatHandlers] Prompt too large (${validation.actualUsage} > ${validation.available}) on attempt ${attempt}/${MAX_RETRIES}`);
+      logger.warn('CHATBOX', `[ImageChatHandlers] Prompt too large (${validation.actualUsage} > ${validation.available}) on attempt ${attempt}/${MAX_RETRIES}`);
 
       // Strategy 1: Summarize conversation (attempt 1 only, if we have history and haven't summarized yet)
       if (attempt === 1 && imageChatHistory.length > 3 && !hasSummarized) {
-        console.log('[ImageChatHandlers] Attempting summarization to free up space for RAG context...');
+        logger.debug('CHATBOX', '[ImageChatHandlers] Attempting summarization to free up space for RAG context...');
 
         // Perform summarization
         const updatedConversationState = await performPreSummarization(
@@ -1404,24 +1405,24 @@ User question: ${message}`;
 
         session = await aiService.getOrCreateSession(contextId, { initialPrompts });
         hasSummarized = true;
-        console.log('[ImageChatHandlers] ✓ Summarization complete, session recreated. Retrying validation...');
+        logger.debug('CHATBOX', '[ImageChatHandlers] ✓ Summarization complete, session recreated. Retrying validation...');
         continue; // Retry validation with same chunks but new session
       }
 
       // Strategy 2: Trim chunks (attempts 2-3)
       if (attempt < MAX_RETRIES) {
-        console.log(`[ImageChatHandlers] Trimming chunks (attempt ${attempt})...`);
+        logger.debug('CHATBOX', `[ImageChatHandlers] Trimming chunks (attempt ${attempt})...`);
         // Remove last 2 chunks and retry (but keep at least 1 chunk)
         const newLength = Math.max(1, finalContextChunks.length - 2);
         finalContextChunks = finalContextChunks.slice(0, newLength);
       } else {
         // Strategy 3: Final fallback - use minimal chunks (just 1-2 most relevant)
-        console.error(`[ImageChatHandlers] Max retries reached, using minimal chunks`);
+        logger.error('CHATBOX', `[ImageChatHandlers] Max retries reached, using minimal chunks`);
         finalContextChunks = contextChunks.slice(0, Math.min(2, contextChunks.length));
       }
 
       if (finalContextChunks.length === 0) {
-        console.error('[ImageChatHandlers] No chunks remaining after trimming');
+        logger.error('CHATBOX', '[ImageChatHandlers] No chunks remaining after trimming');
         await sendImageChatEnd(tabId, 'Context too large even after aggressive trimming. Try a shorter question or use a model with larger context.', []);
         return;
       }
@@ -1478,7 +1479,7 @@ User question: ${message}`;
     let extractedSources: string[] = [];
     let shouldStopDisplaying = false; // Flag to stop sending to user but continue accumulating JSON
 
-    console.log('[ImageChatHandlers] 🔄 Starting structured streaming...');
+    logger.debug('CHATBOX', '[ImageChatHandlers] 🔄 Starting structured streaming...');
 
     for await (const chunk of stream) {
       fullResponseJSON += chunk;
@@ -1543,7 +1544,7 @@ User question: ${message}`;
       // If less than 11 chars accumulated, keep buffering (don't send yet)
     }
 
-    console.log('[ImageChatHandlers] ✓ Image chat response streamed successfully');
+    logger.debug('CHATBOX', '[ImageChatHandlers] ✓ Image chat response streamed successfully');
 
     // Parse final JSON to extract sources
     try {
@@ -1557,9 +1558,9 @@ User question: ${message}`;
         answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
       }
       extractedSources = parsed.sources || [];
-      console.log('[ImageChatHandlers] Parsed sources:', extractedSources);
+      logger.debug('CHATBOX', '[ImageChatHandlers] Parsed sources:', extractedSources);
     } catch (error) {
-      console.error('[ImageChatHandlers] Failed to parse final JSON:', error);
+      logger.error('CHATBOX', '[ImageChatHandlers] Failed to parse final JSON:', error);
       // Use streamed answer, empty sources
       extractedSources = [];
     }
@@ -1573,7 +1574,7 @@ User question: ${message}`;
       })
       .filter((info): info is SourceInfo => info !== undefined);
 
-    console.log('[ImageChatHandlers] Mapped sourceInfo:', sourceInfoArray.length, 'out of', extractedSources.length);
+    logger.debug('CHATBOX', '[ImageChatHandlers] Mapped sourceInfo:', sourceInfoArray.length, 'out of', extractedSources.length);
 
     // Send end signal with final answer and sources
     await sendImageChatEnd(tabId, answer.trim(), extractedSources, sourceInfoArray);
@@ -1597,7 +1598,7 @@ User question: ${message}`;
       const metadata = aiService.getSessionMetadata(contextId);
 
       if (metadata && metadata.needsSummarization) {
-        console.log('[ImageChatHandlers] Token threshold reached, triggering summarization...');
+        logger.debug('CHATBOX', '[ImageChatHandlers] Token threshold reached, triggering summarization...');
 
         // Summarize messages
         const messagesToSummarize = newChatHistory.slice(
@@ -1651,15 +1652,15 @@ User question: ${message}`;
             conversationState: newConversationState,
           });
 
-          console.log('[ImageChatHandlers] ✓ Session cloned with summarized history');
+          logger.debug('CHATBOX', '[ImageChatHandlers] ✓ Session cloned with summarized history');
         }
       }
     } catch (postProcessError) {
-      console.error('[ImageChatHandlers] Post-stream processing error:', postProcessError);
+      logger.error('CHATBOX', '[ImageChatHandlers] Post-stream processing error:', postProcessError);
     }
 
   } catch (error) {
-    console.error('[ImageChatHandlers] Error processing image chat message:', error);
+    logger.error('CHATBOX', '[ImageChatHandlers] Error processing image chat message:', error);
     await sendImageChatEnd(tabId, 'Sorry, I encountered an error processing your message. Please try again.', []);
   }
 }
@@ -1670,7 +1671,7 @@ User question: ${message}`;
 async function sendImageChatChunk(tabId: number, chunk: string): Promise<void> {
   try {
     if (!await isTabValid(tabId)) {
-      console.warn('[ImageChatHandlers] Tab', tabId, 'no longer exists, skipping chunk');
+      logger.warn('CHATBOX', '[ImageChatHandlers] Tab', tabId, 'no longer exists, skipping chunk');
       return;
     }
 
@@ -1679,7 +1680,7 @@ async function sendImageChatChunk(tabId: number, chunk: string): Promise<void> {
       payload: chunk,
     });
   } catch (error) {
-    console.error('[ImageChatHandlers] Error sending image chat chunk:', error);
+    logger.error('CHATBOX', '[ImageChatHandlers] Error sending image chat chunk:', error);
   }
 }
 
@@ -1689,7 +1690,7 @@ async function sendImageChatChunk(tabId: number, chunk: string): Promise<void> {
 async function sendImageChatEnd(tabId: number, fullMessage: string, sources?: string[], sourceInfo?: SourceInfo[]): Promise<void> {
   try {
     if (!await isTabValid(tabId)) {
-      console.warn('[ImageChatHandlers] Tab', tabId, 'no longer exists, skipping stream end');
+      logger.warn('CHATBOX', '[ImageChatHandlers] Tab', tabId, 'no longer exists, skipping stream end');
       return;
     }
 
@@ -1698,7 +1699,7 @@ async function sendImageChatEnd(tabId: number, fullMessage: string, sources?: st
       payload: { fullMessage, sources, sourceInfo },
     });
   } catch (error) {
-    console.error('[ImageChatHandlers] Error sending image chat end:', error);
+    logger.error('CHATBOX', '[ImageChatHandlers] Error sending image chat end:', error);
   }
 }
 
@@ -1730,11 +1731,11 @@ export async function handleSendImageChatMessage(payload: any, sender: chrome.ru
     bytes[i] = binaryString.charCodeAt(i);
   }
   const imageBlob = new Blob([bytes], { type: imageMimeType });
-  console.log('[ImageChatHandlers] Reconstructed blob from Base64:', imageBlob.size, 'bytes, type:', imageBlob.type);
+  logger.debug('CHATBOX', '[ImageChatHandlers] Reconstructed blob from Base64:', imageBlob.size, 'bytes, type:', imageBlob.type);
 
   // Start streaming in background
   processAndStreamImageChatResponse(paperId, imageUrl, imageBlob, message, tabId).catch(error => {
-    console.error('[ImageChatHandlers] Unhandled streaming error:', error);
+    logger.error('CHATBOX', '[ImageChatHandlers] Unhandled streaming error:', error);
   });
 
   // Return success immediately
@@ -1755,17 +1756,17 @@ export async function handleGetImageChatHistory(payload: any): Promise<any> {
   }
 
   try {
-    console.log(`[ImageChatHandlers] Getting image chat history for image: ${imageUrl}`);
+    logger.debug('CHATBOX', `[ImageChatHandlers] Getting image chat history for image: ${imageUrl}`);
 
     const { getImageChat } = await import('../../utils/dbService.ts');
     const imageChat = await getImageChat(paperId, imageUrl);
 
     const chatHistory = imageChat?.chatHistory || [];
-    console.log(`[ImageChatHandlers] ✓ Retrieved ${chatHistory.length} image chat messages`);
+    logger.debug('CHATBOX', `[ImageChatHandlers] ✓ Retrieved ${chatHistory.length} image chat messages`);
 
     return { success: true, chatHistory };
   } catch (error) {
-    console.error('[ImageChatHandlers] Error getting image chat history:', error);
+    logger.error('CHATBOX', '[ImageChatHandlers] Error getting image chat history:', error);
     return {
       success: false,
       error: `Failed to get image chat history: ${String(error)}`,
@@ -1787,15 +1788,15 @@ export async function handleUpdateImageChatHistory(payload: any): Promise<any> {
   }
 
   try {
-    console.log(`[ImageChatHandlers] Updating image chat history for image: ${imageUrl}`);
+    logger.debug('CHATBOX', `[ImageChatHandlers] Updating image chat history for image: ${imageUrl}`);
 
     const { updateImageChat } = await import('../../utils/dbService.ts');
     await updateImageChat(paperId, imageUrl, { chatHistory });
 
-    console.log('[ImageChatHandlers] ✓ Image chat history updated successfully');
+    logger.debug('CHATBOX', '[ImageChatHandlers] ✓ Image chat history updated successfully');
     return { success: true };
   } catch (error) {
-    console.error('[ImageChatHandlers] Error updating image chat history:', error);
+    logger.error('CHATBOX', '[ImageChatHandlers] Error updating image chat history:', error);
     return {
       success: false,
       error: `Failed to update image chat history: ${String(error)}`,
@@ -1817,7 +1818,7 @@ export async function handleClearImageChatHistory(payload: any): Promise<any> {
   }
 
   try {
-    console.log(`[ImageChatHandlers] Clearing image chat history for image: ${imageUrl}`);
+    logger.debug('CHATBOX', `[ImageChatHandlers] Clearing image chat history for image: ${imageUrl}`);
 
     const { deleteImageChat } = await import('../../utils/dbService.ts');
     await deleteImageChat(paperId, imageUrl);
@@ -1832,10 +1833,10 @@ export async function handleClearImageChatHistory(payload: any): Promise<any> {
     const contextId = `image-chat-${paperId}-img_${Math.abs(hash)}`;
     aiService.destroySessionForContext(contextId);
 
-    console.log('[ImageChatHandlers] ✓ Image chat history cleared and session destroyed');
+    logger.debug('CHATBOX', '[ImageChatHandlers] ✓ Image chat history cleared and session destroyed');
     return { success: true };
   } catch (error) {
-    console.error('[ImageChatHandlers] Error clearing image chat history:', error);
+    logger.error('CHATBOX', '[ImageChatHandlers] Error clearing image chat history:', error);
     return {
       success: false,
       error: `Failed to clear image chat history: ${String(error)}`,

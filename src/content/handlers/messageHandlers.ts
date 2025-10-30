@@ -4,6 +4,7 @@ import { storePaper } from '../services/paperStorageService.ts';
 import { aiService } from '../../utils/aiService.ts';
 import { chatboxInjector } from '../services/chatboxInjector.ts';
 import { imageExplanationHandler } from '../services/imageExplanationHandler.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Message Handlers
@@ -15,7 +16,7 @@ import { imageExplanationHandler } from '../services/imageExplanationHandler.ts'
  * Uses AI-first detection and provides detailed storage status
  */
 export async function handleDetectPaper(currentPaper: ResearchPaper | null) {
-  console.log('[MessageHandler] Handling DETECT_PAPER');
+  logger.debug('CONTENT_SCRIPT', '[MessageHandler] Handling DETECT_PAPER');
 
   // Manual detection uses AI-first approach
   const paper = await detectPaperWithAIOnly();
@@ -33,10 +34,10 @@ export async function handleDetectPaper(currentPaper: ResearchPaper | null) {
           paper.metadata = {};
         }
         paper.metadata.originalLanguage = detectedLanguage;
-        console.log('[MessageHandler] Detected paper language:', detectedLanguage);
+        logger.debug('CONTENT_SCRIPT', '[MessageHandler] Detected paper language:', detectedLanguage);
       }
     } catch (error) {
-      console.error('[MessageHandler] Error detecting language:', error);
+      logger.error('CONTENT_SCRIPT', '[MessageHandler] Error detecting language:', error);
       // Continue anyway - language detection is optional
     }
   }
@@ -72,7 +73,7 @@ export async function handleDetectPaper(currentPaper: ResearchPaper | null) {
  * Forwards current paper to background for explanation
  */
 export async function handleExplainPaper(currentPaper: ResearchPaper | null) {
-  console.log('[MessageHandler] Handling EXPLAIN_PAPER');
+  logger.debug('CONTENT_SCRIPT', '[MessageHandler] Handling EXPLAIN_PAPER');
 
   if (currentPaper) {
     // Send paper to background for explanation
@@ -91,7 +92,7 @@ export async function handleExplainPaper(currentPaper: ResearchPaper | null) {
  * Forwards section to background for explanation
  */
 export async function handleExplainSection(payload: any) {
-  console.log('[MessageHandler] Handling EXPLAIN_SECTION');
+  logger.debug('CONTENT_SCRIPT', '[MessageHandler] Handling EXPLAIN_SECTION');
 
   // Handle section explanation
   chrome.runtime.sendMessage({
@@ -168,7 +169,7 @@ export function createMessageRouter(getCurrentPaper: () => ResearchPaper | null)
             sendResponse({ success: false, error: 'Unknown message type' });
         }
       } catch (error) {
-        console.error('[MessageHandler] Error handling message:', error);
+        logger.error('CONTENT_SCRIPT', '[MessageHandler] Error handling message:', error);
         sendResponse({ success: false, error: String(error) });
       }
     })();

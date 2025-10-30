@@ -10,6 +10,7 @@ import { aiService } from '../../utils/aiService.ts';
 import * as operationStateService from './operationStateService.ts';
 import * as requestDeduplicationService from './requestDeduplicationService.ts';
 import { tabPaperTracker } from './tabPaperTracker.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * AI context IDs that might exist for a given tab
@@ -58,7 +59,7 @@ export async function cleanupPaper(
   tabMappingsCleared: number;
   chatSessionsDestroyed: number;
 }> {
-  console.log(`[PaperCleanup] Starting cleanup for paper: ${paperUrl}`, tabId ? `(tab ${tabId})` : '(all tabs)');
+  logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] Starting cleanup for paper: ${paperUrl}`, tabId ? `(tab ${tabId})` : '(all tabs)');
 
   let aiSessionsDestroyed = 0;
   let requestsCancelled = 0;
@@ -74,9 +75,9 @@ export async function cleanupPaper(
       try {
         aiService.destroySessionForContext(contextId);
         aiSessionsDestroyed++;
-        console.log(`[PaperCleanup] ✓ Destroyed AI session: ${contextId}`);
+        logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Destroyed AI session: ${contextId}`);
       } catch (error) {
-        console.warn(`[PaperCleanup] Failed to destroy session ${contextId}:`, error);
+        logger.warn('BACKGROUND_SCRIPT', `[PaperCleanup] Failed to destroy session ${contextId}:`, error);
       }
     }
 
@@ -86,7 +87,7 @@ export async function cleanupPaper(
       if (requestDeduplicationService.hasRequest(requestKey)) {
         requestDeduplicationService.deleteRequest(requestKey);
         requestsCancelled++;
-        console.log(`[PaperCleanup] ✓ Cancelled request: ${requestKey}`);
+        logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Cancelled request: ${requestKey}`);
       }
     }
 
@@ -95,7 +96,7 @@ export async function cleanupPaper(
     if (state?.currentPaper?.url === paperUrl) {
       operationStateService.deleteState(tabId);
       statesCleared++;
-      console.log(`[PaperCleanup] ✓ Cleared operation state for tab ${tabId}`);
+      logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Cleared operation state for tab ${tabId}`);
     }
   } else {
     // Clean up across all tabs
@@ -111,9 +112,9 @@ export async function cleanupPaper(
           try {
             aiService.destroySessionForContext(contextId);
             aiSessionsDestroyed++;
-            console.log(`[PaperCleanup] ✓ Destroyed AI session: ${contextId}`);
+            logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Destroyed AI session: ${contextId}`);
           } catch (error) {
-            console.warn(`[PaperCleanup] Failed to destroy session ${contextId}:`, error);
+            logger.warn('BACKGROUND_SCRIPT', `[PaperCleanup] Failed to destroy session ${contextId}:`, error);
           }
         }
 
@@ -123,14 +124,14 @@ export async function cleanupPaper(
           if (requestDeduplicationService.hasRequest(requestKey)) {
             requestDeduplicationService.deleteRequest(requestKey);
             requestsCancelled++;
-            console.log(`[PaperCleanup] ✓ Cancelled request: ${requestKey}`);
+            logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Cancelled request: ${requestKey}`);
           }
         }
 
         // Clear operation state
         operationStateService.deleteState(currentTabId);
         statesCleared++;
-        console.log(`[PaperCleanup] ✓ Cleared operation state for tab ${currentTabId}`);
+        logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Cleared operation state for tab ${currentTabId}`);
       }
     }
 
@@ -139,7 +140,7 @@ export async function cleanupPaper(
     for (const requestKey of urlRequests) {
       requestDeduplicationService.deleteRequest(requestKey);
       requestsCancelled++;
-      console.log(`[PaperCleanup] ✓ Cancelled request by URL: ${requestKey}`);
+      logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Cancelled request by URL: ${requestKey}`);
     }
   }
 
@@ -147,13 +148,13 @@ export async function cleanupPaper(
   if (tabId === undefined) {
     const clearedTabCount = tabPaperTracker.clearPaperFromAllTabs(paperUrl);
     tabMappingsCleared = clearedTabCount;
-    console.log(`[PaperCleanup] ✓ Cleared ${clearedTabCount} tab-paper mappings`);
+    logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Cleared ${clearedTabCount} tab-paper mappings`);
 
     // Also remove paper ID mapping if paperId provided
     if (paperId) {
       const removed = tabPaperTracker.removePaperIdMapping(paperId);
       if (removed) {
-        console.log(`[PaperCleanup] ✓ Removed paper ID mapping for ${paperId}`);
+        logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Removed paper ID mapping for ${paperId}`);
       }
     }
   }
@@ -164,9 +165,9 @@ export async function cleanupPaper(
     try {
       aiService.destroySessionForContext(chatContextId);
       chatSessionsDestroyed++;
-      console.log(`[PaperCleanup] ✓ Destroyed chat session: ${chatContextId}`);
+      logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Destroyed chat session: ${chatContextId}`);
     } catch (error) {
-      console.warn(`[PaperCleanup] Failed to destroy chat session ${chatContextId}:`, error);
+      logger.warn('BACKGROUND_SCRIPT', `[PaperCleanup] Failed to destroy chat session ${chatContextId}:`, error);
     }
   }
 
@@ -178,7 +179,7 @@ export async function cleanupPaper(
     chatSessionsDestroyed,
   };
 
-  console.log(`[PaperCleanup] Cleanup complete for ${paperUrl}:`, summary);
+  logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] Cleanup complete for ${paperUrl}:`, summary);
   return summary;
 }
 
@@ -196,7 +197,7 @@ export async function cleanupMultiplePapers(
   tabMappingsCleared: number;
   chatSessionsDestroyed: number;
 }> {
-  console.log(`[PaperCleanup] Starting cleanup for ${papers.length} papers`);
+  logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] Starting cleanup for ${papers.length} papers`);
 
   let totalAISessionsDestroyed = 0;
   let totalRequestsCancelled = 0;
@@ -221,6 +222,6 @@ export async function cleanupMultiplePapers(
     chatSessionsDestroyed: totalChatSessionsDestroyed,
   };
 
-  console.log(`[PaperCleanup] Multi-paper cleanup complete:`, summary);
+  logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] Multi-paper cleanup complete:`, summary);
   return summary;
 }

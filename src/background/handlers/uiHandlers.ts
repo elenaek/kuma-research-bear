@@ -1,3 +1,5 @@
+import { logger } from '../../utils/logger.ts';
+
 /**
  * UI Message Handlers
  * Handles UI-related operations (sidepanel, etc.)
@@ -25,7 +27,7 @@ export async function handleCheckSidepanelOpen(): Promise<{ isOpen: boolean }> {
     });
     return { isOpen: sidePanelContexts.length > 0 };
   } catch (error) {
-    console.error('[uiHandlers] Error checking sidepanel state:', error);
+    logger.error('BACKGROUND_SCRIPT', '[uiHandlers] Error checking sidepanel state:', error);
     return { isOpen: false };
   }
 }

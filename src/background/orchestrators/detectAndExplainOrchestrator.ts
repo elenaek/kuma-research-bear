@@ -3,6 +3,7 @@ import { aiService } from '../../utils/aiService.ts';
 import { getPaperByUrl } from '../../utils/dbService.ts';
 import * as operationStateService from '../services/operationStateService.ts';
 import * as iconService from '../services/iconService.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Detect and Explain Orchestrator
@@ -27,7 +28,7 @@ async function updateOperationState(tabId: number, updates: any): Promise<void> 
  */
 export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
   try {
-    console.log('[Orchestrator] Starting detect and explain flow for tab', tabId);
+    logger.debug('BACKGROUND_SCRIPT', '[Orchestrator] Starting detect and explain flow for tab', tabId);
 
     // Phase 1: Detection
     await updateOperationState(tabId, {
@@ -55,7 +56,7 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
     let isPaperStored = false;
     if (detectResponse.paper && detectResponse.alreadyStored) {
       isPaperStored = true;
-      console.log('[Orchestrator] Paper is already stored in DB');
+      logger.debug('BACKGROUND_SCRIPT', '[Orchestrator] Paper is already stored in DB');
     }
 
     // Update state with detected paper
@@ -70,7 +71,7 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
     // Note: Chunking and embedding generation happen asynchronously in offscreen document
     // The dbHandlers.ts will track chunking completion and set chatReady: true
     // Then embeddings will be generated and imageExplanationReady will be set when complete
-    console.log('[Orchestrator] Paper detection complete. Chunking and embedding will happen in background.');
+    logger.debug('BACKGROUND_SCRIPT', '[Orchestrator] Paper detection complete. Chunking and embedding will happen in background.');
 
     return { success: true, paper: detectResponse.paper };
   } catch (flowError) {

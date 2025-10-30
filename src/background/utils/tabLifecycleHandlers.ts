@@ -4,6 +4,7 @@ import * as requestDeduplicationService from '../services/requestDeduplicationSe
 import * as iconService from '../services/iconService.ts';
 import * as paperStatusService from '../services/paperStatusService.ts';
 import { tabPaperTracker } from '../services/tabPaperTracker.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Tab Lifecycle Handlers
@@ -47,7 +48,7 @@ export async function handleTabActivated(activeInfo: chrome.tabs.TabActiveInfo):
     if (operationStateService.hasState(tabId)) {
       const state = operationStateService.getRawState(tabId)!;
       await iconService.updateIconForTab(tabId, state);
-      console.log(`[TabLifecycle] Tab ${tabId} activated, icon updated based on current state`);
+      logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] Tab ${tabId} activated, icon updated based on current state`);
     } else if (tab.url) {
       // No operation state exists, check if this URL has a stored paper
       await checkAndUpdatePaperStatus(tabId, tab.url);
@@ -56,7 +57,7 @@ export async function handleTabActivated(activeInfo: chrome.tabs.TabActiveInfo):
       await iconService.setDefaultIcon(tabId);
     }
   } catch (error) {
-    console.error(`[TabLifecycle] Error handling tab activation for ${tabId}:`, error);
+    logger.error('BACKGROUND_SCRIPT', `[TabLifecycle] Error handling tab activation for ${tabId}:`, error);
     await iconService.setDefaultIcon(tabId);
   }
 }
@@ -65,7 +66,7 @@ export async function handleTabActivated(activeInfo: chrome.tabs.TabActiveInfo):
  * Check if a URL has a stored paper and update operation state + icon accordingly
  */
 async function checkAndUpdatePaperStatus(tabId: number, url: string): Promise<void> {
-  console.log(`[TabLifecycle] Checking paper status for tab ${tabId}, URL: ${url}`);
+  logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] Checking paper status for tab ${tabId}, URL: ${url}`);
 
   // Quick database lookup
   const status = await paperStatusService.checkPaperStatus(url);
@@ -74,7 +75,7 @@ async function checkAndUpdatePaperStatus(tabId: number, url: string): Promise<vo
     // Update operation state with completion info (automatically updates icon)
     await paperStatusService.updateOperationStateFromStoredPaper(tabId, status);
 
-    console.log(`[TabLifecycle] ✓ Stored paper found for tab ${tabId}:`, {
+    logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] ✓ Stored paper found for tab ${tabId}:`, {
       completionPercentage: status.completionPercentage,
       hasExplanation: status.hasExplanation,
       hasAnalysis: status.hasAnalysis,
@@ -83,7 +84,7 @@ async function checkAndUpdatePaperStatus(tabId: number, url: string): Promise<vo
   } else {
     // No stored paper, set default icon
     await iconService.setDefaultIcon(tabId);
-    console.log(`[TabLifecycle] No stored paper for tab ${tabId}`);
+    logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] No stored paper for tab ${tabId}`);
   }
 }
 
@@ -91,7 +92,7 @@ async function checkAndUpdatePaperStatus(tabId: number, url: string): Promise<vo
  * Handle tab removal - clean up AI sessions, active requests, and operation state
  */
 export function handleTabRemoved(tabId: number, removeInfo: chrome.tabs.TabRemoveInfo): void {
-  console.log(`[TabLifecycle] Tab ${tabId} closed, cleaning up AI sessions...`);
+  logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] Tab ${tabId} closed, cleaning up AI sessions...`);
 
   // Get the paper URL before unregistering (for chat session cleanup)
   const paperUrl = tabPaperTracker.getPaperForTab(tabId);
@@ -116,7 +117,7 @@ export function handleTabRemoved(tabId: number, removeInfo: chrome.tabs.TabRemov
 
   // Clean up chat session ONLY if no other tabs are viewing this paper
   if (paperUrl && !tabPaperTracker.hasPaper(paperUrl)) {
-    console.log(`[TabLifecycle] No more tabs viewing paper ${paperUrl}, cleaning up chat session`);
+    logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] No more tabs viewing paper ${paperUrl}, cleaning up chat session`);
 
     // We need to get the paper ID to construct the chat context ID
     // Since we only have the URL, we need to look it up
@@ -125,22 +126,22 @@ export function handleTabRemoved(tabId: number, removeInfo: chrome.tabs.TabRemov
     if (state?.currentPaper?.id) {
       const chatContextId = `chat-${state.currentPaper.id}`;
       aiService.destroySessionForContext(chatContextId);
-      console.log(`[TabLifecycle] Destroyed chat session ${chatContextId}`);
+      logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] Destroyed chat session ${chatContextId}`);
     }
   } else if (paperUrl) {
-    console.log(`[TabLifecycle] Other tabs still viewing paper ${paperUrl}, keeping chat session alive`);
+    logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] Other tabs still viewing paper ${paperUrl}, keeping chat session alive`);
   }
 
   // Clean up active requests for this tab
   const deletedRequests = requestDeduplicationService.deleteRequestsByTab(tabId);
   if (deletedRequests.length > 0) {
-    console.log(`[TabLifecycle] Cleaned up ${deletedRequests.length} active requests:`, deletedRequests);
+    logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] Cleaned up ${deletedRequests.length} active requests:`, deletedRequests);
   }
 
   // Also clean up operation state for this tab
   if (operationStateService.hasState(tabId)) {
     operationStateService.deleteState(tabId);
-    console.log(`[TabLifecycle] Cleaned up operation state for tab ${tabId}`);
+    logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] Cleaned up operation state for tab ${tabId}`);
   }
 
   // Reset icon to default (cleanup any custom icons)
@@ -155,5 +156,5 @@ export function registerTabLifecycleHandlers(): void {
   chrome.tabs.onActivated.addListener(handleTabActivated);
   chrome.tabs.onRemoved.addListener(handleTabRemoved);
 
-  console.log('[TabLifecycle] Tab lifecycle handlers registered');
+  logger.debug('BACKGROUND_SCRIPT', '[TabLifecycle] Tab lifecycle handlers registered');
 }

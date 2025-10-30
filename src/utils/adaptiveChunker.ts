@@ -7,6 +7,7 @@
 import { ContentChunk } from '../types/index.ts';
 import { inputQuotaService } from './inputQuotaService.ts';
 import type { PaperSection } from './researchPaperSplitter.ts';
+import { logger } from './logger.ts';
 
 /**
  * Chunk research paper sections adaptively based on inputQuota
@@ -26,12 +27,12 @@ export async function chunkSections(
   };
 }> {
   try {
-    console.log(`[AdaptiveChunker] Chunking ${sections.length} sections for paper ${paperId}`);
+    logger.debug('UTILS', `[AdaptiveChunker] Chunking ${sections.length} sections for paper ${paperId}`);
 
     // Get adaptive sizing from inputQuota service
     const maxAllowedChunkSize = await inputQuotaService.getMaxChunkSize();
 
-    console.log(`[AdaptiveChunker] Max allowed chunk size: ${maxAllowedChunkSize} chars`);
+    logger.debug('UTILS', `[AdaptiveChunker] Max allowed chunk size: ${maxAllowedChunkSize} chars`);
 
     const allChunks: ContentChunk[] = [];
     let globalChunkIndex = 0;
@@ -56,9 +57,9 @@ export async function chunkSections(
     const minChunkSize = Math.min(...chunkSizes);
     const maxChunkSize = Math.max(...chunkSizes);
 
-    console.log(`[AdaptiveChunker] ✓ Created ${allChunks.length} chunks from ${sections.length} sections`);
-    console.log(`[AdaptiveChunker] Stats: avg=${averageChunkSize}, min=${minChunkSize}, max=${maxChunkSize} chars`);
-    console.log(`[AdaptiveChunker] Avg chunks per section: ${(allChunks.length / sections.length).toFixed(1)}`);
+    logger.debug('UTILS', `[AdaptiveChunker] ✓ Created ${allChunks.length} chunks from ${sections.length} sections`);
+    logger.debug('UTILS', `[AdaptiveChunker] Stats: avg=${averageChunkSize}, min=${minChunkSize}, max=${maxChunkSize} chars`);
+    logger.debug('UTILS', `[AdaptiveChunker] Avg chunks per section: ${(allChunks.length / sections.length).toFixed(1)}`);
 
     return {
       chunks: allChunks,
@@ -70,7 +71,7 @@ export async function chunkSections(
       },
     };
   } catch (error) {
-    console.error('[AdaptiveChunker] Error chunking sections:', error);
+    logger.error('UTILS', '[AdaptiveChunker] Error chunking sections:', error);
     throw error;
   }
 }
@@ -120,7 +121,7 @@ function chunkSection(
 
   // ALWAYS chunk by paragraphs (natural document boundaries)
   const paragraphs = extractParagraphs(content);
-  console.log(`[AdaptiveChunker] Chunking section "${heading}" (${content.length} chars) - extracted ${paragraphs.length} paragraphs`);
+  logger.debug('UTILS', `[AdaptiveChunker] Chunking section "${heading}" (${content.length} chars) - extracted ${paragraphs.length} paragraphs`);
 
   const chunks: ContentChunk[] = [];
   let currentChunkIndex = startGlobalIndex;
@@ -155,7 +156,7 @@ function chunkSection(
       currentChunkIndex++;
     } else {
       // Paragraph exceeds maxChunkSize → chunk by sentences
-      console.log(`[AdaptiveChunker] Paragraph ${i + 1} (${paragraph.length} chars) exceeds max size, chunking by sentences...`);
+      logger.debug('UTILS', `[AdaptiveChunker] Paragraph ${i + 1} (${paragraph.length} chars) exceeds max size, chunking by sentences...`);
 
       const sentences = extractSentences(paragraph);
       let currentSentenceGroup = '';
@@ -234,7 +235,7 @@ function chunkSection(
     chunk.totalSectionChunks = totalChunks;
   });
 
-  console.log(`[AdaptiveChunker] ✓ Created ${totalChunks} chunks for section "${heading}"`);
+  logger.debug('UTILS', `[AdaptiveChunker] ✓ Created ${totalChunks} chunks for section "${heading}"`);
 
   return chunks;
 }

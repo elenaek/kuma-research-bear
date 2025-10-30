@@ -3,6 +3,8 @@
  * Extracts clean text from web pages and PDFs
  */
 
+import { logger } from './logger.ts';
+
 export interface ExtractedContent {
   text: string;
   headings: string[];
@@ -364,13 +366,13 @@ export async function extractResearchPaper(paperId: string): Promise<{
   chunks?: import('../types/index.ts').ContentChunk[];
 }> {
   try {
-    console.log('[ContentExtractor] Starting research paper extraction...');
+    logger.debug('UTILS', '[ContentExtractor] Starting research paper extraction...');
 
     // Step 1: Detect if this is a research paper
     const { detectResearchPaper } = await import('./paperDetection.ts');
     const detectionResult = await detectResearchPaper();
 
-    console.log(`[ContentExtractor] Detection result:`, detectionResult);
+    logger.debug('UTILS', `[ContentExtractor] Detection result:`, detectionResult);
 
     // If not a research paper, return early
     if (!detectionResult.isResearchPaper) {
@@ -386,7 +388,7 @@ export async function extractResearchPaper(paperId: string): Promise<{
     const sections = await extractHTMLSections();
 
     if (sections.length === 0) {
-      console.warn('[ContentExtractor] No sections extracted, falling back to basic extraction');
+      logger.warn('UTILS', '[ContentExtractor] No sections extracted, falling back to basic extraction');
       return {
         success: false,
         isResearchPaper: true,
@@ -394,13 +396,13 @@ export async function extractResearchPaper(paperId: string): Promise<{
       };
     }
 
-    console.log(`[ContentExtractor] Extracted ${sections.length} sections`);
+    logger.debug('UTILS', `[ContentExtractor] Extracted ${sections.length} sections`);
 
     // Step 3: Chunk sections adaptively based on inputQuota
     const { chunkSections } = await import('./adaptiveChunker.ts');
     const { chunks, stats } = await chunkSections(sections, paperId);
 
-    console.log(`[ContentExtractor] ✓ Created ${chunks.length} adaptive chunks`);
+    logger.debug('UTILS', `[ContentExtractor] ✓ Created ${chunks.length} adaptive chunks`);
 
     return {
       success: true,
@@ -410,7 +412,7 @@ export async function extractResearchPaper(paperId: string): Promise<{
       averageChunkSize: stats.averageChunkSize, // Include for storing in paper metadata
     };
   } catch (error) {
-    console.error('[ContentExtractor] Error extracting research paper:', error);
+    logger.error('UTILS', '[ContentExtractor] Error extracting research paper:', error);
     return {
       success: false,
       isResearchPaper: false,

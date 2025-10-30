@@ -24,6 +24,7 @@ import * as citationHandlers from './handlers/citationHandlers.ts';
 import { executeDetectAndExplainFlow } from './orchestrators/detectAndExplainOrchestrator.ts';
 import { inputQuotaService } from '../utils/inputQuotaService.ts';
 import { getShowImageButtons, setShowImageButtons } from '../utils/settingsService.ts';
+import { logger } from '../utils/logger.ts';
 
 // Download progress state storage (for popup state reinitialization)
 // Uses chrome.storage.local to persist across service worker restarts
@@ -43,7 +44,7 @@ export async function getDownloadProgressState() {
       currentDownloadingModel: result[STORAGE_KEY_DOWNLOADING_MODEL] || null
     };
   } catch (error) {
-    console.error('[Background] Failed to read download progress from storage:', error);
+    logger.error('BACKGROUND_SCRIPT', '[Background] Failed to read download progress from storage:', error);
     return {
       downloadProgress: 0,
       currentDownloadingModel: null
@@ -58,9 +59,9 @@ async function setDownloadProgressState(progress: number, model: 'gemini' | 'emb
       [STORAGE_KEY_DOWNLOAD_PROGRESS]: progress,
       [STORAGE_KEY_DOWNLOADING_MODEL]: model
     });
-    console.log(`[Background] Stored progress: ${progress.toFixed(1)}% (${model})`);
+    logger.debug('BACKGROUND_SCRIPT', `[Background] Stored progress: ${progress.toFixed(1)}% (${model})`);
   } catch (error) {
-    console.error('[Background] Failed to store download progress:', error);
+    logger.error('BACKGROUND_SCRIPT', '[Background] Failed to store download progress:', error);
   }
 }
 
@@ -71,9 +72,9 @@ async function clearDownloadProgressState() {
       STORAGE_KEY_DOWNLOAD_PROGRESS,
       STORAGE_KEY_DOWNLOADING_MODEL
     ]);
-    console.log('[Background] Cleared download progress state');
+    logger.debug('BACKGROUND_SCRIPT', '[Background] Cleared download progress state');
   } catch (error) {
-    console.error('[Background] Failed to clear download progress:', error);
+    logger.error('BACKGROUND_SCRIPT', '[Background] Failed to clear download progress:', error);
   }
 }
 
@@ -100,7 +101,7 @@ const pendingExtractions = new Map<string, number>();
 
 // Handle extension installation
 chrome.runtime.onInstalled.addListener(async () => {
-  console.log('Research Bear extension installed');
+  logger.debug('BACKGROUND_SCRIPT', 'Research Bear extension installed');
 
   // Set default settings (legacy settings in local storage)
   chrome.storage.local.set({
@@ -116,12 +117,12 @@ chrome.runtime.onInstalled.addListener(async () => {
 
   // Initialize inputQuota service for adaptive chunking
   try {
-    console.log('[Background] Initializing inputQuota service...');
+    logger.debug('BACKGROUND_SCRIPT', '[Background] Initializing inputQuota service...');
     await inputQuotaService.initialize();
     const quotaInfo = await inputQuotaService.getQuotaInfo();
-    console.log('[Background] ✓ InputQuota initialized:', quotaInfo);
+    logger.debug('BACKGROUND_SCRIPT', '[Background] ✓ InputQuota initialized:', quotaInfo);
   } catch (error) {
-    console.error('[Background] Failed to initialize inputQuota:', error);
+    logger.error('BACKGROUND_SCRIPT', '[Background] Failed to initialize inputQuota:', error);
   }
 
   // ========================================
@@ -223,7 +224,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     checked: true, // Default to checked
   });
 
-  console.log('Context menus created');
+  logger.debug('BACKGROUND_SCRIPT', 'Context menus created');
 });
 
 /**
@@ -265,7 +266,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
 
           // Clear progress when download completes
           if (progress >= 100) {
-            console.log('[Background] Download complete, clearing progress state');
+            logger.debug('BACKGROUND_SCRIPT', '[Background] Download complete, clearing progress state');
             await clearDownloadProgressState();
           }
         }
@@ -379,7 +380,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
           const paperUrl = message.payload.paper.url;
           tabId = pendingExtractions.get(paperUrl);
           if (tabId) {
-            console.log('[Background] Retrieved tabId', tabId, 'from pending extractions for:', paperUrl);
+            logger.debug('BACKGROUND_SCRIPT', '[Background] Retrieved tabId', tabId, 'from pending extractions for:', paperUrl);
             pendingExtractions.delete(paperUrl); // Clean up mapping
           }
         }
@@ -393,7 +394,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         const extractTabId = sender.tab?.id;
         if (extractTabId && message.payload.paperUrl) {
           pendingExtractions.set(message.payload.paperUrl, extractTabId);
-          console.log('[Background] Stored tabId', extractTabId, 'for paper extraction:', message.payload.paperUrl);
+          logger.debug('BACKGROUND_SCRIPT', '[Background] Stored tabId', extractTabId, 'for paper extraction:', message.payload.paperUrl);
         }
         sendResponse(await dbHandlers.handleExtractPaperHTML(message.payload));
         break;
@@ -505,7 +506,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         sendResponse({ success: false, error: 'Unknown message type' });
     }
   } catch (error) {
-    console.error('Error handling message:', error);
+    logger.error('BACKGROUND_SCRIPT', 'Error handling message:', error);
     sendResponse({ success: false, error: String(error) });
   }
 }
@@ -535,7 +536,7 @@ async function isChatReady(tabId: number): Promise<boolean> {
     const paper = await dbHandlers.handleGetPaperByUrl({ url: tab.url });
     return !!(paper.success && paper.paper && paper.paper.chunkCount > 0);
   } catch (error) {
-    console.error('[ContextMenu] Error checking chat ready status:', error);
+    logger.error('BACKGROUND_SCRIPT', '[ContextMenu] Error checking chat ready status:', error);
     return false;
   }
 }
@@ -570,7 +571,7 @@ async function isPaperNotStored(tabId: number): Promise<boolean> {
 
     return !paperExists; // Return true if paper doesn't exist or isn't chunked
   } catch (error) {
-    console.error('[ContextMenu] Error checking paper storage status:', error);
+    logger.error('BACKGROUND_SCRIPT', '[ContextMenu] Error checking paper storage status:', error);
     return false; // Default to not showing detect menu on error
   }
 }
@@ -617,7 +618,7 @@ export async function updateContextMenuState() {
     });
   } catch (error) {
     // Context menu might not exist yet, that's ok
-    console.debug('[ContextMenu] Could not update menu state:', error);
+    logger.debug('BACKGROUND_SCRIPT', '[ContextMenu] Could not update menu state:', error);
   }
 }
 
@@ -636,7 +637,7 @@ export async function updateContextMenuForPaper(paperUrl: string) {
       await updateContextMenuState();
     }
   } catch (error) {
-    console.debug('[ContextMenu] Could not update menu for paper:', error);
+    logger.debug('BACKGROUND_SCRIPT', '[ContextMenu] Could not update menu for paper:', error);
   }
 }
 
@@ -654,13 +655,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
     // Handle "Detect Paper with Kuma" menu item
     else if (info.menuItemId === CONTEXT_MENU_DETECT_ID) {
-      console.log('[ContextMenu] Detect Paper triggered from context menu for tab', tab.id);
+      logger.debug('BACKGROUND_SCRIPT', '[ContextMenu] Detect Paper triggered from context menu for tab', tab.id);
       // Execute the detect and explain flow (same as popup button)
       await executeDetectAndExplainFlow(tab.id);
     }
     // Handle "Discuss this image with Kuma" menu item
     else if (info.menuItemId === CONTEXT_MENU_IMAGE_ID) {
-      console.log('[ContextMenu] Discuss image triggered for:', info.srcUrl);
+      logger.debug('BACKGROUND_SCRIPT', '[ContextMenu] Discuss image triggered for:', info.srcUrl);
       // Send message to content script with image URL
       await chrome.tabs.sendMessage(tab.id, {
         type: MessageType.CONTEXT_MENU_IMAGE_DISCUSS,
@@ -669,7 +670,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
     // Handle "Show Image Explanation Buttons" toggle
     else if (info.menuItemId === CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID) {
-      console.log('[ContextMenu] Toggle image buttons:', info.checked);
+      logger.debug('BACKGROUND_SCRIPT', '[ContextMenu] Toggle image buttons:', info.checked);
       // Update setting
       await setShowImageButtons(info.checked ?? true);
 
@@ -686,7 +687,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
     // Handle "Open Sidepanel" / "Open Paper in Sidepanel" menu item
     else if (info.menuItemId === CONTEXT_MENU_SIDEPANEL_ID) {
-      console.log('[ContextMenu] Open sidepanel triggered from context menu for tab', tab.id);
+      logger.debug('BACKGROUND_SCRIPT', '[ContextMenu] Open sidepanel triggered from context menu for tab', tab.id);
 
       // Always open sidepanel FIRST (preserves user gesture)
       await chrome.sidePanel.open({ tabId: tab.id });
@@ -702,7 +703,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       // Otherwise, sidepanel shows default view (0th index paper)
     }
   } catch (error) {
-    console.error('[ContextMenu] Error handling context menu click:', error);
+    logger.error('BACKGROUND_SCRIPT', '[ContextMenu] Error handling context menu click:', error);
   }
 });
 
@@ -718,4 +719,4 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   }
 });
 
-console.log('Research Bear background service worker loaded');
+logger.debug('BACKGROUND_SCRIPT', 'Research Bear background service worker loaded');

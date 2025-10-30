@@ -6,6 +6,7 @@
 
 import { ContentChunk } from '../../types/index.ts';
 import { getPaperChunks, getRelevantChunks, getRelevantChunksByTopic } from '../../utils/dbService.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Get relevant chunks using semantic search (EmbeddingGemma)
@@ -16,14 +17,14 @@ export async function getRelevantChunksSemantic(
   query: string,
   limit: number = 5
 ): Promise<ContentChunk[]> {
-  console.log('[Semantic Search] Searching for:', query);
+  logger.debug('RAG', '[Semantic Search] Searching for:', query);
 
   try {
     // Get all chunks for the paper
     const chunks = await getPaperChunks(paperId);
 
     if (chunks.length === 0) {
-      console.warn('[Semantic Search] No chunks found for paper:', paperId);
+      logger.warn('RAG', '[Semantic Search] No chunks found for paper:', paperId);
       return [];
     }
 
@@ -31,7 +32,7 @@ export async function getRelevantChunksSemantic(
     const hasEmbeddings = chunks.some(chunk => chunk.embedding !== undefined);
 
     if (!hasEmbeddings) {
-      console.log('[Semantic Search] No embeddings available, falling back to keyword search');
+      logger.debug('RAG', '[Semantic Search] No embeddings available, falling back to keyword search');
       return await getRelevantChunks(paperId, query, limit);
     }
 
@@ -41,11 +42,11 @@ export async function getRelevantChunksSemantic(
     // Check if model is available
     const capabilities = await embeddingService.checkAvailability();
     if (!capabilities.available) {
-      console.log('[Semantic Search] Embedding model not available, falling back to keyword search');
+      logger.debug('RAG', '[Semantic Search] Embedding model not available, falling back to keyword search');
       return await getRelevantChunks(paperId, query, limit);
     }
 
-    console.log('[Semantic Search] Using semantic search with', chunks.length, 'chunks');
+    logger.debug('RAG', '[Semantic Search] Using semantic search with', chunks.length, 'chunks');
 
     // Generate query embedding
     const queryEmbedding = await embeddingService.generateEmbedding(query, true);
@@ -54,7 +55,7 @@ export async function getRelevantChunksSemantic(
     const chunksWithEmbeddings = chunks.filter(c => c.embedding !== undefined);
 
     if (chunksWithEmbeddings.length === 0) {
-      console.warn('[Semantic Search] No chunks with embeddings, falling back to keyword search');
+      logger.warn('RAG', '[Semantic Search] No chunks with embeddings, falling back to keyword search');
       return await getRelevantChunks(paperId, query, limit);
     }
 
@@ -69,17 +70,17 @@ export async function getRelevantChunksSemantic(
       limit
     );
 
-    console.log('[Semantic Search] Top', limit, 'similarities:', similarities.slice(0, 3).map(s => s.score));
+    logger.debug('RAG', '[Semantic Search] Top', limit, 'similarities:', similarities.slice(0, 3).map(s => s.score));
 
     // Map similarity scores back to chunks
     const relevantChunks = similarities.map(sim => {
       return chunksWithEmbeddings.find(c => c.id === sim.chunkId)!;
     });
 
-    console.log('[Semantic Search] ✓ Found', relevantChunks.length, 'relevant chunks');
+    logger.debug('RAG', '[Semantic Search] ✓ Found', relevantChunks.length, 'relevant chunks');
     return relevantChunks;
   } catch (error) {
-    console.error('[Semantic Search] Error, falling back to keyword search:', error);
+    logger.error('RAG', '[Semantic Search] Error, falling back to keyword search:', error);
     return await getRelevantChunks(paperId, query, limit);
   }
 }
@@ -92,14 +93,14 @@ export async function getRelevantChunksByTopicSemantic(
   topics: string[],
   limit: number = 3
 ): Promise<ContentChunk[]> {
-  console.log('[Semantic Search] Searching for topics:', topics);
+  logger.debug('RAG', '[Semantic Search] Searching for topics:', topics);
 
   try {
     // Get all chunks for the paper
     const chunks = await getPaperChunks(paperId);
 
     if (chunks.length === 0) {
-      console.warn('[Semantic Search] No chunks found for paper:', paperId);
+      logger.warn('RAG', '[Semantic Search] No chunks found for paper:', paperId);
       return [];
     }
 
@@ -107,7 +108,7 @@ export async function getRelevantChunksByTopicSemantic(
     const hasEmbeddings = chunks.some(chunk => chunk.embedding !== undefined);
 
     if (!hasEmbeddings) {
-      console.log('[Semantic Search] No embeddings available, falling back to keyword search');
+      logger.debug('RAG', '[Semantic Search] No embeddings available, falling back to keyword search');
       return await getRelevantChunksByTopic(paperId, topics, limit);
     }
 
@@ -117,11 +118,11 @@ export async function getRelevantChunksByTopicSemantic(
     // Check if model is available
     const capabilities = await embeddingService.checkAvailability();
     if (!capabilities.available) {
-      console.log('[Semantic Search] Embedding model not available, falling back to keyword search');
+      logger.debug('RAG', '[Semantic Search] Embedding model not available, falling back to keyword search');
       return await getRelevantChunksByTopic(paperId, topics, limit);
     }
 
-    console.log('[Semantic Search] Using semantic search with', chunks.length, 'chunks');
+    logger.debug('RAG', '[Semantic Search] Using semantic search with', chunks.length, 'chunks');
 
     // Combine topics into a single query
     const query = topics.join(' ');
@@ -133,7 +134,7 @@ export async function getRelevantChunksByTopicSemantic(
     const chunksWithEmbeddings = chunks.filter(c => c.embedding !== undefined);
 
     if (chunksWithEmbeddings.length === 0) {
-      console.warn('[Semantic Search] No chunks with embeddings, falling back to keyword search');
+      logger.warn('RAG', '[Semantic Search] No chunks with embeddings, falling back to keyword search');
       return await getRelevantChunksByTopic(paperId, topics, limit);
     }
 
@@ -148,17 +149,17 @@ export async function getRelevantChunksByTopicSemantic(
       limit
     );
 
-    console.log('[Semantic Search] Top', limit, 'similarities:', similarities.slice(0, 3).map(s => s.score));
+    logger.debug('RAG', '[Semantic Search] Top', limit, 'similarities:', similarities.slice(0, 3).map(s => s.score));
 
     // Map similarity scores back to chunks
     const relevantChunks = similarities.map(sim => {
       return chunksWithEmbeddings.find(c => c.id === sim.chunkId)!;
     });
 
-    console.log('[Semantic Search] ✓ Found', relevantChunks.length, 'relevant chunks');
+    logger.debug('RAG', '[Semantic Search] ✓ Found', relevantChunks.length, 'relevant chunks');
     return relevantChunks;
   } catch (error) {
-    console.error('[Semantic Search] Error, falling back to keyword search:', error);
+    logger.error('RAG', '[Semantic Search] Error, falling back to keyword search:', error);
     return await getRelevantChunksByTopic(paperId, topics, limit);
   }
 }

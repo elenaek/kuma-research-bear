@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(git stash show:*)"
-    ],
-    "deny": [],
-    "ask": []
-  }
-}

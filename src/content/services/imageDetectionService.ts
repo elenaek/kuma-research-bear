@@ -1,3 +1,5 @@
+import { logger } from '../../utils/logger.ts';
+
 /**
  * Image Detection Service
  * Detects relevant images in research papers for explanation
@@ -163,19 +165,19 @@ function findMainContent(): HTMLElement | null {
  * Detect all relevant images in the document
  */
 export function detectImages(): DetectedImage[] {
-  console.log('[ImageDetect] Starting image detection...');
+  logger.debug('CONTENT_SCRIPT', '[ImageDetect] Starting image detection...');
 
   const mainContent = findMainContent();
   if (!mainContent) {
-    console.log('[ImageDetect] No main content area found');
+    logger.debug('CONTENT_SCRIPT', '[ImageDetect] No main content area found');
     return [];
   }
 
-  console.log('[ImageDetect] Main content element:', mainContent.tagName, mainContent.className);
+  logger.debug('CONTENT_SCRIPT', '[ImageDetect] Main content element:', mainContent.tagName, mainContent.className);
 
   // Get all images in main content
   const allImages = Array.from(mainContent.querySelectorAll('img')) as HTMLImageElement[];
-  console.log('[ImageDetect] Found', allImages.length, 'total images in main content');
+  logger.debug('CONTENT_SCRIPT', '[ImageDetect] Found', allImages.length, 'total images in main content');
 
   // Filter images
   const detectedImages: DetectedImage[] = [];
@@ -183,13 +185,13 @@ export function detectImages(): DetectedImage[] {
   for (const img of allImages) {
     // Skip if in excluded area
     if (isInExcludedArea(img)) {
-      console.log('[ImageDetect] Skipping image in excluded area:', img.src);
+      logger.debug('CONTENT_SCRIPT', '[ImageDetect] Skipping image in excluded area:', img.src);
       continue;
     }
 
     // Skip if too small
     if (!meetsMinimumSize(img)) {
-      console.log('[ImageDetect] Skipping small image:', img.src,
+      logger.debug('CONTENT_SCRIPT', '[ImageDetect] Skipping small image:', img.src,
                   `(${img.naturalWidth}x${img.naturalHeight})`);
       continue;
     }
@@ -197,7 +199,7 @@ export function detectImages(): DetectedImage[] {
     // Skip if hidden
     const style = window.getComputedStyle(img);
     if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
-      console.log('[ImageDetect] Skipping hidden image:', img.src);
+      logger.debug('CONTENT_SCRIPT', '[ImageDetect] Skipping hidden image:', img.src);
       continue;
     }
 
@@ -215,11 +217,11 @@ export function detectImages(): DetectedImage[] {
     };
 
     detectedImages.push(detectedImage);
-    console.log('[ImageDetect] ✓ Detected relevant image:', url,
+    logger.debug('CONTENT_SCRIPT', '[ImageDetect] ✓ Detected relevant image:', url,
                 `(${detectedImage.width}x${detectedImage.height})`);
   }
 
-  console.log('[ImageDetect] Detected', detectedImages.length, 'relevant images');
+  logger.debug('CONTENT_SCRIPT', '[ImageDetect] Detected', detectedImages.length, 'relevant images');
   return detectedImages;
 }
 
@@ -295,7 +297,7 @@ export function watchForNewImages(callback: (images: DetectedImage[]) => void): 
     }
 
     if (hasNewImages) {
-      console.log('[ImageDetect] New images detected, re-scanning...');
+      logger.debug('CONTENT_SCRIPT', '[ImageDetect] New images detected, re-scanning...');
       const images = detectImages();
       callback(images);
     }

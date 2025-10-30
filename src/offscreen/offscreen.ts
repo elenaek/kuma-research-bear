@@ -11,61 +11,62 @@ import { getPaperChunks } from '../utils/dbService.ts';
 import { embeddingService } from '../utils/embeddingService.ts';
 import { DEFAULT_HYBRID_CONFIG } from '../types/embedding.ts';
 import BM25 from 'okapibm25';
+import { logger } from '../utils/logger.ts';
 
-console.log('[Offscreen] Offscreen document initialized');
+logger.debug('EMBEDDINGS', '[Offscreen] Offscreen document initialized');
 
 /**
  * Diagnostic: Check WebGPU availability on startup
  */
 (async () => {
-  console.log('[Offscreen] 🔍 Running WebGPU diagnostics...');
+  logger.debug('PERFORMANCE', '[Offscreen] 🔍 Running WebGPU diagnostics...');
 
   // Check if WebGPU API exists
   if (typeof navigator === 'undefined' || !('gpu' in navigator)) {
-    console.warn('[Offscreen] ❌ WebGPU API not available in this context');
+    logger.warn('PERFORMANCE', '[Offscreen] ❌ WebGPU API not available in this context');
     return;
   }
 
-  console.log('[Offscreen] ✓ WebGPU API exists');
+  logger.debug('PERFORMANCE', '[Offscreen] ✓ WebGPU API exists');
 
   try {
     // Request adapter to test if WebGPU actually works
     const adapter = await navigator.gpu.requestAdapter();
 
     if (!adapter) {
-      console.warn('[Offscreen] ❌ WebGPU adapter request returned null (GPU not available)');
+      logger.warn('PERFORMANCE', '[Offscreen] ❌ WebGPU adapter request returned null (GPU not available)');
       return;
     }
 
-    console.log('[Offscreen] ✓ WebGPU adapter obtained successfully');
+    logger.debug('PERFORMANCE', '[Offscreen] ✓ WebGPU adapter obtained successfully');
 
     // Log adapter info (if available - newer API)
     try {
       if (typeof adapter.requestAdapterInfo === 'function') {
         const info = await adapter.requestAdapterInfo();
-        console.log('[Offscreen] 📊 GPU Info:', {
+        logger.debug('PERFORMANCE', '[Offscreen] 📊 GPU Info:', {
           vendor: info.vendor,
           architecture: info.architecture,
           device: info.device,
           description: info.description,
         });
       } else {
-        console.log('[Offscreen] 📊 GPU Info: (requestAdapterInfo not available in this browser)');
+        logger.debug('PERFORMANCE', '[Offscreen] 📊 GPU Info: (requestAdapterInfo not available in this browser)');
       }
     } catch (infoError) {
-      console.log('[Offscreen] 📊 GPU Info: (unable to retrieve adapter info)');
+      logger.debug('PERFORMANCE', '[Offscreen] 📊 GPU Info: (unable to retrieve adapter info)');
     }
 
     // Log adapter features and limits
-    console.log('[Offscreen] 🎯 GPU Features:', Array.from(adapter.features));
-    console.log('[Offscreen] 📏 GPU Limits (selected):', {
+    logger.debug('PERFORMANCE', '[Offscreen] 🎯 GPU Features:', Array.from(adapter.features));
+    logger.debug('PERFORMANCE', '[Offscreen] 📏 GPU Limits (selected):', {
       maxBufferSize: adapter.limits.maxBufferSize,
       maxComputeWorkgroupsPerDimension: adapter.limits.maxComputeWorkgroupsPerDimension,
     });
 
-    console.log('[Offscreen] ✅ WebGPU is fully functional and ready for use!');
+    logger.debug('PERFORMANCE', '[Offscreen] ✅ WebGPU is fully functional and ready for use!');
   } catch (error) {
-    console.error('[Offscreen] ❌ WebGPU test failed:', error);
+    logger.error('PERFORMANCE', '[Offscreen] ❌ WebGPU test failed:', error);
   }
 })();
 
@@ -96,13 +97,13 @@ async function generateEmbeddingsForPaper(
 
     // Get device backend (webgpu or wasm) - now this will be accurate!
     const device = capabilities.device || 'wasm';
-    console.log(`[Offscreen] 🎯 Using ${device.toUpperCase()} backend for embeddings`);
+    logger.debug('EMBEDDINGS', `[Offscreen] 🎯 Using ${device.toUpperCase()} backend for embeddings`);
 
     // Fetch chunks from IndexedDB (shared with background)
     const chunks = await getPaperChunks(paperId);
 
     if (chunks.length === 0) {
-      console.warn('[Offscreen] No chunks found for paper:', paperId);
+      logger.warn('EMBEDDINGS', '[Offscreen] No chunks found for paper:', paperId);
       return null;
     }
 
@@ -144,7 +145,7 @@ async function generateEmbeddingsForPaper(
 
         // Log performance every 10% progress
         if (current % Math.max(1, Math.floor(chunks.length * 0.1)) === 0 || isMilestone) {
-          console.log(`[Offscreen] ⚡ Performance: ${embeddingsPerSecond} emb/s (${avgTimePerEmbedding}ms per embedding) using ${device.toUpperCase()}`);
+          logger.debug('PERFORMANCE', `[Offscreen] ⚡ Performance: ${embeddingsPerSecond} emb/s (${avgTimePerEmbedding}ms per embedding) using ${device.toUpperCase()}`);
         }
 
         chrome.runtime.sendMessage({
@@ -185,16 +186,16 @@ async function generateEmbeddingsForPaper(
     const avgTimePerEmbedding = (totalTime / embeddings.length * 1000).toFixed(0); // ms
 
     const backendUsed = device === 'webgpu' ? 'WebGPU (GPU-accelerated)' : 'WASM (CPU)';
-    console.log(`[Offscreen] ✅ Generated ${embeddings.length} embeddings using ${backendUsed}`);
-    console.log(`[Offscreen] 📊 Performance Summary:`);
-    console.log(`   - Total time: ${totalTime.toFixed(1)}s`);
-    console.log(`   - Speed: ${embeddingsPerSecond} embeddings/second`);
-    console.log(`   - Average: ${avgTimePerEmbedding}ms per embedding`);
-    console.log(`   - Backend: ${device.toUpperCase()}`);
+    logger.debug('EMBEDDINGS', `[Offscreen] ✅ Generated ${embeddings.length} embeddings using ${backendUsed}`);
+    logger.debug('PERFORMANCE', `[Offscreen] 📊 Performance Summary:`);
+    logger.debug('PERFORMANCE', `   - Total time: ${totalTime.toFixed(1)}s`);
+    logger.debug('PERFORMANCE', `   - Speed: ${embeddingsPerSecond} embeddings/second`);
+    logger.debug('PERFORMANCE', `   - Average: ${avgTimePerEmbedding}ms per embedding`);
+    logger.debug('PERFORMANCE', `   - Backend: ${device.toUpperCase()}`);
 
     return { count: embeddings.length, device };
   } catch (error) {
-    console.error('[Offscreen] Failed to generate embeddings:', error);
+    logger.error('EMBEDDINGS', '[Offscreen] Failed to generate embeddings:', error);
     return null;
   }
 }
@@ -243,7 +244,7 @@ async function searchSemantic(paperId: string, query: string, limit: number = 5)
     // Return ranked chunk IDs
     return similarities.map(sim => sim.chunkId);
   } catch (error) {
-    console.error('[Offscreen] Error in semantic search:', error);
+    logger.error('RAG', '[Offscreen] Error in semantic search:', error);
     return [];
   }
 }
@@ -284,7 +285,7 @@ function calculateBM25Scores(
     const scores = BM25(documents, queryWords, { k1, b }) as number[];
     return scores;
   } catch (error) {
-    console.error('[Offscreen] Error calculating BM25 scores:', error);
+    logger.error('RAG', '[Offscreen] Error calculating BM25 scores:', error);
     return chunks.map(() => 0);
   }
 }
@@ -323,7 +324,7 @@ async function searchHybrid(
 
     if (!hasEmbeddings) {
       // Fall back to BM25-only search when embeddings unavailable
-      console.log('[Offscreen] No embeddings, falling back to BM25 search');
+      logger.debug('RAG', '[Offscreen] No embeddings, falling back to BM25 search');
       const bm25Scores = calculateBM25Scores(chunks, query, k1, b);
 
       const scoredChunks = chunks.map((chunk, i) => ({
@@ -401,12 +402,12 @@ async function searchHybrid(
     // Log top result for debugging
     if (rankedResults.length > 0) {
       const top = rankedResults[0];
-      console.log(`[Offscreen] Hybrid search (BM25) top result - Total: ${top.score.toFixed(3)}, Semantic: ${top.semanticScore.toFixed(3)}, BM25: ${top.bm25Score.toFixed(3)}`);
+      logger.debug('RAG', `[Offscreen] Hybrid search (BM25) top result - Total: ${top.score.toFixed(3)}, Semantic: ${top.semanticScore.toFixed(3)}, BM25: ${top.bm25Score.toFixed(3)}`);
     }
 
     return rankedResults.map(r => r.chunkId);
   } catch (error) {
-    console.error('[Offscreen] Error in hybrid search:', error);
+    logger.error('RAG', '[Offscreen] Error in hybrid search:', error);
     return [];
   }
 }
@@ -429,21 +430,21 @@ async function extractPaperFromHTML(
 ): Promise<void> {
   // LEVEL 2 DEDUPLICATION: Skip if already extracting this URL
   if (inFlightExtractions.has(paperUrl)) {
-    console.log('[Offscreen] ⏭ Skipping duplicate extraction for:', paperUrl);
+    logger.debug('PDF_EXTRACTION', '[Offscreen] ⏭ Skipping duplicate extraction for:', paperUrl);
     return;
   }
 
   try {
     // Mark as in-flight
     inFlightExtractions.add(paperUrl);
-    console.log('[Offscreen] 📄 Starting extraction for:', paperUrl);
+    logger.debug('PDF_EXTRACTION', '[Offscreen] 📄 Starting extraction for:', paperUrl);
 
     // Parse HTML string into Document
     const parser = new DOMParser();
     const doc = parser.parseFromString(paperHtml, 'text/html');
 
     if (!doc) {
-      console.error('[Offscreen] Failed to parse HTML');
+      logger.error('PDF_EXTRACTION', '[Offscreen] Failed to parse HTML');
       return;
     }
 
@@ -452,11 +453,11 @@ async function extractPaperFromHTML(
     const sections = await extractHTMLSections(doc);
 
     if (!sections || sections.length === 0) {
-      console.warn('[Offscreen] No sections extracted from HTML');
+      logger.warn('PDF_EXTRACTION', '[Offscreen] No sections extracted from HTML');
       return;
     }
 
-    console.log(`[Offscreen] ✓ Extracted ${sections.length} sections`);
+    logger.debug('PDF_EXTRACTION', `[Offscreen] ✓ Extracted ${sections.length} sections`);
 
     // Generate paper ID
     const { generatePaperId } = await import('../utils/dbService.ts');
@@ -466,7 +467,7 @@ async function extractPaperFromHTML(
     const { chunkSections } = await import('../utils/adaptiveChunker.ts');
     const { chunks, stats } = await chunkSections(sections, paperId);
 
-    console.log(`[Offscreen] ✓ Created ${chunks.length} adaptive chunks`);
+    logger.debug('CHUNKING', `[Offscreen] ✓ Created ${chunks.length} adaptive chunks`);
 
     // Create metadata chunk
     const { createMetadataChunk } = await import('../content/services/paperStorageService.ts');
@@ -486,7 +487,7 @@ async function extractPaperFromHTML(
     const totalChunkSize = allChunks.reduce((sum, c) => sum + c.content.length, 0);
     const avgChunkSize = Math.floor(totalChunkSize / allChunks.length);
 
-    console.log(`[Offscreen] ✓ Created metadata chunk, total chunks: ${allChunks.length}`);
+    logger.debug('CHUNKING', `[Offscreen] ✓ Created metadata chunk, total chunks: ${allChunks.length}`);
 
     // Send to background for storage
     chrome.runtime.sendMessage({
@@ -503,9 +504,9 @@ async function extractPaperFromHTML(
       }
     });
 
-    console.log('[Offscreen] ✓ Sent chunks to background for storage');
+    logger.debug('PDF_EXTRACTION', '[Offscreen] ✓ Sent chunks to background for storage');
   } catch (error) {
-    console.error('[Offscreen] Error extracting paper from HTML:', error);
+    logger.error('PDF_EXTRACTION', '[Offscreen] Error extracting paper from HTML:', error);
   } finally {
     // Remove from in-flight set
     inFlightExtractions.delete(paperUrl);
@@ -529,7 +530,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: false, error: 'Failed to generate embeddings' });
         }
       } catch (error) {
-        console.error('[Offscreen] Error generating embeddings:', error);
+        logger.error('EMBEDDINGS', '[Offscreen] Error generating embeddings:', error);
         sendResponse({ success: false, error: String(error) });
       }
     })();
@@ -546,7 +547,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const chunkIds = await searchSemantic(paperId, query, limit || 5);
         sendResponse({ success: true, chunkIds });
       } catch (error) {
-        console.error('[Offscreen] Error in semantic search:', error);
+        logger.error('RAG', '[Offscreen] Error in semantic search:', error);
         sendResponse({ success: false, error: String(error), chunkIds: [] });
       }
     })();
@@ -563,7 +564,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const chunkIds = await searchHybrid(paperId, query, limit || 5, alpha);
         sendResponse({ success: true, chunkIds });
       } catch (error) {
-        console.error('[Offscreen] Error in hybrid search:', error);
+        logger.error('RAG', '[Offscreen] Error in hybrid search:', error);
         sendResponse({ success: false, error: String(error), chunkIds: [] });
       }
     })();
@@ -575,12 +576,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Preload embedding model during initialization
     (async () => {
       try {
-        console.log('[Offscreen] Preloading embedding model...');
+        logger.debug('EMBEDDINGS', '[Offscreen] Preloading embedding model...');
         await embeddingService.loadModel();
-        console.log('[Offscreen] Embedding model preloaded successfully');
+        logger.debug('EMBEDDINGS', '[Offscreen] Embedding model preloaded successfully');
         sendResponse({ success: true });
       } catch (error) {
-        console.error('[Offscreen] Error preloading embeddings:', error);
+        logger.error('EMBEDDINGS', '[Offscreen] Error preloading embeddings:', error);
         sendResponse({ success: false, error: String(error) });
       }
     })();

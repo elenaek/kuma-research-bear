@@ -5,6 +5,7 @@ import * as ChromeService from '../../services/ChromeService.ts';
 import { aiService } from '../../utils/aiService.ts';
 import { chatboxInjector } from './chatboxInjector.ts'; // NEW: Multi-tab chatbox integration
 import { getShowImageButtons } from '../../utils/settingsService.ts';
+import { logger } from '../../utils/logger.ts';
 
 interface ImageState {
   element: HTMLImageElement;
@@ -37,35 +38,35 @@ class ImageExplanationHandler {
 
   async initialize(currentPaper: any) {
     if (this.isInitialized) {
-      console.log('[ImageExplain] Already initialized');
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] Already initialized');
       return;
     }
 
     this.currentPaper = currentPaper;
 
-    console.log('[ImageExplain] Initializing image explanation handler...');
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Initializing image explanation handler...');
 
     // Check multimodal API availability
     try {
       const { available } = await aiService.checkMultimodalAvailability();
       this.multimodalAvailable = available;
-      console.log('[ImageExplain] Multimodal API available:', available);
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] Multimodal API available:', available);
 
       if (!available) {
-        console.log('[ImageExplain] Multimodal API not available, feature will be hidden');
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] Multimodal API not available, feature will be hidden');
         return; // Don't initialize if API not available
       }
     } catch (error) {
-      console.error('[ImageExplain] Error checking multimodal availability:', error);
+      logger.error('CONTENT_SCRIPT', '[ImageExplain] Error checking multimodal availability:', error);
       return;
     }
 
     // Load user setting for button visibility FIRST
     try {
       this.showImageButtons = await getShowImageButtons();
-      console.log('[ImageExplain] Button visibility setting:', this.showImageButtons);
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] Button visibility setting:', this.showImageButtons);
     } catch (error) {
-      console.error('[ImageExplain] Error loading settings:', error);
+      logger.error('CONTENT_SCRIPT', '[ImageExplain] Error loading settings:', error);
       this.showImageButtons = true; // Default to visible
     }
 
@@ -78,7 +79,7 @@ class ImageExplanationHandler {
     });
 
     this.isInitialized = true;
-    console.log('[ImageExplain] ✓ Image explanation handler initialized');
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Image explanation handler initialized');
   }
 
   /**
@@ -86,7 +87,7 @@ class ImageExplanationHandler {
    * Destroys existing buttons and recreates them
    */
   async reinitialize(currentPaper: any) {
-    console.log('[ImageExplain] Reinitializing image explanation handler...');
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Reinitializing image explanation handler...');
 
     // Destroy existing buttons
     this.destroy();
@@ -97,12 +98,12 @@ class ImageExplanationHandler {
 
   private async setupImages() {
     if (!this.currentPaper) {
-      console.log('[ImageExplain] No current paper, skipping image setup');
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] No current paper, skipping image setup');
       return;
     }
 
     const images = detectImages();
-    console.log('[ImageExplain] Setting up', images.length, 'images');
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Setting up', images.length, 'images');
 
     for (const image of images) {
       // Skip if already set up
@@ -115,7 +116,7 @@ class ImageExplanationHandler {
   }
 
   private async setupImageButton(image: DetectedImage) {
-    console.log('[ImageExplain] Setting up button for image:', image.url);
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Setting up button for image:', image.url);
 
     // Create container for button
     const buttonContainer = document.createElement('div');
@@ -194,10 +195,10 @@ class ImageExplanationHandler {
       if (response && response.explanation) {
         imageState.title = response.explanation.title || 'Image Explanation';
         imageState.explanation = response.explanation.explanation;
-        console.log('[ImageExplain] Loaded cached explanation for:', imageState.url);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] Loaded cached explanation for:', imageState.url);
       }
     } catch (error) {
-      console.error('[ImageExplain] Error loading cached explanation:', error);
+      logger.error('CONTENT_SCRIPT', '[ImageExplain] Error loading cached explanation:', error);
     }
   }
 
@@ -209,11 +210,11 @@ class ImageExplanationHandler {
     // Check if this image is in our detected images
     const imageState = this.imageStates.get(imageUrl);
     if (!imageState) {
-      console.log('[ImageExplain] Context menu clicked on non-detected image, ignoring');
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] Context menu clicked on non-detected image, ignoring');
       return;
     }
 
-    console.log('[ImageExplain] Context menu click for detected image:', imageUrl);
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Context menu click for detected image:', imageUrl);
     await this.openImageDiscussion(imageUrl);
   }
 
@@ -226,7 +227,7 @@ class ImageExplanationHandler {
       return;
     }
 
-    console.log('[ImageExplain] Opening image discussion for:', imageUrl);
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Opening image discussion for:', imageUrl);
 
     try {
       const blob = await imageElementToBlob(imageState.element);
@@ -247,14 +248,14 @@ class ImageExplanationHandler {
         }
       }
 
-      console.log('[ImageExplain] ✓ Image discussion opened');
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Image discussion opened');
     } catch (error) {
-      console.error('[ImageExplain] Error opening image discussion:', error);
+      logger.error('CONTENT_SCRIPT', '[ImageExplain] Error opening image discussion:', error);
     }
   }
 
   private async handleButtonClick(imageUrl: string) {
-    console.log('[ImageExplain] Button clicked for:', imageUrl);
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Button clicked for:', imageUrl);
     // Use unified discussion opener
     await this.openImageDiscussion(imageUrl);
   }
@@ -265,7 +266,7 @@ class ImageExplanationHandler {
       return;
     }
 
-    console.log('[ImageExplain] Generating explanation for:', imageUrl);
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Generating explanation for:', imageUrl);
 
     imageState.isLoading = true;
     this.renderButton(imageUrl, imageState.buttonRoot!);
@@ -293,15 +294,15 @@ class ImageExplanationHandler {
           result.explanation
         );
 
-        console.log('[ImageExplain] ✓ Generated and stored explanation');
-        console.log('[ImageExplain] Title:', result.title);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Generated and stored explanation');
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] Title:', result.title);
       } else {
-        console.warn('[ImageExplain] Failed to generate explanation');
+        logger.warn('CONTENT_SCRIPT', '[ImageExplain] Failed to generate explanation');
         imageState.title = 'Error';
         imageState.explanation = 'Sorry, I could not generate an explanation for this image. The multimodal API may not be available or there was an error processing the image.';
       }
     } catch (error) {
-      console.error('[ImageExplain] Error generating explanation:', error);
+      logger.error('CONTENT_SCRIPT', '[ImageExplain] Error generating explanation:', error);
       imageState.title = 'Error';
       imageState.explanation = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
     } finally {
@@ -357,7 +358,7 @@ class ImageExplanationHandler {
       return null;
     }
 
-    console.log('[ImageExplain] Regenerating explanation for:', imageUrl);
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Regenerating explanation for:', imageUrl);
 
     // Set loading state
     imageState.isLoading = true;
@@ -385,16 +386,16 @@ class ImageExplanationHandler {
           result.explanation
         );
 
-        console.log('[ImageExplain] ✓ Regenerated and stored explanation');
-        console.log('[ImageExplain] New title:', result.title);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Regenerated and stored explanation');
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] New title:', result.title);
 
         return result;
       } else {
-        console.warn('[ImageExplain] Failed to regenerate explanation');
+        logger.warn('CONTENT_SCRIPT', '[ImageExplain] Failed to regenerate explanation');
         return null;
       }
     } catch (error) {
-      console.error('[ImageExplain] Error regenerating explanation:', error);
+      logger.error('CONTENT_SCRIPT', '[ImageExplain] Error regenerating explanation:', error);
       return null;
     } finally {
       imageState.isLoading = false;
@@ -415,7 +416,7 @@ class ImageExplanationHandler {
       }
       throw new Error(`Failed to fetch CSS: ${response.status}`);
     } catch (error) {
-      console.warn('[ImageExplain] Failed to load external CSS, using inline styles:', error);
+      logger.warn('CONTENT_SCRIPT', '[ImageExplain] Failed to load external CSS, using inline styles:', error);
       return this.getInlineStyles();
     }
   }
@@ -551,7 +552,7 @@ class ImageExplanationHandler {
    * Keeps DOM elements in place for compass arrow and tab restoration
    */
   hideButtons() {
-    console.log('[ImageExplain] Hiding image explanation buttons...');
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Hiding image explanation buttons...');
 
     // Update setting
     this.showImageButtons = false;
@@ -563,14 +564,14 @@ class ImageExplanationHandler {
       }
     }
 
-    console.log('[ImageExplain] ✓ Buttons hidden');
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Buttons hidden');
   }
 
   /**
    * Show buttons by re-rendering as full buttons
    */
   showButtons() {
-    console.log('[ImageExplain] Showing image explanation buttons...');
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Showing image explanation buttons...');
 
     // Update setting
     this.showImageButtons = true;
@@ -582,11 +583,11 @@ class ImageExplanationHandler {
       }
     }
 
-    console.log('[ImageExplain] ✓ Buttons shown');
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Buttons shown');
   }
 
   destroy() {
-    console.log('[ImageExplain] Destroying image explanation handler...');
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Destroying image explanation handler...');
 
     // Remove all button containers
     for (const [url, state] of this.imageStates) {

@@ -30,6 +30,7 @@ import { normalizeUrl } from '../utils/urlUtils.ts';
 import { ExplanationTab } from './components/tabs/ExplanationTab.tsx';
 import * as ChromeService from '../services/ChromeService.ts';
 import * as StorageService from '../services/StorageService.ts';
+import { logger } from '../utils/logger.ts';
 
 type ViewState = 'loading' | 'empty' | 'content' | 'stored-only';
 type TabType = 'summary' | 'explanation' | 'qa' | 'analysis' | 'glossary' | 'original';
@@ -199,7 +200,7 @@ export function Sidepanel() {
           if (freshPaper) {
             // Always fetch fresh papers from IndexedDB (single source of truth)
             // This avoids stale closure issues with paperNavigation.allPapers
-            console.log('[Sidepanel] Operation completed, refreshing all papers from IndexedDB');
+            logger.debug('UI', '[Sidepanel] Operation completed, refreshing all papers from IndexedDB');
             const allPapers = await ChromeService.getAllPapers();
             paperNavigation.setAllPapers(allPapers);
 
@@ -210,7 +211,7 @@ export function Sidepanel() {
             if (currentPaperUrl) {
               const newIndex = allPapers.findIndex(p => normalizeUrl(p.url) === normalizeUrl(currentPaperUrl));
               if (newIndex !== -1 && newIndex !== paperNavigation.currentPaperIndex) {
-                console.log('[Sidepanel] Re-syncing paper index after array update:', paperNavigation.currentPaperIndex, '→', newIndex);
+                logger.debug('UI', '[Sidepanel] Re-syncing paper index after array update:', paperNavigation.currentPaperIndex, '→', newIndex);
                 paperNavigation.setCurrentPaperIndex(newIndex);
               }
             }
@@ -219,12 +220,12 @@ export function Sidepanel() {
             // This ensures the sidepanel auto-loads when going from 0→1 papers
             // Use ref to avoid stale closure bug (same pattern as isCurrentPaper check below)
             if (allPapers.length > 0 && currentPaperUrlRef.current === null) {
-              console.log('[Sidepanel] No current paper but papers exist, auto-loading first paper');
+              logger.debug('UI', '[Sidepanel] No current paper but papers exist, auto-loading first paper');
               const newPaper = allPapers.find(p => normalizeUrl(p.url) === normalizeUrl(paperUrl));
               if (newPaper) {
                 const paperIndex = allPapers.findIndex(p => p.id === newPaper.id);
                 if (paperIndex !== -1) {
-                  console.log('[Sidepanel] Auto-switching to newly added paper at index:', paperIndex);
+                  logger.debug('UI', '[Sidepanel] Auto-switching to newly added paper at index:', paperIndex);
                   await paperNavigation.switchToPaper(paperIndex, allPapers);
                 }
                 // Paper has been loaded via navigation system, no need to check isCurrentPaper below
@@ -260,7 +261,7 @@ export function Sidepanel() {
             }
           }
         } catch (error) {
-          console.error('[Sidepanel] Error reloading paper on operation update:', error);
+          logger.error('UI', '[Sidepanel] Error reloading paper on operation update:', error);
         }
       }
     });
@@ -271,22 +272,22 @@ export function Sidepanel() {
         const targetUrl = message.payload?.url;
         if (!targetUrl) return;
 
-        console.log('[Sidepanel] Received navigation request for URL:', targetUrl);
+        logger.debug('UI', '[Sidepanel] Received navigation request for URL:', targetUrl);
 
         // Fetch fresh papers from ChromeService to avoid stale closure
         const papers = await ChromeService.getAllPapers();
-        console.log('[Sidepanel] Fetched', papers.length, 'papers for navigation');
+        logger.debug('UI', '[Sidepanel] Fetched', papers.length, 'papers for navigation');
 
         const normalizedTargetUrl = normalizeUrl(targetUrl);
         const paperIndex = papers.findIndex(p => normalizeUrl(p.url) === normalizedTargetUrl);
 
         if (paperIndex !== -1) {
-          console.log('[Sidepanel] Navigating to paper at index:', paperIndex);
+          logger.debug('UI', '[Sidepanel] Navigating to paper at index:', paperIndex);
           // Update allPapers and navigate using fresh array (avoid state timing)
           paperNavigation.setAllPapers(papers);
           await paperNavigation.switchToPaper(paperIndex, papers);
         } else {
-          console.warn('[Sidepanel] Paper not found for URL:', targetUrl);
+          logger.warn('UI', '[Sidepanel] Paper not found for URL:', targetUrl);
         }
       }
     };
@@ -294,7 +295,7 @@ export function Sidepanel() {
     // Create glossary progress listener for GLOSSARY_PROGRESS updates
     const glossaryProgressListener = (message: any) => {
       if (message.type === MessageType.GLOSSARY_PROGRESS) {
-        console.log('[Sidepanel] Glossary progress update:', message.payload);
+        logger.debug('UI', '[Sidepanel] Glossary progress update:', message.payload);
         setGlossaryProgress(message.payload);
       }
     };
@@ -302,7 +303,7 @@ export function Sidepanel() {
     // Create analysis progress listener for ANALYSIS_PROGRESS updates
     const analysisProgressListener = (message: any) => {
       if (message.type === MessageType.ANALYSIS_PROGRESS) {
-        console.log('[Sidepanel] Analysis progress update:', message.payload);
+        logger.debug('UI', '[Sidepanel] Analysis progress update:', message.payload);
         setAnalysisProgress(message.payload);
       }
     };
@@ -314,7 +315,7 @@ export function Sidepanel() {
 
         // Only update if it's the current paper
         if (currentPaperUrlRef.current && normalizeUrl(currentPaperUrlRef.current) === normalizeUrl(paperUrl)) {
-          console.log('[Sidepanel] Analysis section complete:', section);
+          logger.debug('UI', '[Sidepanel] Analysis section complete:', section);
 
           // Update analysis state with partial result
           setAnalysis((prevAnalysis) => ({
@@ -332,7 +333,7 @@ export function Sidepanel() {
         const deletedPaperUrl = message.payload?.paperUrl;
         if (!deletedPaperUrl) return;
 
-        console.log('[Sidepanel] Paper deleted externally:', deletedPaperUrl);
+        logger.debug('UI', '[Sidepanel] Paper deleted externally:', deletedPaperUrl);
 
         // Clean up operation states for deleted paper
         const normalizedDeletedUrl = normalizeUrl(deletedPaperUrl);
@@ -359,7 +360,7 @@ export function Sidepanel() {
             setGlossary(null);
           } else {
             // Switch to another paper (first paper in the list)
-            console.log('[Sidepanel] Current paper deleted, switching to first paper');
+            logger.debug('UI', '[Sidepanel] Current paper deleted, switching to first paper');
             await paperNavigation.switchToPaper(0, allPapers);
           }
         } else {
@@ -367,7 +368,7 @@ export function Sidepanel() {
           if (currentPaperUrl) {
             const newIndex = allPapers.findIndex(p => normalizeUrl(p.url) === normalizeUrl(currentPaperUrl));
             if (newIndex !== -1 && newIndex !== paperNavigation.currentPaperIndex) {
-              console.log('[Sidepanel] Re-syncing paper index after external deletion:', paperNavigation.currentPaperIndex, '→', newIndex);
+              logger.debug('UI', '[Sidepanel] Re-syncing paper index after external deletion:', paperNavigation.currentPaperIndex, '→', newIndex);
               paperNavigation.setCurrentPaperIndex(newIndex);
             }
           }
@@ -446,7 +447,7 @@ export function Sidepanel() {
    * Ensures synchronization between navigation and content
    */
   async function loadPaperData(paper: StoredPaper) {
-    console.log('[Sidepanel] Loading paper data:', paper.title);
+    logger.debug('UI', '[Sidepanel] Loading paper data:', paper.title);
 
     setStoredPaper(paper);
     setQaHistory(paper.qaHistory || []);
@@ -462,7 +463,7 @@ export function Sidepanel() {
 
     // Load analysis
     if (paper.analysis) {
-      console.log('[Sidepanel] Loading analysis from paper');
+      logger.debug('UI', '[Sidepanel] Loading analysis from paper');
       setAnalysis(paper.analysis);
     } else {
       setAnalysis(null);
@@ -470,7 +471,7 @@ export function Sidepanel() {
 
     // Load glossary
     if (paper.glossary) {
-      console.log('[Sidepanel] Loading glossary from paper');
+      logger.debug('UI', '[Sidepanel] Loading glossary from paper');
       setGlossary(paper.glossary);
     } else {
       setGlossary(null);
@@ -482,7 +483,7 @@ export function Sidepanel() {
       // Load all papers from IndexedDB
       const papers = await ChromeService.getAllPapers();
       paperNavigation.setAllPapers(papers);
-      console.log('[Sidepanel] Loaded', papers.length, 'papers from IndexedDB');
+      logger.debug('UI', '[Sidepanel] Loaded', papers.length, 'papers from IndexedDB');
 
       // Get current tab URL
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -493,12 +494,12 @@ export function Sidepanel() {
 
       // Query IndexedDB for paper matching current tab URL (single source of truth)
       if (!currentUrl) {
-        console.log('[Sidepanel] No current URL, showing empty state');
+        logger.debug('UI', '[Sidepanel] No current URL, showing empty state');
         setViewState('empty');
         return;
       }
 
-      console.log('[Sidepanel] Checking IndexedDB for paper at URL:', currentUrl);
+      logger.debug('UI', '[Sidepanel] Checking IndexedDB for paper at URL:', currentUrl);
       setIsCheckingStorage(true);
 
       try {
@@ -510,19 +511,19 @@ export function Sidepanel() {
           const paperIndex = papers.findIndex(p => p.id === stored.id);
           if (paperIndex !== -1) {
             paperNavigation.setCurrentPaperIndex(paperIndex);
-            console.log('[Sidepanel] Synced navigation to paper index:', paperIndex);
+            logger.debug('UI', '[Sidepanel] Synced navigation to paper index:', paperIndex);
           }
           paperToLoad = stored;
         } else {
           // No paper found for current URL - check if we have any papers to show as fallback
           if (papers.length > 0) {
-            console.log('[Sidepanel] No paper for current URL, loading first paper as fallback');
+            logger.debug('UI', '[Sidepanel] No paper for current URL, loading first paper as fallback');
             // Set navigation to first paper
             paperNavigation.setCurrentPaperIndex(0);
             paperToLoad = papers[0];
           } else {
             // Truly no papers in database - show empty state
-            console.log('[Sidepanel] No papers in database');
+            logger.debug('UI', '[Sidepanel] No papers in database');
             setViewState('empty');
           }
         }
@@ -537,7 +538,7 @@ export function Sidepanel() {
 
             if (stateResponse.success && stateResponse.state) {
               const state = stateResponse.state;
-              console.log('[Sidepanel] Loaded operation state for paper:', paperToLoad.url, state);
+              logger.debug('UI', '[Sidepanel] Loaded operation state for paper:', paperToLoad.url, state);
 
               // Update banner states based on current operation
               setIsExplainingInBackground(state.isExplaining);
@@ -559,7 +560,7 @@ export function Sidepanel() {
                     current: state.currentAnalysisStep,
                     total: state.totalAnalysisSteps,
                   });
-                  console.log('[Sidepanel] Restored analysis progress:', state.analysisProgressStage, state.currentAnalysisStep, '/', state.totalAnalysisSteps);
+                  logger.debug('UI', '[Sidepanel] Restored analysis progress:', state.analysisProgressStage, state.currentAnalysisStep, '/', state.totalAnalysisSteps);
                 }
               }
               if (state.isGeneratingGlossary) {
@@ -572,24 +573,24 @@ export function Sidepanel() {
                     current: state.currentGlossaryTerm,
                     total: state.totalGlossaryTerms,
                   });
-                  console.log('[Sidepanel] Restored glossary progress:', state.glossaryProgressStage, state.currentGlossaryTerm, '/', state.totalGlossaryTerms);
+                  logger.debug('UI', '[Sidepanel] Restored glossary progress:', state.glossaryProgressStage, state.currentGlossaryTerm, '/', state.totalGlossaryTerms);
                 }
               }
             } else {
-              console.log('[Sidepanel] No operation state found for paper:', paperToLoad.url);
+              logger.debug('UI', '[Sidepanel] No operation state found for paper:', paperToLoad.url);
             }
           } catch (stateError) {
-            console.warn('[Sidepanel] Could not load operation state for paper:', stateError);
+            logger.warn('UI', '[Sidepanel] Could not load operation state for paper:', stateError);
           }
         }
       } catch (dbError) {
-        console.error('[Sidepanel] Error loading from IndexedDB:', dbError);
+        logger.error('UI', '[Sidepanel] Error loading from IndexedDB:', dbError);
         setViewState('empty');
       } finally {
         setIsCheckingStorage(false);
       }
     } catch (error) {
-      console.error('Error loading explanation:', error);
+      logger.error('UI', 'Error loading explanation:', error);
       setViewState('empty');
     }
   }
@@ -597,7 +598,7 @@ export function Sidepanel() {
   async function triggerAnalysis(paperUrl: string) {
     // Guard: Don't retrigger if already analyzing THIS paper
     if (operationState.isAnalyzing(paperUrl)) {
-      console.log('[Sidepanel] Analysis already in progress for this paper, skipping');
+      logger.debug('UI', '[Sidepanel] Analysis already in progress for this paper, skipping');
       setOperationQueueMessage('Analysis already in progress for this paper');
       setHasQueuedOperations(true);
       setTimeout(() => {
@@ -610,7 +611,7 @@ export function Sidepanel() {
     try {
       // Add to analyzing papers Set
       operationState.addAnalyzingPaper(paperUrl);
-      console.log('Starting paper analysis for:', paperUrl);
+      logger.debug('UI', 'Starting paper analysis for:', paperUrl);
 
       // Get active tab ID to associate operation state
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -619,10 +620,10 @@ export function Sidepanel() {
       const response = await ChromeService.analyzePaper(paperUrl, tabId);
 
       if (response.success) {
-        console.log('✓ Paper analysis completed successfully');
+        logger.debug('UI', '✓ Paper analysis completed successfully');
         // Analysis will be loaded automatically via storage change listener
       } else {
-        console.error('Analysis failed:', response.error);
+        logger.error('UI', 'Analysis failed:', response.error);
         // Show error to user
         setOperationQueueMessage(`Analysis failed: ${response.error}`);
         setHasQueuedOperations(true);
@@ -632,7 +633,7 @@ export function Sidepanel() {
         }, 5000);
       }
     } catch (error) {
-      console.error('Error triggering analysis:', error);
+      logger.error('UI', 'Error triggering analysis:', error);
       setOperationQueueMessage('Failed to start analysis');
       setHasQueuedOperations(true);
       setTimeout(() => {
@@ -648,7 +649,7 @@ export function Sidepanel() {
   async function triggerGlossaryGeneration(paperUrl: string) {
     // Guard: Don't retrigger if already generating for THIS paper
     if (operationState.isGeneratingGlossary(paperUrl)) {
-      console.log('[Sidepanel] Glossary generation already in progress for this paper, skipping');
+      logger.debug('UI', '[Sidepanel] Glossary generation already in progress for this paper, skipping');
       setOperationQueueMessage('Glossary generation already in progress for this paper');
       setHasQueuedOperations(true);
       setTimeout(() => {
@@ -661,7 +662,7 @@ export function Sidepanel() {
     try {
       // Add to glossary generating papers Set (progress updates come from message listener)
       operationState.addGlossaryGeneratingPaper(paperUrl);
-      console.log('Starting glossary generation for:', paperUrl);
+      logger.debug('UI', 'Starting glossary generation for:', paperUrl);
 
       // Get active tab ID to associate operation state
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -670,7 +671,7 @@ export function Sidepanel() {
       const response = await ChromeService.generateGlossary(paperUrl, tabId);
 
       if (response.success && response.glossary) {
-        console.log('✓ Glossary generated successfully');
+        logger.debug('UI', '✓ Glossary generated successfully');
         setGlossary(response.glossary);
 
         // Update storedPaper and allPapers to reflect the new glossary
@@ -684,10 +685,10 @@ export function Sidepanel() {
           updatedAllPapers[paperNavigation.currentPaperIndex] = updatedPaper;
           paperNavigation.setAllPapers(updatedAllPapers);
 
-          console.log('[Sidepanel] Updated storedPaper and allPapers with new glossary');
+          logger.debug('UI', '[Sidepanel] Updated storedPaper and allPapers with new glossary');
         }
       } else {
-        console.error('Glossary generation failed:', response.error);
+        logger.error('UI', 'Glossary generation failed:', response.error);
         // Show error to user
         setOperationQueueMessage(`Glossary generation failed: ${response.error}`);
         setHasQueuedOperations(true);
@@ -697,7 +698,7 @@ export function Sidepanel() {
         }, 5000);
       }
     } catch (error) {
-      console.error('Error triggering glossary generation:', error);
+      logger.error('UI', 'Error triggering glossary generation:', error);
       setOperationQueueMessage('Failed to generate glossary');
       setHasQueuedOperations(true);
       setTimeout(() => {
@@ -714,7 +715,7 @@ export function Sidepanel() {
   async function triggerExplanation(paperUrl: string) {
     // Guard: Don't retrigger if already explaining for THIS paper
     if (operationState.isExplaining(paperUrl)) {
-      console.log('[Sidepanel] Explanation generation already in progress for this paper, skipping');
+      logger.debug('UI', '[Sidepanel] Explanation generation already in progress for this paper, skipping');
       setOperationQueueMessage('Explanation generation already in progress for this paper');
       setHasQueuedOperations(true);
       setTimeout(() => {
@@ -727,7 +728,7 @@ export function Sidepanel() {
     try {
       // Add to explaining papers Set
       operationState.addExplainingPaper(paperUrl);
-      console.log('Starting explanation generation for:', paperUrl);
+      logger.debug('UI', 'Starting explanation generation for:', paperUrl);
 
       // Get active tab ID to associate operation state
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -736,10 +737,10 @@ export function Sidepanel() {
       const response = await ChromeService.explainPaperManual(paperUrl, tabId);
 
       if (response.success) {
-        console.log('✓ Explanation generated successfully');
+        logger.debug('UI', '✓ Explanation generated successfully');
         // Explanation will be loaded automatically via storage change listener
       } else {
-        console.error('Explanation generation failed:', response.error);
+        logger.error('UI', 'Explanation generation failed:', response.error);
         // Show error to user
         setOperationQueueMessage(`Explanation generation failed: ${response.error}`);
         setHasQueuedOperations(true);
@@ -749,7 +750,7 @@ export function Sidepanel() {
         }, 5000);
       }
     } catch (error) {
-      console.error('Error triggering explanation generation:', error);
+      logger.error('UI', 'Error triggering explanation generation:', error);
       setOperationQueueMessage('Failed to generate explanation');
       setHasQueuedOperations(true);
       setTimeout(() => {
@@ -765,7 +766,7 @@ export function Sidepanel() {
   async function triggerSummary(paperUrl: string) {
     // Guard: Don't retrigger if already generating summary for THIS paper
     if (operationState.isGeneratingSummary(paperUrl)) {
-      console.log('[Sidepanel] Summary generation already in progress for this paper, skipping');
+      logger.debug('UI', '[Sidepanel] Summary generation already in progress for this paper, skipping');
       setOperationQueueMessage('Summary generation already in progress for this paper');
       setHasQueuedOperations(true);
       setTimeout(() => {
@@ -778,7 +779,7 @@ export function Sidepanel() {
     try {
       // Add to summary generating papers Set
       operationState.addSummaryGeneratingPaper(paperUrl);
-      console.log('Starting summary generation for:', paperUrl);
+      logger.debug('UI', 'Starting summary generation for:', paperUrl);
 
       // Get active tab ID to associate operation state
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -787,10 +788,10 @@ export function Sidepanel() {
       const response = await ChromeService.generateSummaryManual(paperUrl, tabId);
 
       if (response.success) {
-        console.log('✓ Summary generated successfully');
+        logger.debug('UI', '✓ Summary generated successfully');
         // Summary will be loaded automatically via storage change listener
       } else {
-        console.error('Summary generation failed:', response.error);
+        logger.error('UI', 'Summary generation failed:', response.error);
         // Show error to user
         setOperationQueueMessage(`Summary generation failed: ${response.error}`);
         setHasQueuedOperations(true);
@@ -800,7 +801,7 @@ export function Sidepanel() {
         }, 5000);
       }
     } catch (error) {
-      console.error('Error triggering summary generation:', error);
+      logger.error('UI', 'Error triggering summary generation:', error);
       setOperationQueueMessage('Failed to generate summary');
       setHasQueuedOperations(true);
       setTimeout(() => {
@@ -830,7 +831,7 @@ export function Sidepanel() {
 
     try {
       setIsAsking(true);
-      console.log('Asking question:', question);
+      logger.debug('UI', 'Asking question:', question);
 
       const sanitizedQuestion = question.trim();
 
@@ -854,7 +855,7 @@ export function Sidepanel() {
       const response = await ChromeService.askQuestion(data.paper.url, sanitizedQuestion);
 
       if (response.success && response.answer) {
-        console.log('✓ Question answered successfully');
+        logger.debug('UI', '✓ Question answered successfully');
         // update history
         const answeredHistory = [response.answer, ...qaHistory];
         setQaHistory(answeredHistory);
@@ -870,7 +871,7 @@ export function Sidepanel() {
           await ChromeService.updatePaperQAHistory(storedPaper.id, answeredHistory);
         }
       } else {
-        console.error('Question answering failed:', response.error);
+        logger.error('UI', 'Question answering failed:', response.error);
 
         alert(`Failed to answer question: ${response.error}`);
       }
@@ -884,7 +885,7 @@ export function Sidepanel() {
       if (storedPaper && revertHistory.length > 0) {
         await ChromeService.updatePaperQAHistory(storedPaper.id, revertHistory);
       }
-      console.error('Error asking question:', error);
+      logger.error('UI', 'Error asking question:', error);
       alert('Failed to ask question. Please try again.');
     } finally {
       setIsAsking(false);
@@ -920,7 +921,7 @@ Source: ${paper.url}
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('Error copying:', error);
+      logger.error('UI', 'Error copying:', error);
       alert('Failed to copy explanation');
     }
   }
@@ -944,7 +945,7 @@ Source: ${paper.url}
         setViewState('empty');
       }
     } catch (error) {
-      console.error('Error regenerating:', error);
+      logger.error('UI', 'Error regenerating:', error);
       alert('Failed to regenerate explanation');
       setViewState('empty');
     } finally {
@@ -953,7 +954,7 @@ Source: ${paper.url}
   }
 
   async function handleManualRefresh() {
-    console.log('[Sidepanel] Manual refresh requested');
+    logger.debug('UI', '[Sidepanel] Manual refresh requested');
     setIsCheckingStorage(true);
     await loadExplanation();
   }
@@ -968,7 +969,7 @@ Source: ${paper.url}
         await ChromeService.toggleChatbox(tab.id);
       }
     } catch (error) {
-      console.error('[Sidepanel] Failed to toggle chatbox:', error);
+      logger.error('UI', '[Sidepanel] Failed to toggle chatbox:', error);
     }
   }
 
@@ -979,7 +980,7 @@ Source: ${paper.url}
 
     if (index < 0 || index >= papers.length) return;
 
-    console.log(`[Sidepanel] Switching to paper at index ${index}`);
+    logger.debug('UI', `[Sidepanel] Switching to paper at index ${index}`);
 
     // Save current paper's Q&A history before switching
     if (storedPaper && qaHistory.length > 0) {
@@ -1012,7 +1013,7 @@ Source: ${paper.url}
     setQaHistory(paperToUse.qaHistory || []);
 
     // Load explanation and summary from IndexedDB (single source of truth)
-    console.log('[Sidepanel] Loading paper data from IndexedDB');
+    logger.debug('UI', '[Sidepanel] Loading paper data from IndexedDB');
     setData({
       paper: paperToUse,
       explanation: paperToUse.explanation || null,
@@ -1023,23 +1024,23 @@ Source: ${paper.url}
 
     // Load analysis from IndexedDB (single source of truth)
     if (paperToUse.analysis) {
-      console.log('[Sidepanel] Loading analysis from IndexedDB');
+      logger.debug('UI', '[Sidepanel] Loading analysis from IndexedDB');
       setAnalysis(paperToUse.analysis);
     } else {
       // Paper switching should NOT auto-trigger analysis (prevents retrigger bug)
       // Analysis is only auto-triggered during initial load in loadExplanation()
-      console.log('[Sidepanel] No analysis for this paper');
+      logger.debug('UI', '[Sidepanel] No analysis for this paper');
       setAnalysis(null);
     }
 
     // Load glossary from IndexedDB (single source of truth)
     if (paperToUse.glossary) {
-      console.log('[Sidepanel] Loading glossary from IndexedDB');
+      logger.debug('UI', '[Sidepanel] Loading glossary from IndexedDB');
       setGlossary(paperToUse.glossary);
     } else {
       // Paper switching should NOT auto-trigger glossary generation (prevents retrigger bug)
       // Glossary is only auto-triggered during initial load in loadExplanation()
-      console.log('[Sidepanel] No glossary for this paper');
+      logger.debug('UI', '[Sidepanel] No glossary for this paper');
       setGlossary(null);
     }
   }
@@ -1070,7 +1071,7 @@ Source: ${paper.url}
 
     try {
       setIsDeletingAll(true);
-      console.log('[Sidepanel] Deleting all papers:', paperNavigation.allPapers.length);
+      logger.debug('UI', '[Sidepanel] Deleting all papers:', paperNavigation.allPapers.length);
 
       // Delete all papers one by one
       let successCount = 0;
@@ -1081,7 +1082,7 @@ Source: ${paper.url}
         }
       }
 
-      console.log(`[Sidepanel] Deleted ${successCount}/${paperNavigation.allPapers.length} papers`);
+      logger.debug('UI', `[Sidepanel] Deleted ${successCount}/${paperNavigation.allPapers.length} papers`);
 
       // Clear all state
       paperNavigation.setAllPapers([]);
@@ -1096,7 +1097,7 @@ Source: ${paper.url}
         alert(`Deleted ${successCount} out of ${paperNavigation.allPapers.length} papers. Some papers could not be deleted.`);
       }
     } catch (error) {
-      console.error('[Sidepanel] Error deleting all papers:', error);
+      logger.error('UI', '[Sidepanel] Error deleting all papers:', error);
       alert('Failed to delete all papers. Please try again.');
     } finally {
       setIsDeletingAll(false);
@@ -1111,7 +1112,7 @@ Source: ${paper.url}
     }
 
     try {
-      console.log('[Sidepanel] Resetting sidepanel state...');
+      logger.debug('UI', '[Sidepanel] Resetting sidepanel state...');
 
       // Reset all component state
       setData(null);
@@ -1124,9 +1125,9 @@ Source: ${paper.url}
       // Reload from IndexedDB (single source of truth)
       await loadExplanation();
 
-      console.log('[Sidepanel] ✓ Sidepanel state reset and reloaded from IndexedDB');
+      logger.debug('UI', '[Sidepanel] ✓ Sidepanel state reset and reloaded from IndexedDB');
     } catch (error) {
-      console.error('[Sidepanel] Error resetting state:', error);
+      logger.error('UI', '[Sidepanel] Error resetting state:', error);
       alert('Failed to reset state. Please try again.');
     }
   }

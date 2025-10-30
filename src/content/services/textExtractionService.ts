@@ -1,5 +1,6 @@
 import { extractPageText, isPDFPage } from '../../utils/contentExtractor.ts';
 import { getPDFUrl, extractPDFText } from '../../utils/pdfExtractor.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Text Extraction Service
@@ -13,10 +14,10 @@ export async function extractFullText(): Promise<string> {
   try {
     // Check if this is a PDF page
     if (isPDFPage()) {
-      console.log('[TextExtraction] PDF detected, extracting full PDF text...');
+      logger.debug('CONTENT_SCRIPT', '[TextExtraction] PDF detected, extracting full PDF text...');
       const pdfUrl = getPDFUrl();
       if (!pdfUrl) {
-        console.error('[TextExtraction] Could not determine PDF URL');
+        logger.error('CONTENT_SCRIPT', '[TextExtraction] Could not determine PDF URL');
         return '';
       }
 
@@ -26,7 +27,7 @@ export async function extractFullText(): Promise<string> {
           console.log(`[TextExtraction] PDF extraction progress: ${progress.percentComplete}% (${progress.currentPage}/${progress.totalPages})`);
         });
 
-        console.log('[TextExtraction] ✓ PDF text extracted:', {
+        logger.debug('CONTENT_SCRIPT', '[TextExtraction] ✓ PDF text extracted:', {
           pageCount: pdfContent.pageCount,
           textLength: pdfContent.text.length,
           wordCount: pdfContent.text.split(/\s+/).length,
@@ -34,7 +35,7 @@ export async function extractFullText(): Promise<string> {
 
         return pdfContent.text;
       } catch (pdfError) {
-        console.error('[TextExtraction] Failed to extract PDF text:', pdfError);
+        logger.error('CONTENT_SCRIPT', '[TextExtraction] Failed to extract PDF text:', pdfError);
         return '';
       }
     } else {
@@ -43,7 +44,7 @@ export async function extractFullText(): Promise<string> {
       return extracted.text;
     }
   } catch (error) {
-    console.error('[TextExtraction] Fatal error in extractFullText:', error);
+    logger.error('CONTENT_SCRIPT', '[TextExtraction] Fatal error in extractFullText:', error);
     return '';
   }
 }

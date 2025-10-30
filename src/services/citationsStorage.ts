@@ -1,5 +1,6 @@
 import { Citation, CitationFormat, CitationsStore } from '../types/index.ts';
 import { initDB, CITATIONS_STORE, CITATIONS_SETTINGS_STORE } from '../utils/dbService.ts';
+import { logger } from '../utils/logger.ts';
 
 const SETTINGS_ID = 'global-settings';
 const DEFAULT_FORMAT: CitationFormat = 'apa';
@@ -37,12 +38,12 @@ export async function addCitation(citation: Citation): Promise<Citation> {
       request.onerror = () => reject(new Error('Failed to add citation'));
     });
 
-    console.log('✓ Citation added:', citation.id);
+    logger.debug('SERVICE', '✓ Citation added:', citation.id);
     db.close();
     return citation;
   } catch (error) {
     db.close();
-    console.error('Error adding citation:', error);
+    logger.error('SERVICE', 'Error adding citation:', error);
     throw error;
   }
 }
@@ -67,7 +68,7 @@ export async function getCitation(id: string): Promise<Citation | null> {
     return citation;
   } catch (error) {
     db.close();
-    console.error('Error getting citation:', error);
+    logger.error('SERVICE', 'Error getting citation:', error);
     return null;
   }
 }
@@ -94,7 +95,7 @@ export async function getAllCitations(): Promise<Citation[]> {
     return sortCitations(citations);
   } catch (error) {
     db.close();
-    console.error('Error getting all citations:', error);
+    logger.error('SERVICE', 'Error getting all citations:', error);
     return [];
   }
 }
@@ -120,7 +121,7 @@ export async function getCitationsForPaper(paperId: string): Promise<Citation[]>
     return sortCitations(citations);
   } catch (error) {
     db.close();
-    console.error('Error getting citations for paper:', error);
+    logger.error('SERVICE', 'Error getting citations for paper:', error);
     return [];
   }
 }
@@ -141,12 +142,12 @@ export async function updateCitation(citation: Citation): Promise<Citation> {
       request.onerror = () => reject(new Error('Failed to update citation'));
     });
 
-    console.log('✓ Citation updated:', citation.id);
+    logger.debug('SERVICE', '✓ Citation updated:', citation.id);
     db.close();
     return citation;
   } catch (error) {
     db.close();
-    console.error('Error updating citation:', error);
+    logger.error('SERVICE', 'Error updating citation:', error);
     throw error;
   }
 }
@@ -167,11 +168,11 @@ export async function deleteCitation(id: string): Promise<void> {
       request.onerror = () => reject(new Error('Failed to delete citation'));
     });
 
-    console.log('✓ Citation deleted:', id);
+    logger.debug('SERVICE', '✓ Citation deleted:', id);
     db.close();
   } catch (error) {
     db.close();
-    console.error('Error deleting citation:', error);
+    logger.error('SERVICE', 'Error deleting citation:', error);
     throw error;
   }
 }
@@ -204,11 +205,11 @@ export async function updateCitationsOrder(citationIds: string[]): Promise<void>
       }
     }
 
-    console.log('✓ Citation order updated');
+    logger.debug('SERVICE', '✓ Citation order updated');
     db.close();
   } catch (error) {
     db.close();
-    console.error('Error updating citation order:', error);
+    logger.error('SERVICE', 'Error updating citation order:', error);
     throw error;
   }
 }
@@ -241,11 +242,11 @@ export async function resetCitationsOrder(): Promise<void> {
       }
     }
 
-    console.log('✓ Citation order reset to alphabetical');
+    logger.debug('SERVICE', '✓ Citation order reset to alphabetical');
     db.close();
   } catch (error) {
     db.close();
-    console.error('Error resetting citation order:', error);
+    logger.error('SERVICE', 'Error resetting citation order:', error);
     throw error;
   }
 }
@@ -270,7 +271,7 @@ export async function getSelectedFormat(): Promise<CitationFormat> {
     return settings?.selectedFormat || DEFAULT_FORMAT;
   } catch (error) {
     db.close();
-    console.error('Error getting selected format:', error);
+    logger.error('SERVICE', 'Error getting selected format:', error);
     return DEFAULT_FORMAT;
   }
 }
@@ -291,11 +292,11 @@ export async function setSelectedFormat(format: CitationFormat): Promise<void> {
       request.onerror = () => reject(new Error('Failed to set citation format'));
     });
 
-    console.log('✓ Citation format set to:', format);
+    logger.debug('SERVICE', '✓ Citation format set to:', format);
     db.close();
   } catch (error) {
     db.close();
-    console.error('Error setting citation format:', error);
+    logger.error('SERVICE', 'Error setting citation format:', error);
     throw error;
   }
 }
@@ -320,7 +321,7 @@ export async function getCitationCount(): Promise<number> {
     return count;
   } catch (error) {
     db.close();
-    console.error('Error counting citations:', error);
+    logger.error('SERVICE', 'Error counting citations:', error);
     return 0;
   }
 }

@@ -2,6 +2,7 @@ import { StoredPaper, ResearchPaper } from '../../types/index.ts';
 import * as dbService from '../../utils/dbService.ts';
 import * as operationStateService from './operationStateService.ts';
 import { tabPaperTracker } from './tabPaperTracker.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Paper Status Service
@@ -48,7 +49,7 @@ export async function checkPaperStatus(url: string): Promise<PaperStatus> {
     const completedFeatures = [hasExplanation, hasSummary, hasAnalysis, hasGlossary].filter(Boolean).length;
     const completionPercentage = (completedFeatures / 4) * 100;
 
-    console.log('[PaperStatus] Status check for URL:', url, {
+    logger.debug('BACKGROUND_SCRIPT', '[PaperStatus] Status check for URL:', url, {
       isStored: true,
       hasExplanation,
       hasSummary,
@@ -67,7 +68,7 @@ export async function checkPaperStatus(url: string): Promise<PaperStatus> {
       paper,
     };
   } catch (error) {
-    console.error('[PaperStatus] Error checking paper status:', error);
+    logger.error('BACKGROUND_SCRIPT', '[PaperStatus] Error checking paper status:', error);
     return {
       isStored: false,
       hasExplanation: false,
@@ -86,7 +87,7 @@ export async function checkPaperStatus(url: string): Promise<PaperStatus> {
  */
 export async function updateOperationStateFromStoredPaper(tabId: number, status: PaperStatus): Promise<void> {
   if (!status.isStored || !status.paper) {
-    console.log('[PaperStatus] No stored paper, keeping operation state as-is');
+    logger.debug('BACKGROUND_SCRIPT', '[PaperStatus] No stored paper, keeping operation state as-is');
     return;
   }
 
@@ -104,7 +105,7 @@ export async function updateOperationStateFromStoredPaper(tabId: number, status:
     completionPercentage: status.completionPercentage,
   });
 
-  console.log('[PaperStatus] Updated operation state for tab', tabId, {
+  logger.debug('BACKGROUND_SCRIPT', '[PaperStatus] Updated operation state for tab', tabId, {
     isPaperStored: true,
     completionPercentage: status.completionPercentage,
   });

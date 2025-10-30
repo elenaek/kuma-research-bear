@@ -1,6 +1,7 @@
 import { ResearchPaper, StoredPaper, ContentChunk, ImageExplanation, ChatMessage, ConversationState } from '../types/index.ts';
 import { normalizeUrl } from './urlUtils.ts';
 import { getOutputLanguage } from './settingsService.ts';
+import { logger } from './logger.ts';
 
 /**
  * IndexedDB Service for storing research papers locally
@@ -91,7 +92,7 @@ export function initDB(): Promise<IDBDatabase> {
           }
         };
 
-        console.log('✓ Migrated image explanations to DB_VERSION 3 (added title field)');
+        logger.debug('DATABASE', '✓ Migrated image explanations to DB_VERSION 3 (added title field)');
       }
 
       // Create image chats store (DB_VERSION 4)
@@ -100,7 +101,7 @@ export function initDB(): Promise<IDBDatabase> {
         imageChatsStore.createIndex('paperId', 'paperId', { unique: false });
         imageChatsStore.createIndex('imageUrl', 'imageUrl', { unique: false });
         imageChatsStore.createIndex('lastUpdated', 'lastUpdated', { unique: false });
-        console.log('✓ Created image chats store (DB_VERSION 4)');
+        logger.debug('DATABASE', '✓ Created image chats store (DB_VERSION 4)');
       }
 
       // Create citations store (DB_VERSION 5)
@@ -109,16 +110,16 @@ export function initDB(): Promise<IDBDatabase> {
         citationsStore.createIndex('paperId', 'paperId', { unique: false });
         citationsStore.createIndex('addedAt', 'addedAt', { unique: false });
         citationsStore.createIndex('customOrder', 'customOrder', { unique: false });
-        console.log('✓ Created citations store (DB_VERSION 5)');
+        logger.debug('DATABASE', '✓ Created citations store (DB_VERSION 5)');
       }
 
       // Create citations settings store (DB_VERSION 5)
       if (!db.objectStoreNames.contains(CITATIONS_SETTINGS_STORE)) {
         db.createObjectStore(CITATIONS_SETTINGS_STORE, { keyPath: 'id' });
-        console.log('✓ Created citations settings store (DB_VERSION 5)');
+        logger.debug('DATABASE', '✓ Created citations settings store (DB_VERSION 5)');
       }
 
-      console.log('✓ IndexedDB initialized with stores:', PAPERS_STORE, CHUNKS_STORE, IMAGE_EXPLANATIONS_STORE, IMAGE_CHATS_STORE, CITATIONS_STORE, CITATIONS_SETTINGS_STORE);
+      logger.debug('DATABASE', '✓ IndexedDB initialized with stores:', PAPERS_STORE, CHUNKS_STORE, IMAGE_EXPLANATIONS_STORE, IMAGE_CHATS_STORE, CITATIONS_STORE, CITATIONS_SETTINGS_STORE);
     };
   });
 }
@@ -153,7 +154,7 @@ export async function storePaper(
     metadata?: { averageChunkSize?: number };
   }
 ): Promise<StoredPaper> {
-  console.log('[IndexedDB] storePaper called:', {
+  logger.debug('DATABASE', '[IndexedDB] storePaper called:', {
     title: paper.title,
     url: paper.url,
     source: paper.source,
@@ -164,13 +165,13 @@ export async function storePaper(
 
   try {
     const paperId = generatePaperId(paper.url);
-    console.log('[IndexedDB] Generated paper ID:', paperId, 'for URL:', paper.url);
+    logger.debug('DATABASE', '[IndexedDB] Generated paper ID:', paperId, 'for URL:', paper.url);
 
     // LEVEL 3 DEDUPLICATION: Check if paper already exists (transaction-level check)
     // This prevents race conditions when multiple tabs try to store the same paper
     const existingPaper = await getPaperById(paperId);
     if (existingPaper) {
-      console.log('[IndexedDB] ⏭ Paper already stored, skipping duplicate storage:', paperId);
+      logger.debug('DATABASE', '[IndexedDB] ⏭ Paper already stored, skipping duplicate storage:', paperId);
       return existingPaper;
     }
 
@@ -179,15 +180,15 @@ export async function storePaper(
 
     // If pre-chunked data provided, use it directly
     if (preChunkedData && preChunkedData.chunks && preChunkedData.chunks.length > 0) {
-      console.log('[IndexedDB] Using pre-chunked data from research paper extraction');
+      logger.debug('DATABASE', '[IndexedDB] Using pre-chunked data from research paper extraction');
       contentChunks = preChunkedData.chunks;
 
       // Reconstruct full text from chunks for hierarchical summary
       extractedText = contentChunks.map(c => c.content).join('\n\n');
 
-      console.log(`[IndexedDB] Pre-chunked: ${contentChunks.length} chunks, avgSize: ${preChunkedData.metadata?.averageChunkSize || 'unknown'} chars`);
+      logger.debug('DATABASE', `[IndexedDB] Pre-chunked: ${contentChunks.length} chunks, avgSize: ${preChunkedData.metadata?.averageChunkSize || 'unknown'} chars`);
     } else {
-      console.log('[IndexedDB] No pre-chunked data, falling back to simple chunking');
+      logger.debug('DATABASE', '[IndexedDB] No pre-chunked data, falling back to simple chunking');
 
       // Extract full text if not provided (only works in content script context)
       if (fullText) {
@@ -217,7 +218,7 @@ export async function storePaper(
         tokenCount: Math.ceil(chunk.content.length / 4),
       }));
 
-      console.log(`[IndexedDB] Simple chunking: ${contentChunks.length} chunks created`);
+      logger.debug('DATABASE', `[IndexedDB] Simple chunking: ${contentChunks.length} chunks created`);
     }
 
     // Get user's preferred output language from settings
@@ -279,7 +280,7 @@ export async function storePaper(
       }
     }
 
-    console.log(`✓ Stored paper: ${paper.title} (${contentChunks.length} chunks)`);
+    logger.debug('DATABASE', `✓ Stored paper: ${paper.title} (${contentChunks.length} chunks)`);
 
     // Note: Hierarchical summary is lazy-loaded (only generated when user clicks "Analyze")
     // This allows embeddings to start immediately without waiting for expensive AI summarization
@@ -302,7 +303,7 @@ export async function storePaper(
 export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
   // Normalize URL for consistent lookups
   const normalizedUrl = normalizeUrl(url);
-  console.log('[IndexedDB] getPaperByUrl called with URL:', url, '(normalized:', normalizedUrl, ')');
+  logger.debug('DATABASE', '[IndexedDB] getPaperByUrl called with URL:', url, '(normalized:', normalizedUrl, ')');
 
   const db = await initDB();
 
@@ -315,7 +316,7 @@ export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
       const request = index.get(normalizedUrl);
       request.onsuccess = () => {
         const result = request.result || null;
-        console.log('[IndexedDB] Query result:', result ? {
+        logger.debug('DATABASE', '[IndexedDB] Query result:', result ? {
           found: true,
           id: result.id,
           title: result.title,
@@ -325,7 +326,7 @@ export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
         resolve(result);
       };
       request.onerror = () => {
-        console.error('[IndexedDB] Query error:', request.error);
+        logger.error('DATABASE', '[IndexedDB] Query error:', request.error);
         resolve(null);
       };
     });
@@ -336,14 +337,14 @@ export async function getPaperByUrl(url: string): Promise<StoredPaper | null> {
       const updateTransaction = db.transaction([PAPERS_STORE], 'readwrite');
       const updateStore = updateTransaction.objectStore(PAPERS_STORE);
       updateStore.put(paper);
-      console.log('[IndexedDB] Updated lastAccessedAt for paper:', paper.id);
+      logger.debug('DATABASE', '[IndexedDB] Updated lastAccessedAt for paper:', paper.id);
     }
 
     db.close();
     return paper;
   } catch (error) {
     db.close();
-    console.error('[IndexedDB] Error getting paper by URL:', {
+    logger.error('DATABASE', '[IndexedDB] Error getting paper by URL:', {
       error,
       url,
       stack: error instanceof Error ? error.stack : undefined
@@ -380,7 +381,7 @@ export async function getPaperById(id: string): Promise<StoredPaper | null> {
     return paper;
   } catch (error) {
     db.close();
-    console.error('Error getting paper by ID:', error);
+    logger.error('DATABASE', 'Error getting paper by ID:', error);
     return null;
   }
 }
@@ -408,7 +409,7 @@ export async function getPaperChunks(paperId: string): Promise<ContentChunk[]> {
     return chunks.sort((a, b) => a.index - b.index);
   } catch (error) {
     db.close();
-    console.error('Error getting paper chunks:', error);
+    logger.error('DATABASE', 'Error getting paper chunks:', error);
     return [];
   }
 }
@@ -435,7 +436,7 @@ export async function getAllPapers(): Promise<StoredPaper[]> {
     return papers.sort((a, b) => b.storedAt - a.storedAt);
   } catch (error) {
     db.close();
-    console.error('Error getting all papers:', error);
+    logger.error('DATABASE', 'Error getting all papers:', error);
     return [];
   }
 }
@@ -449,11 +450,11 @@ export async function deletePaper(paperId: string): Promise<boolean> {
   try {
     // Delete all image explanations for this paper
     const deletedExplanations = await deleteImageExplanationsByPaper(paperId);
-    console.log(`✓ Deleted ${deletedExplanations} image explanations for paper`);
+    logger.debug('DATABASE', `✓ Deleted ${deletedExplanations} image explanations for paper`);
 
     // Delete all image chats for this paper
     const deletedChats = await deleteImageChatsByPaper(paperId);
-    console.log(`✓ Deleted ${deletedChats} image chats for paper`);
+    logger.debug('DATABASE', `✓ Deleted ${deletedChats} image chats for paper`);
 
     // Delete paper
     const paperTransaction = db.transaction([PAPERS_STORE], 'readwrite');
@@ -483,13 +484,13 @@ export async function deletePaper(paperId: string): Promise<boolean> {
       });
     }
 
-    console.log(`✓ Deleted paper and ${chunks.length} chunks`);
+    logger.debug('DATABASE', `✓ Deleted paper and ${chunks.length} chunks`);
 
     db.close();
     return true;
   } catch (error) {
     db.close();
-    console.error('Error deleting paper:', error);
+    logger.error('DATABASE', 'Error deleting paper:', error);
     return false;
   }
 }
@@ -512,7 +513,7 @@ export async function updatePaper(paperId: string, updates: Partial<StoredPaper>
     });
 
     if (!paper) {
-      console.error('Paper not found for update:', paperId);
+      logger.error('DATABASE', 'Paper not found for update:', paperId);
       db.close();
       throw new Error(`Paper not found for update: ${paperId}`);
     }
@@ -526,12 +527,12 @@ export async function updatePaper(paperId: string, updates: Partial<StoredPaper>
       request.onerror = () => reject(new Error('Failed to update paper'));
     });
 
-    console.log(`✓ Updated paper: ${paper.title}`);
+    logger.debug('DATABASE', `✓ Updated paper: ${paper.title}`);
     db.close();
     return true;
   } catch (error) {
     db.close();
-    console.error('Error updating paper:', error);
+    logger.error('DATABASE', 'Error updating paper:', error);
     throw error;
   }
 }
@@ -554,7 +555,7 @@ export async function updatePaperQAHistory(paperId: string, qaHistory: any[]): P
     });
 
     if (!paper) {
-      console.error('Paper not found for Q&A history update:', paperId);
+      logger.error('DATABASE', 'Paper not found for Q&A history update:', paperId);
       db.close();
       throw new Error(`Paper not found for Q&A history update: ${paperId}`);
     }
@@ -571,12 +572,12 @@ export async function updatePaperQAHistory(paperId: string, qaHistory: any[]): P
       request.onerror = () => reject(new Error('Failed to update Q&A history'));
     });
 
-    console.log(`✓ Updated Q&A history for paper: ${paper.title}`);
+    logger.debug('DATABASE', `✓ Updated Q&A history for paper: ${paper.title}`);
     db.close();
     return true;
   } catch (error) {
     db.close();
-    console.error('Error updating Q&A history:', error);
+    logger.error('DATABASE', 'Error updating Q&A history:', error);
     throw error;
   }
 }
@@ -604,7 +605,7 @@ export async function updatePaperExplanation(
     });
 
     if (!paper) {
-      console.error('Paper not found for explanation update:', paperId);
+      logger.error('DATABASE', 'Paper not found for explanation update:', paperId);
       db.close();
       throw new Error(`Paper not found for explanation update: ${paperId}`);
     }
@@ -630,12 +631,12 @@ export async function updatePaperExplanation(
       request.onerror = () => reject(new Error('Failed to update explanation'));
     });
 
-    console.log(`✓ Updated explanation for paper: ${paper.title}`);
+    logger.debug('DATABASE', `✓ Updated explanation for paper: ${paper.title}`);
     db.close();
     return true;
   } catch (error) {
     db.close();
-    console.error('Error updating explanation:', error);
+    logger.error('DATABASE', 'Error updating explanation:', error);
     throw error;
   }
 }
@@ -684,11 +685,11 @@ export async function updateChunkEmbeddings(paperId: string, embeddings: Float32
       }
     }
 
-    console.log(`✓ Updated ${embeddings.length} chunks with embeddings for paper: ${paperId}`);
+    logger.debug('DATABASE', `✓ Updated ${embeddings.length} chunks with embeddings for paper: ${paperId}`);
     db.close();
   } catch (error) {
     db.close();
-    console.error('Error updating chunk embeddings:', error);
+    logger.error('DATABASE', 'Error updating chunk embeddings:', error);
     throw error;
   }
 }
@@ -711,7 +712,7 @@ export async function updatePaperAnalysis(paperId: string, analysis: any, output
     });
 
     if (!paper) {
-      console.error('Paper not found for analysis update:', paperId);
+      logger.error('DATABASE', 'Paper not found for analysis update:', paperId);
       db.close();
       throw new Error(`Paper not found for analysis update: ${paperId}`);
     }
@@ -735,12 +736,12 @@ export async function updatePaperAnalysis(paperId: string, analysis: any, output
       request.onerror = () => reject(new Error('Failed to update analysis'));
     });
 
-    console.log(`✓ Updated analysis for paper: ${paper.title}`);
+    logger.debug('DATABASE', `✓ Updated analysis for paper: ${paper.title}`);
     db.close();
     return true;
   } catch (error) {
     db.close();
-    console.error('Error updating analysis:', error);
+    logger.error('DATABASE', 'Error updating analysis:', error);
     throw error;
   }
 }
@@ -769,7 +770,7 @@ export async function updatePartialPaperAnalysis(
     });
 
     if (!paper) {
-      console.error('Paper not found for partial analysis update:', paperId);
+      logger.error('DATABASE', 'Paper not found for partial analysis update:', paperId);
       db.close();
       throw new Error(`Paper not found for partial analysis update: ${paperId}`);
     }
@@ -798,12 +799,12 @@ export async function updatePartialPaperAnalysis(
       request.onerror = () => reject(new Error(`Failed to update ${section} analysis`));
     });
 
-    console.log(`✓ Updated ${section} analysis for paper: ${paper.title}`);
+    logger.debug('DATABASE', `✓ Updated ${section} analysis for paper: ${paper.title}`);
     db.close();
     return true;
   } catch (error) {
     db.close();
-    console.error(`Error updating partial ${section} analysis:`, error);
+    logger.error('DATABASE', `Error updating partial ${section} analysis:`, error);
     throw error;
   }
 }
@@ -826,7 +827,7 @@ export async function updatePaperGlossary(paperId: string, glossary: any, output
     });
 
     if (!paper) {
-      console.error('Paper not found for glossary update:', paperId);
+      logger.error('DATABASE', 'Paper not found for glossary update:', paperId);
       db.close();
       throw new Error(`Paper not found for glossary update: ${paperId}`);
     }
@@ -850,12 +851,12 @@ export async function updatePaperGlossary(paperId: string, glossary: any, output
       request.onerror = () => reject(new Error('Failed to update glossary'));
     });
 
-    console.log(`✓ Updated glossary for paper: ${paper.title}`);
+    logger.debug('DATABASE', `✓ Updated glossary for paper: ${paper.title}`);
     db.close();
     return true;
   } catch (error) {
     db.close();
-    console.error('Error updating glossary:', error);
+    logger.error('DATABASE', 'Error updating glossary:', error);
     throw error;
   }
 }
@@ -933,7 +934,7 @@ export async function getRelevantChunksByTopic(
 ): Promise<ContentChunk[]> {
   const chunks = await getPaperChunks(paperId);
 
-  console.log(`[RAG] Searching ${chunks.length} chunks for topics:`, topics);
+  logger.debug('RAG', `[RAG] Searching ${chunks.length} chunks for topics:`, topics);
 
   // Score chunks by topic keyword relevance
   const scoredChunks = chunks.map(chunk => {
@@ -972,7 +973,7 @@ export async function getRelevantChunksByTopic(
     .slice(0, limit)
     .map(({ chunk }) => chunk);
 
-  console.log(`[RAG] Found ${relevantChunks.length} relevant chunks`);
+  logger.debug('RAG', `[RAG] Found ${relevantChunks.length} relevant chunks`);
   return relevantChunks;
 }
 
@@ -994,7 +995,7 @@ export async function getRelevantChunksSemantic(
   query: string,
   limit: number = 5
 ): Promise<ContentChunk[]> {
-  console.log('[dbService] Search requested for:', query);
+  logger.debug('DATABASE', '[dbService] Search requested for:', query);
 
   try {
     // Check if chunks have embeddings
@@ -1002,7 +1003,7 @@ export async function getRelevantChunksSemantic(
     const hasEmbeddings = chunks.some(chunk => chunk.embedding !== undefined);
 
     if (!hasEmbeddings) {
-      console.log('[dbService] No embeddings available, falling back to keyword search');
+      logger.debug('DATABASE', '[dbService] No embeddings available, falling back to keyword search');
       return await getRelevantChunks(paperId, query, limit);
     }
 
@@ -1021,10 +1022,10 @@ export async function getRelevantChunksSemantic(
           .map(chunkId => chunks.find(c => c.id === chunkId))
           .filter(c => c !== undefined) as ContentChunk[];
 
-        console.log('[dbService] ✓ Hybrid search found', rankedChunks.length, 'chunks');
+        logger.debug('DATABASE', '[dbService] ✓ Hybrid search found', rankedChunks.length, 'chunks');
         return rankedChunks;
       } else {
-        console.log('[dbService] Hybrid search failed, falling back to keyword search');
+        logger.debug('DATABASE', '[dbService] Hybrid search failed, falling back to keyword search');
         return await getRelevantChunks(paperId, query, limit);
       }
     } else {
@@ -1038,15 +1039,15 @@ export async function getRelevantChunksSemantic(
           .map(chunkId => chunks.find(c => c.id === chunkId))
           .filter(c => c !== undefined) as ContentChunk[];
 
-        console.log('[dbService] ✓ Semantic search found', rankedChunks.length, 'chunks');
+        logger.debug('DATABASE', '[dbService] ✓ Semantic search found', rankedChunks.length, 'chunks');
         return rankedChunks;
       } else {
-        console.log('[dbService] Semantic search failed, falling back to keyword search');
+        logger.debug('DATABASE', '[dbService] Semantic search failed, falling back to keyword search');
         return await getRelevantChunks(paperId, query, limit);
       }
     }
   } catch (error) {
-    console.error('[dbService] Error in search, falling back to keyword search:', error);
+    logger.error('DATABASE', '[dbService] Error in search, falling back to keyword search:', error);
     return await getRelevantChunks(paperId, query, limit);
   }
 }
@@ -1070,7 +1071,7 @@ export async function getRelevantChunksByTopicSemantic(
 ): Promise<ContentChunk[]> {
   // This function is deprecated in background worker context
   // Use content/services/semanticSearchService.ts from content script instead
-  console.log('[dbService] Semantic search by topic called from background, using keyword fallback');
+  logger.debug('DATABASE', '[dbService] Semantic search by topic called from background, using keyword fallback');
   return await getRelevantChunksByTopic(paperId, topics, limit);
 }
 
@@ -1164,12 +1165,12 @@ export async function storeImageExplanation(
       request.onerror = () => reject(new Error('Failed to store image explanation'));
     });
 
-    console.log('✓ Stored image explanation for:', imageUrl);
+    logger.debug('DATABASE', '✓ Stored image explanation for:', imageUrl);
     db.close();
     return imageExplanation;
   } catch (error) {
     db.close();
-    console.error('Error storing image explanation:', error);
+    logger.error('DATABASE', 'Error storing image explanation:', error);
     throw error;
   }
 }
@@ -1198,7 +1199,7 @@ export async function getImageExplanation(
     return explanation;
   } catch (error) {
     db.close();
-    console.error('Error getting image explanation:', error);
+    logger.error('DATABASE', 'Error getting image explanation:', error);
     return null;
   }
 }
@@ -1224,7 +1225,7 @@ export async function getImageExplanationsByPaper(paperId: string): Promise<Imag
     return explanations;
   } catch (error) {
     db.close();
-    console.error('Error getting image explanations for paper:', error);
+    logger.error('DATABASE', 'Error getting image explanations for paper:', error);
     return [];
   }
 }
@@ -1249,12 +1250,12 @@ export async function deleteImageExplanation(
       request.onerror = () => reject(new Error('Failed to delete image explanation'));
     });
 
-    console.log('✓ Deleted image explanation for:', imageUrl);
+    logger.debug('DATABASE', '✓ Deleted image explanation for:', imageUrl);
     db.close();
     return true;
   } catch (error) {
     db.close();
-    console.error('Error deleting image explanation:', error);
+    logger.error('DATABASE', 'Error deleting image explanation:', error);
     return false;
   }
 }
@@ -1278,12 +1279,12 @@ export async function deleteImageExplanationsByPaper(paperId: string): Promise<n
       });
     }
 
-    console.log(`✓ Deleted ${explanations.length} image explanations for paper:`, paperId);
+    logger.debug('DATABASE', `✓ Deleted ${explanations.length} image explanations for paper:`, paperId);
     db.close();
     return explanations.length;
   } catch (error) {
     db.close();
-    console.error('Error deleting image explanations for paper:', error);
+    logger.error('DATABASE', 'Error deleting image explanations for paper:', error);
     return 0;
   }
 }
@@ -1326,7 +1327,7 @@ export async function getImageChat(
     return chat;
   } catch (error) {
     db.close();
-    console.error('Error getting image chat:', error);
+    logger.error('DATABASE', 'Error getting image chat:', error);
     return null;
   }
 }
@@ -1376,11 +1377,11 @@ export async function updateImageChat(
       request.onerror = () => reject(new Error('Failed to update image chat'));
     });
 
-    console.log('✓ Updated image chat for:', imageUrl);
+    logger.debug('DATABASE', '✓ Updated image chat for:', imageUrl);
     db.close();
   } catch (error) {
     db.close();
-    console.error('Error updating image chat:', error);
+    logger.error('DATABASE', 'Error updating image chat:', error);
     throw error;
   }
 }
@@ -1405,12 +1406,12 @@ export async function deleteImageChat(
       request.onerror = () => reject(new Error('Failed to delete image chat'));
     });
 
-    console.log('✓ Deleted image chat for:', imageUrl);
+    logger.debug('DATABASE', '✓ Deleted image chat for:', imageUrl);
     db.close();
     return true;
   } catch (error) {
     db.close();
-    console.error('Error deleting image chat:', error);
+    logger.error('DATABASE', 'Error deleting image chat:', error);
     return false;
   }
 }
@@ -1436,7 +1437,7 @@ export async function getAllImageChatsForPaper(paperId: string): Promise<ImageCh
     return chats.sort((a, b) => b.lastUpdated - a.lastUpdated);
   } catch (error) {
     db.close();
-    console.error('Error getting image chats for paper:', error);
+    logger.error('DATABASE', 'Error getting image chats for paper:', error);
     return [];
   }
 }
@@ -1460,12 +1461,12 @@ export async function deleteImageChatsByPaper(paperId: string): Promise<number> 
       });
     }
 
-    console.log(`✓ Deleted ${chats.length} image chats for paper:`, paperId);
+    logger.debug('DATABASE', `✓ Deleted ${chats.length} image chats for paper:`, paperId);
     db.close();
     return chats.length;
   } catch (error) {
     db.close();
-    console.error('Error deleting image chats for paper:', error);
+    logger.error('DATABASE', 'Error deleting image chats for paper:', error);
     return 0;
   }
 }

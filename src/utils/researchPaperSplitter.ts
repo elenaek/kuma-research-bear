@@ -4,6 +4,8 @@
  * Preserves exact original heading text for accurate citations
  */
 
+import { logger } from './logger.ts';
+
 export interface PaperSection {
   heading: string;          // Exact original heading text (e.g., "3.2 Multifrequency Angular Power Spectra")
   level: number;            // Heading level (1=h1, 2=h2, 3=h3)
@@ -127,7 +129,7 @@ function extractSectionElements(doc: Document): PaperSection[] | null {
     return null;
   }
 
-  console.log(`[ResearchPaperSplitter] Found ${allSections.length} <section> elements, extracting with hierarchy...`);
+  logger.debug('UTILS', `[ResearchPaperSplitter] Found ${allSections.length} <section> elements, extracting with hierarchy...`);
 
   // Filter to only top-level sections (sections not contained within other sections)
   const topLevelSections = allSections.filter(section => {
@@ -142,7 +144,7 @@ function extractSectionElements(doc: Document): PaperSection[] | null {
     return true; // Top-level section
   });
 
-  console.log(`[ResearchPaperSplitter] Found ${topLevelSections.length} top-level sections`);
+  logger.debug('UTILS', `[ResearchPaperSplitter] Found ${topLevelSections.length} top-level sections`);
 
   const sections: PaperSection[] = [];
   let currentCharIndex = 0;
@@ -176,7 +178,7 @@ function extractSectionRecursive(
   const headingElement = sectionElement.querySelector('h1, h2, h3, h4, h5, h6');
 
   if (!headingElement) {
-    console.warn('[ResearchPaperSplitter] Section element has no heading, skipping');
+    logger.warn('UTILS', '[ResearchPaperSplitter] Section element has no heading, skipping');
     return [];
   }
 
@@ -264,35 +266,35 @@ export async function extractHTMLSections(doc?: Document): Promise<PaperSection[
 
     // Guard against non-document contexts
     if (!document) {
-      console.warn('[ResearchPaperSplitter] No document available');
+      logger.warn('UTILS', '[ResearchPaperSplitter] No document available');
       return [];
     }
 
     // STRATEGY 1: Try semantic <section> tag extraction first (preferred for modern papers)
-    console.log('[ResearchPaperSplitter] Attempting section-based extraction...');
+    logger.debug('UTILS', '[ResearchPaperSplitter] Attempting section-based extraction...');
     const sectionBasedResults = extractSectionElements(document);
 
     if (sectionBasedResults && sectionBasedResults.length > 0) {
-      console.log(`[ResearchPaperSplitter] ✓ Extracted ${sectionBasedResults.length} sections using <section> tags`);
+      logger.debug('UTILS', `[ResearchPaperSplitter] ✓ Extracted ${sectionBasedResults.length} sections using <section> tags`);
 
       // Log section structure for debugging
-      console.log('[ResearchPaperSplitter] Section structure:');
+      logger.debug('UTILS', '[ResearchPaperSplitter] Section structure:');
       sectionBasedResults.forEach((section, index) => {
         const indent = '  '.repeat(section.level - 1);
         const parentInfo = section.parentHeading ? ` (parent: ${section.parentHeading})` : '';
-        console.log(`${indent}${index + 1}. [h${section.level}] ${section.heading}${parentInfo} (${section.content.length} chars)`);
+        logger.debug('UTILS', `${indent}${index + 1}. [h${section.level}] ${section.heading}${parentInfo} (${section.content.length} chars)`);
       });
 
       return sectionBasedResults;
     }
 
     // STRATEGY 2: Fallback to heading-based extraction (for papers without <section> tags)
-    console.log('[ResearchPaperSplitter] No <section> tags found, falling back to heading-based extraction...');
+    logger.debug('UTILS', '[ResearchPaperSplitter] No <section> tags found, falling back to heading-based extraction...');
 
     // Get main content area (filters out navigation, footers, etc.)
     const mainContent = getMainContentElement(document);
     if (!mainContent) {
-      console.warn('[ResearchPaperSplitter] No main content found');
+      logger.warn('UTILS', '[ResearchPaperSplitter] No main content found');
       return [];
     }
 
@@ -300,11 +302,11 @@ export async function extractHTMLSections(doc?: Document): Promise<PaperSection[
     const headingElements = Array.from(mainContent.querySelectorAll('h1, h2, h3, h4, h5, h6'));
 
     if (headingElements.length === 0) {
-      console.warn('[ResearchPaperSplitter] No headings found in document');
+      logger.warn('UTILS', '[ResearchPaperSplitter] No headings found in document');
       return [];
     }
 
-    console.log(`[ResearchPaperSplitter] Found ${headingElements.length} headings`);
+    logger.debug('UTILS', `[ResearchPaperSplitter] Found ${headingElements.length} headings`);
 
     const sections: PaperSection[] = [];
     const headingStack: Array<{ level: number; heading: string }> = [];
@@ -362,20 +364,20 @@ export async function extractHTMLSections(doc?: Document): Promise<PaperSection[
       });
     }
 
-    console.log(`[ResearchPaperSplitter] ✓ Extracted ${sections.length} sections with hierarchy (heading-based)`);
+    logger.debug('UTILS', `[ResearchPaperSplitter] ✓ Extracted ${sections.length} sections with hierarchy (heading-based)`);
 
     // Log section structure for debugging
     if (sections.length > 0) {
-      console.log('[ResearchPaperSplitter] Section structure:');
+      logger.debug('UTILS', '[ResearchPaperSplitter] Section structure:');
       sections.forEach((section, index) => {
         const indent = '  '.repeat(section.level - 1);
-        console.log(`${indent}${index + 1}. [h${section.level}] ${section.heading} (${section.content.length} chars)`);
+        logger.debug('UTILS', `${indent}${index + 1}. [h${section.level}] ${section.heading} (${section.content.length} chars)`);
       });
     }
 
     return sections;
   } catch (error) {
-    console.error('[ResearchPaperSplitter] Error extracting sections:', error);
+    logger.error('UTILS', '[ResearchPaperSplitter] Error extracting sections:', error);
     return [];
   }
 }
@@ -475,7 +477,7 @@ function getMainContentElement(doc: Document): HTMLElement | null {
         // Verify this element has headings (to avoid false positives)
         const headingCount = element.querySelectorAll('h1, h2, h3').length;
         if (headingCount > 0) {
-          console.log(`[ResearchPaperSplitter] Found main content via pattern: ${className || id}`);
+          logger.debug('UTILS', `[ResearchPaperSplitter] Found main content via pattern: ${className || id}`);
           return element as HTMLElement;
         }
       }
@@ -496,12 +498,12 @@ function getMainContentElement(doc: Document): HTMLElement | null {
   }
 
   if (bestCandidate && maxHeadings >= 2) {
-    console.log(`[ResearchPaperSplitter] Found main content via heuristics: ${maxHeadings} headings`);
+    logger.debug('UTILS', `[ResearchPaperSplitter] Found main content via heuristics: ${maxHeadings} headings`);
     return bestCandidate;
   }
 
   // STEP 4: Ultimate fallback - use body
-  console.log('[ResearchPaperSplitter] Using document.body as fallback');
+  logger.debug('UTILS', '[ResearchPaperSplitter] Using document.body as fallback');
   return doc.body;
 }
 
