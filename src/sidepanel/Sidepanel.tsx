@@ -300,6 +300,24 @@ export function Sidepanel() {
       }
     };
 
+    // Create glossary batch completion listener for progressive display
+    const glossaryBatchCompleteListener = (message: any) => {
+      if (message.type === MessageType.GLOSSARY_BATCH_COMPLETE) {
+        const { paperUrl, terms } = message.payload;
+
+        // Only update if it's the current paper
+        if (currentPaperUrlRef.current && normalizeUrl(currentPaperUrlRef.current) === normalizeUrl(paperUrl)) {
+          logger.debug('UI', '[Sidepanel] Glossary batch complete:', terms.length, 'new terms');
+
+          // Update glossary state with new terms (append to existing)
+          setGlossary((prevGlossary) => ({
+            terms: [...(prevGlossary?.terms || []), ...terms],
+            timestamp: prevGlossary?.timestamp || Date.now(),
+          }));
+        }
+      }
+    };
+
     // Create analysis progress listener for ANALYSIS_PROGRESS updates
     const analysisProgressListener = (message: any) => {
       if (message.type === MessageType.ANALYSIS_PROGRESS) {
@@ -380,6 +398,7 @@ export function Sidepanel() {
     chrome.runtime.onMessage.addListener(messageListener);
     chrome.runtime.onMessage.addListener(navigationListener);
     chrome.runtime.onMessage.addListener(glossaryProgressListener);
+    chrome.runtime.onMessage.addListener(glossaryBatchCompleteListener);
     chrome.runtime.onMessage.addListener(analysisProgressListener);
     chrome.runtime.onMessage.addListener(analysisSectionCompleteListener);
     chrome.runtime.onMessage.addListener(paperDeletedListener);
@@ -388,6 +407,7 @@ export function Sidepanel() {
       chrome.runtime.onMessage.removeListener(messageListener);
       chrome.runtime.onMessage.removeListener(navigationListener);
       chrome.runtime.onMessage.removeListener(glossaryProgressListener);
+      chrome.runtime.onMessage.removeListener(glossaryBatchCompleteListener);
       chrome.runtime.onMessage.removeListener(analysisProgressListener);
       chrome.runtime.onMessage.removeListener(analysisSectionCompleteListener);
       chrome.runtime.onMessage.removeListener(paperDeletedListener);

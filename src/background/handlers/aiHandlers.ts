@@ -1001,8 +1001,8 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
       const glossaryTerms: GlossaryTerm[] = [];
       let successCount = 0;
 
-      // Process definitions in batches (10 at a time to avoid input size limits)
-      const definitionBatchSize = 10;
+      // Process definitions in batches (5 at a time for progressive UI updates)
+      const definitionBatchSize = 5;
       const totalTerms = deduplicatedTerms.length;
 
       for (let i = 0; i < totalTerms; i += definitionBatchSize) {
@@ -1022,9 +1022,11 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
           );
 
           // Collect successful results
+          const newTerms: GlossaryTerm[] = [];
           batchTerms.forEach((term, idx) => {
             if (term) {
               glossaryTerms.push(term);
+              newTerms.push(term);
               successCount++;
               logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] ✓ Definition generated for: ${batch[idx]}`);
             } else {
@@ -1033,6 +1035,35 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
           });
 
           logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Batch complete: ${batchTerms.filter(t => t !== null).length}/${batch.length} successful`);
+
+          // Broadcast batch completion with new terms for progressive UI updates
+          if (newTerms.length > 0) {
+            chrome.runtime.sendMessage({
+              type: MessageType.GLOSSARY_BATCH_COMPLETE,
+              payload: {
+                paperUrl: storedPaper.url,
+                terms: newTerms,  // Just the new terms from this batch
+                totalProcessed: successCount,  // Total so far
+                totalTerms: deduplicatedTerms.length,
+              },
+            }).catch(() => {
+              // No listeners, that's ok
+            });
+
+            // Update partial glossary in IndexedDB for persistence
+            try {
+              const { updatePartialPaperGlossary } = await import('../../utils/dbService.ts');
+              const { getOutputLanguage } = await import('../../utils/settingsService.ts');
+              const outputLanguage = await getOutputLanguage();
+              const partialGlossary = {
+                terms: glossaryTerms,  // All terms so far
+                timestamp: Date.now(),
+              };
+              await updatePartialPaperGlossary(storedPaper.id, partialGlossary, outputLanguage);
+            } catch (error) {
+              logger.warn('BACKGROUND_SCRIPT', '[Glossary] Failed to store partial glossary:', error);
+            }
+          }
         } catch (error) {
           logger.error('BACKGROUND_SCRIPT', `[AIHandlers] Error generating batch definitions:`, error);
           // Continue to next batch on error
