@@ -4,6 +4,8 @@
  * Domain-agnostic approach using universal signals (Abstract, References, DOI, citations, etc.)
  */
 
+import { buildPaperDetectionPrompt } from '../prompts/templates/detection.ts';
+
 export interface PaperDetectionResult {
   isResearchPaper: boolean;
   confidence: number; // 0-100
@@ -205,7 +207,7 @@ async function aiDetectionFallback(): Promise<{ isResearchPaper: boolean; reason
     // Create session for detection
     const session = await LanguageModel.create({
       temperature: 0.0, // Deterministic
-      systemPrompt: 'You are a research paper classifier. Analyze text and determine if it is from an academic/research paper.',
+      systemPrompt: buildPaperDetectionPrompt(),
     });
 
     // Ask AI

@@ -25,6 +25,15 @@ import { getSchemaForLanguage } from '../schemas/analysisSchemas.multilang.ts';
 import { getOutputLanguage } from './settingsService.ts';
 import { getOptimalRAGChunkCount } from './adaptiveRAGService.ts';
 import { logger } from './logger.ts';
+import { buildSimplifyTextPrompt } from '../prompts/templates/simplification.ts';
+import { buildExplainTermPrompt, buildExplainAbstractPrompt, buildImageExplanationPrompt } from '../prompts/templates/explanation.ts';
+import { buildSummaryPrompt } from '../prompts/templates/summary.ts';
+import { buildMetadataExtractionPrompt } from '../prompts/templates/extraction.ts';
+import { buildMethodologyAnalysisPrompt, buildConfounderAnalysisPrompt, buildImplicationAnalysisPrompt, buildLimitationAnalysisPrompt } from '../prompts/templates/analysis.ts';
+import { buildQAPrompt } from '../prompts/templates/qa.ts';
+import { buildJSONRepairPrompt, buildJSONRepairInput } from '../prompts/templates/utility.ts';
+import { buildExtractTermsPrompt, buildExtractChunkTermsPrompt, buildDefinitionPrompt, buildDeduplicateTermsPrompt } from '../prompts/templates/glossary.ts';
+import { getLanguageName } from '../prompts/components/language.ts';
 
 /**
  * Utility: Sleep for a specified duration
@@ -242,30 +251,7 @@ class ChromeAIService {
         temperature: 0.7,
         topK: 3,
         expectedInputs: [{ type: 'image' }],
-        systemPrompt: `You are an expert research assistant helping readers understand scientific figures and images in research papers. 
-Provide clear, concise explanations of images in the context of the paper. 
-
-Math formatting with LaTeX:
-- Use $expr$ for inline math, $$expr$$ for display equations
-- CRITICAL: In JSON strings, backslashes must be escaped by doubling them
-
-LaTeX Escaping Rules (CRITICAL - READ CAREFULLY):
-- Every LaTeX command needs TWO backslashes in your JSON output
-- Example: To render \\alpha, you must write: "The value is \\\\alpha"
-- Example: To render \\theta, you must write: "The formula uses \\\\theta"
-- Example: To render \\frac{a}{b}, you must write: "The fraction \\\\frac{a}{b}"
-
-IMPORTANT - Commands that look like escape sequences:
-- \\text{...} → Write as \\\\text{...} (NOT \\text which becomes tab + "ext")
-- \\theta → Write as \\\\theta (NOT \\theta which could break)
-- \\nabla → Write as \\\\nabla (NOT \\nabla which becomes newline + "abla")
-- \\nu → Write as \\\\nu (NOT \\nu which becomes newline + "u")
-- \\rho → Write as \\\\rho (NOT \\rho which becomes carriage return + "ho")
-- \\times, \\tan, \\tanh → Write as \\\\times, \\\\tan, \\\\tanh
-- \\ne, \\neq, \\not → Write as \\\\ne, \\\\neq, \\\\not
-
-More examples: \\\\alpha, \\\\beta, \\\\gamma, \\\\ell, \\\\sum, \\\\int, \\\\boldsymbol{x}, \\\\frac{a}{b}
-Use markdown formatting to make your response easier to read (e.g., **bold**, *italic*, bullet points, numbered lists, etc.).`,
+        systemPrompt: buildImageExplanationPrompt(),
       });
 
       logger.debug('AI_SERVICE', '[ImageExplain] Session created, sending image...');
@@ -734,17 +720,8 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
    * Used when initial JSON parsing fails
    */
   async fixMalformedJSON(malformedJson: string, contextId: string = 'default'): Promise<string> {
-    const systemPrompt = `You are a JSON validator and fixer. Your job is to take malformed JSON and return valid, properly escaped JSON.`;
-
-    const input = `The following JSON has syntax errors (likely improperly escaped strings). Fix it and return ONLY valid JSON with properly escaped strings:
-
-${malformedJson}
-
-Important:
-- Escape all quotes in strings with \\"
-- Escape all newlines as \\n
-- Escape all backslashes as \\\\
-- Return ONLY the corrected JSON, no explanations or markdown`;
+    const systemPrompt = buildJSONRepairPrompt();
+    const input = buildJSONRepairInput(malformedJson);
 
     try {
       const response = await this.prompt(input, systemPrompt, undefined, contextId);
@@ -768,24 +745,8 @@ Important:
     const outputLanguage = await getOutputLanguage();
     logger.debug('AI_SERVICE', '[ExplainAbstract] Output language:', outputLanguage);
 
-    // Get language name for instructions
-    const languageNames: { [key: string]: string } = {
-      'en': 'English',
-      'es': 'Spanish',
-      'ja': 'Japanese'
-    };
-    const languageName = languageNames[outputLanguage] || 'English';
-
-    const systemPrompt = `You are a helpful research assistant that explains complex academic papers in simple terms.
-Your goal is to make research papers accessible to people without specialized knowledge.
-Break down technical jargon, use analogies when helpful, and focus on the key insights.
-Use markdown formatting to enhance readability (bold for key terms, bullet points for lists, etc.).
-When mathematical expressions, equations, or formulas are needed:
-- Use $expression$ for inline math (e.g., $E = mc^2$)
-- Use $$expression$$ for display equations on separate lines
-- Alternative: \\(expression\\) for inline, \\[expression\\] for display
-- Ensure proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, \\alpha, \\beta)
-IMPORTANT: Respond in ${languageName}. Your entire explanation must be in ${languageName}.`;
+    const systemPrompt = buildExplainAbstractPrompt(outputLanguage as 'en' | 'es' | 'ja');
+    const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
 
     // If hierarchical summary is provided, use it for richer context
     let input: string;
@@ -803,7 +764,7 @@ Use the full paper summary below to provide a comprehensive explanation that cov
 - Answer
 ### What is the proposed solution, method or model?
 - Answer
-### What are the key assumptions orp remises of the approach?
+### What are the key assumptions or premises of the approach?
 - Answer
 ### What are the paper's main findings or results?
 - Answer
@@ -926,10 +887,7 @@ ${abstract}`;
 
     // Fall back to Prompt API
     logger.debug('AI_SERVICE', '[Summary] Using Prompt API for summary generation');
-    const systemPrompt = `You are a research assistant that creates concise summaries of academic papers.
-Extract the most important information and present it clearly.
-Use markdown formatting to enhance readability.
-For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations, or \\(expression\\)/\\[expression\\]. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).`;
+    const systemPrompt = buildSummaryPrompt();
 
     // If hierarchical summary is provided, use it for comprehensive summary
     let input: string;
@@ -998,7 +956,7 @@ KEY POINTS:
    * Explain a technical term
    */
   async explainTerm(term: string, context?: string, contextId: string = 'default'): Promise<string> {
-    const systemPrompt = `You are a helpful assistant that explains technical and scientific terms in simple language.`;
+    const systemPrompt = buildExplainTermPrompt();
 
     const input = context
       ? `Explain the term "${term}" in the context of: ${context}`
@@ -1011,9 +969,7 @@ KEY POINTS:
    * Simplify a section of text
    */
   async simplifyText(text: string, contextId: string = 'default'): Promise<string> {
-    const systemPrompt = `You are a helpful assistant that rewrites complex academic text in simple, clear language
-while preserving the original meaning.
-For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\alpha, \\sum, etc.).`;
+    const systemPrompt = buildSimplifyTextPrompt();
 
     const input = `Rewrite this text in simpler terms:\n\n${text}`;
 
@@ -1078,9 +1034,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
     const maxChars = 8000; // ~2000 tokens
     const truncatedContent = content.slice(0, maxChars);
 
-    const systemPrompt = `You are a research paper metadata extraction expert.
-Extract structured information from academic papers and return it as valid JSON.
-Be accurate and only extract information that is clearly present in the text.`;
+    const systemPrompt = buildMetadataExtractionPrompt();
 
     const input = `Extract metadata from this research paper content and return ONLY valid JSON with this exact structure:
 {
@@ -1476,18 +1430,9 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
   ): Promise<MethodologyAnalysis> {
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
+    const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
 
-    // Get language name for instructions
-    const languageNames: { [key: string]: string } = {
-      'en': 'English',
-      'es': 'Spanish',
-      'ja': 'Japanese'
-    };
-    const languageName = languageNames[outputLanguage] || 'English';
-
-    const systemPrompt = `You are a research methodology expert. Analyze research papers for their study design, methods, and rigor.
-For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).
-IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
+    const systemPrompt = buildMethodologyAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja');
 
     try {
       // Import RAG and quota services
@@ -1620,18 +1565,9 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
   ): Promise<ConfounderAnalysis> {
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
+    const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
 
-    // Get language name for instructions
-    const languageNames: { [key: string]: string } = {
-      'en': 'English',
-      'es': 'Spanish',
-      'ja': 'Japanese'
-    };
-    const languageName = languageNames[outputLanguage] || 'English';
-
-    const systemPrompt = `You are a research quality expert specializing in identifying biases and confounding variables.
-For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).
-IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
+    const systemPrompt = buildConfounderAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja');
 
     try {
       // Import RAG and quota services
@@ -1759,18 +1695,9 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
   ): Promise<ImplicationAnalysis> {
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
+    const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
 
-    // Get language name for instructions
-    const languageNames: { [key: string]: string } = {
-      'en': 'English',
-      'es': 'Spanish',
-      'ja': 'Japanese'
-    };
-    const languageName = languageNames[outputLanguage] || 'English';
-
-    const systemPrompt = `You are a research impact expert who identifies practical applications and significance of research.
-For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).
-IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
+    const systemPrompt = buildImplicationAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja');
 
     try {
       // Import RAG and quota services
@@ -1898,18 +1825,9 @@ Provide a comprehensive analysis of real-world applications, significance, and f
   ): Promise<LimitationAnalysis> {
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
+    const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
 
-    // Get language name for instructions
-    const languageNames: { [key: string]: string } = {
-      'en': 'English',
-      'es': 'Spanish',
-      'ja': 'Japanese'
-    };
-    const languageName = languageNames[outputLanguage] || 'English';
-
-    const systemPrompt = `You are a research critique expert who identifies limitations and constraints in studies.
-For mathematical expressions: use $expression$ for inline math, $$expression$$ for display equations. Use proper LaTeX syntax (\\frac{a}{b}, \\sum, \\alpha, etc.).
-IMPORTANT: Respond in ${languageName}. All your analysis must be in ${languageName}.`;
+    const systemPrompt = buildLimitationAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja');
 
     try {
       // Import RAG and quota services
@@ -2091,14 +2009,6 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
 
-    // Get language name for instructions
-    const languageNames: { [key: string]: string } = {
-      'en': 'English',
-      'es': 'Spanish',
-      'ja': 'Japanese'
-    };
-    const languageName = languageNames[outputLanguage] || 'English';
-
     // Validate and trim chunks if needed (with retry logic)
     let finalContextChunks = contextChunks;
     const MAX_RETRIES = 3;
@@ -2126,15 +2036,7 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
         .join('\n\n---\n\n');
     };
 
-    const systemPrompt = `You are Kuma, a helpful research assistant. Answer questions about research papers based ONLY on the provided context.
-Be accurate, cite which sections you used, and if the context doesn't contain enough information to answer, say so clearly.
-Use markdown formatting to make your answers more readable and well-structured.
-When mathematical expressions, equations, or formulas are needed:
-- Use $expression$ for inline math (e.g., $E = mc^2$, $p < 0.05$)
-- Use $$expression$$ for display equations on separate lines
-- Alternative: \\(expression\\) for inline, \\[expression\\] for display
-- Ensure proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)
-IMPORTANT: Respond in ${languageName}. Your entire answer must be in ${languageName}.`;
+    const systemPrompt = buildQAPrompt(outputLanguage as 'en' | 'es' | 'ja');
 
     // Include language in context ID to ensure separate sessions per language
     const languageContextId = `${contextId}-${outputLanguage}`;
@@ -2143,9 +2045,7 @@ IMPORTANT: Respond in ${languageName}. Your entire answer must be in ${languageN
     const session = await this.getOrCreateSession(languageContextId, {
       systemPrompt,
       expectedInputs: [{ type: "text", languages: ["en"] }],
-      expectedOutputs: [{ type: "text", languages: [outputLanguage] }],
-      temperature: 0,
-      topK: 3
+      expectedOutputs: [{ type: "text", languages: [outputLanguage] }]
     });
 
     // Validate prompt size with retry logic
@@ -2266,15 +2166,9 @@ Use markdown formatting for better readability:
 
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
-    const languageNames: { [key: string]: string } = {
-      'en': 'English',
-      'es': 'Spanish',
-      'ja': 'Japanese'
-    };
-    const languageName = languageNames[outputLanguage] || 'English';
+    const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
 
-    const systemPrompt = `You are a research paper expert who identifies important technical terms and acronyms for glossaries.
-IMPORTANT: Return your response in ${languageName}.`;
+    const systemPrompt = buildExtractTermsPrompt(outputLanguage as 'en' | 'es' | 'ja');
 
     const input = `Paper Title: ${paperTitle}
 
@@ -2352,16 +2246,7 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
     const outputLanguage = await getOutputLanguage();
     const chunkSchema = getSchemaForLanguage('chunk-summary', outputLanguage as 'en' | 'es' | 'ja');
 
-    const systemPrompt = `You are a research paper analyzer extracting technical terms.
-CRITICAL:
-- Extract ONLY the ${termCount} most important technical terms, acronyms, and domain-specific jargon
-- Preserve ALL acronyms exactly (e.g., "SES", "RCT", "fMRI")
-- Keep technical terminology intact - do NOT paraphrase
-- Focus on terms that would be valuable in a glossary
-- Prioritize: technical terms, acronyms, specialized concepts, methodological terms
-- EXCLUDE: person names, institution names, place names, common words
-
-Paper: ${paperTitle}`;
+    const systemPrompt = buildExtractChunkTermsPrompt(paperTitle, termCount);
 
     const input = `Extract the ${termCount} most important technical terms and acronyms from this section. Also provide a brief summary:\n\n${chunkContent}`;
 
@@ -2513,21 +2398,10 @@ Paper: ${paperTitle}`;
 
       // Get user's preferred output language
       const outputLanguage = await getOutputLanguage();
-      const languageNames: { [key: string]: string } = {
-        'en': 'English',
-        'es': 'Spanish',
-        'ja': 'Japanese'
-      };
-      const languageName = languageNames[outputLanguage] || 'English';
+      const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
 
       // Step 3: Generate definition using GeminiNano
-      const systemPrompt = `You are a research paper terminology expert who provides clear, accurate definitions for technical terms and acronyms.
-When mathematical expressions, equations, or formulas are needed in definitions or contexts:
-- Use $expression$ for inline math (e.g., $E = mc^2$, $\\alpha$)
-- Use $$expression$$ for display equations on separate lines
-- Alternative: \\(expression\\) for inline, \\[expression\\] for display
-- Ensure proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters)
-IMPORTANT: All definitions, contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.`;
+      const systemPrompt = buildDefinitionPrompt(outputLanguage as 'en' | 'es' | 'ja');
 
       const input = `IMPORTANT: All definitions, study contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.
 
@@ -3117,19 +2991,12 @@ For mathematical expressions in definitions, contexts, or analogies:
 
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
-    const languageNames: { [key: string]: string } = {
-      'en': 'English',
-      'es': 'Spanish',
-      'ja': 'Japanese'
-    };
-    const languageName = languageNames[outputLanguage] || 'English';
+    const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
 
     // Prepare term list
     const termList = terms.join(', ');
 
-    const systemPrompt = `You are a research paper glossary expert who deduplicates and selects technical terms.
-Your task is to remove duplicates and select the TOP ${targetCount} most important unique terms.
-IMPORTANT: Return your response in ${languageName}.`;
+    const systemPrompt = buildDeduplicateTermsPrompt(outputLanguage as 'en' | 'es' | 'ja', targetCount);
 
     const input = `Paper Title: ${paperTitle}
 
