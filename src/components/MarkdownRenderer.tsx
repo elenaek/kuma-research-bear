@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { repairLatexCommands } from '../utils/latexRepair.ts';
 
 /**
  * MarkdownRenderer Component
@@ -244,7 +245,11 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
   });
 
   // Defensive check: ensure content is always a string
-  const safeContent = typeof content === 'string' ? content : String(content || '');
+  let safeContent = typeof content === 'string' ? content : String(content || '');
+
+  // Repair any corrupted LaTeX commands (e.g., \triangle → [TAB]riangle)
+  // This happens when JSON.parse interprets \t, \n, \r, \b, \f as escape sequences
+  safeContent = repairLatexCommands(safeContent);
 
   useEffect(() => {
     let isStale = false; // Flag to prevent updating with stale renders
@@ -314,7 +319,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
             'dx', 'dy', 'points', 'id', 'xlink:href',
             'font-family', 'font-size', 'font-weight', 'font-style',
             'text-anchor', 'dominant-baseline', 'alignment-baseline',
-            'data-c', 'data-mml-node', 'data-mjx-texclass',
+            'data-c', 'data-mml-node', 'data-mjx-texclass', 'data-latex',
           ],
         });
 
@@ -337,26 +342,30 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
     const container = containerRef.current;
 
     const handleSvgClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
+      try {
+        const target = e.target as HTMLElement;
 
-      // Find closest SVG (could be the SVG itself or a child element)
-      const svg = target.closest('svg');
-      if (!svg) return;
+        // Find closest SVG (could be the SVG itself or a child element)
+        const svg = target.closest('svg');
+        if (!svg) return;
 
-      // Check if it's a MathJax SVG
-      const wrapper = svg.closest('.mathjax-inline, .mathjax-display') as HTMLElement;
-      if (!wrapper) return;
+        // Check if it's a MathJax SVG
+        const wrapper = svg.closest('.mathjax-inline, .mathjax-display') as HTMLElement;
+        if (!wrapper) return;
 
-      // Stop propagation to prevent document listeners from interfering
-      e.stopPropagation();
+        // Stop propagation to prevent document listeners from interfering
+        e.stopPropagation();
 
-      // Extract metadata
-      const isDisplay = wrapper.classList.contains('mathjax-display');
-      const svgString = svg.outerHTML;
-      const latex = wrapper.getAttribute('data-latex') || '';
-      const triggerRect = svg.getBoundingClientRect();
+        // Extract metadata
+        const isDisplay = wrapper.classList.contains('mathjax-display');
+        const svgString = svg.outerHTML;
+        const latex = wrapper.getAttribute('data-latex') || '';
+        const triggerRect = svg.getBoundingClientRect();
 
-      setZoomedFormula({ svg: svgString, latex, isDisplay, triggerRect });
+        setZoomedFormula({ svg: svgString, latex, isDisplay, triggerRect });
+      } catch (error) {
+        console.error('[LaTeX Zoom Error]', error);
+      }
     };
 
     container.addEventListener('click', handleSvgClick);
