@@ -1,5 +1,5 @@
 import { memo } from 'preact/compat';
-import { Loader } from 'lucide-preact';
+import { Loader, InfoIcon } from 'lucide-preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp } from 'lucide-preact';
 import { QuestionAnswer, StoredPaper } from '../../types/index.ts';
@@ -164,7 +164,8 @@ export const QASection = memo(function QASection(props: QASectionProps) {
           </button>
         </div>
         <p class="text-responsive-xs text-gray-500 animate-fade-in" style={{ animationDuration: '1000ms' }}>
-          Kuma will search through {storedPaper?.chunkCount} content chunks
+          <InfoIcon size={16} class="text-gray-500 inline-block mr-1" /> 
+          Kuma has more room to think here than in the chatbox. Kuma will search through {storedPaper?.chunkCount} paper sections to answer your question.
         </p>
       </div>
 
