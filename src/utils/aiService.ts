@@ -678,13 +678,15 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
     contextId: string = 'default',
     expectedInputs?: Array<{ type: string; languages: string[] }>,
     expectedOutputs?: Array<{ type: string; languages: string[] }>,
+    temperature?: number,
+    topK?: number
   ): Promise<string> {
     try {
       logger.debug('PROMPT_ENGINEERING', '[Prompt] contextId:', contextId);
       logger.debug('PROMPT_ENGINEERING', '[Prompt] expectedOutputs:', JSON.stringify(expectedOutputs));
 
       // Get or create session for this context
-      const session = await this.getOrCreateSession(contextId, { systemPrompt, expectedInputs, expectedOutputs });
+      const session = await this.getOrCreateSession(contextId, { systemPrompt, expectedInputs, expectedOutputs, temperature, topK });
 
       // Create abort controller for this request
       const abortController = new AbortController();
@@ -2306,7 +2308,9 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
         undefined, // No schema - simple text response
         contextId,
         [{ type: "text", languages: ["en"] }],
-        [{ type: "text", languages: [outputLanguage] }]
+        [{ type: "text", languages: [outputLanguage] }],
+        0,  // temperature
+        3   // topK
       );
 
       // Parse comma-separated list
@@ -2362,7 +2366,7 @@ Paper: ${paperTitle}`;
     const maxRetries = 3;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const response = await this.prompt(input, systemPrompt, chunkSchema, contextId);
+        const response = await this.prompt(input, systemPrompt, chunkSchema, contextId, undefined, undefined, 0, 3);
         const parsed = JSON.parse(response);
 
         logger.debug('AI_SERVICE', '[ChunkTermExtraction] ✓ Extracted', parsed.terms.length, 'terms');
@@ -2585,7 +2589,9 @@ For mathematical expressions in definitions, contexts, or analogies:
         singleTermSchema as JSONSchema,
         languageContextId,
         [{ type: "text", languages: ["en"] }],
-        [{ type: "text", languages: [outputLanguage] }]
+        [{ type: "text", languages: [outputLanguage] }],
+        0,  // temperature
+        3   // topK
       );
 
       const term = JSON.parse(response) as GlossaryTerm;
@@ -2867,7 +2873,7 @@ For mathematical expressions in definitions, contexts, or analogies:
           // Use keyword-only search if specified
           if (useKeywordOnly) {
             const { getRelevantChunks } = await import('./dbService.ts');
-            relevantChunks = await getRelevantChunks(paperId, keyword, chunksPerKeywordWithBuffer);
+            relevantChunks = await getRelevantChunks(paperId, keyword, Math.min(chunksPerKeywordWithBuffer, 3));
           } else {
             // Try semantic search
             const hasEmbeddings = allChunks.some(chunk => chunk.embedding !== undefined);
@@ -3001,7 +3007,9 @@ For mathematical expressions in definitions, contexts, or analogies:
             schema,
             languageContextId,
             [{ type: "text", languages: ["en"] }],
-            [{ type: "text", languages: [outputLanguage] }]
+            [{ type: "text", languages: [outputLanguage] }],
+            0,  // temperature
+            3   // topK
           );
 
           // Track actual token usage after successful call
@@ -3157,7 +3165,9 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
         undefined, // No schema - simple text response
         contextId,
         [{ type: "text", languages: ["en"] }],
-        [{ type: "text", languages: [outputLanguage] }]
+        [{ type: "text", languages: [outputLanguage] }],
+        0,  // temperature
+        3   // topK
       );
 
       // Parse comma-separated list
