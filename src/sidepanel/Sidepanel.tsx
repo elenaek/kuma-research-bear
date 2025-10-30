@@ -53,7 +53,7 @@ export function Sidepanel() {
   const [analysis, setAnalysis] = useState<PaperAnalysisResult | null>(null);
   const [glossary, setGlossary] = useState<GlossaryResult | null>(null);
   const [glossaryProgress, setGlossaryProgress] = useState<{
-    stage: 'extracting' | 'filtering-terms' | 'generating-definitions';
+    stage: 'extracting' | 'extracting-terms-from-chunks' | 'filtering-terms' | 'generating-definitions';
     current?: number;
     total?: number;
   } | null>(null);

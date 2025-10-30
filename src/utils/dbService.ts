@@ -695,6 +695,71 @@ export async function updateChunkEmbeddings(paperId: string, embeddings: Float32
 }
 
 /**
+ * Update terms for multiple chunks
+ * Used when extracting terms on-demand (e.g., for glossarization)
+ * @param paperId The paper ID
+ * @param chunkTerms Array of {chunkId, terms} objects
+ */
+export async function updateChunkTerms(
+  paperId: string,
+  chunkTerms: Array<{ chunkId: string; terms: string[] }>
+): Promise<void> {
+  const db = await initDB();
+
+  try {
+    logger.debug('DATABASE', `Updating terms for ${chunkTerms.length} chunks for paper: ${paperId}`);
+
+    // Update chunks in batches to prevent UI blocking
+    const BATCH_SIZE = 20;
+
+    for (let batchStart = 0; batchStart < chunkTerms.length; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, chunkTerms.length);
+
+      // Create transaction for this batch
+      const transaction = db.transaction([CHUNKS_STORE], 'readwrite');
+      const store = transaction.objectStore(CHUNKS_STORE);
+
+      // Update chunks in this batch
+      for (let i = batchStart; i < batchEnd; i++) {
+        const { chunkId, terms } = chunkTerms[i];
+
+        // Get the chunk, update terms, and save
+        const chunk = await new Promise<ContentChunk | null>((resolve) => {
+          const request = store.get(chunkId);
+          request.onsuccess = () => resolve(request.result || null);
+          request.onerror = () => resolve(null);
+        });
+
+        if (chunk) {
+          chunk.terms = terms;
+          store.put(chunk);
+        } else {
+          logger.warn('DATABASE', `Chunk not found for terms update: ${chunkId}`);
+        }
+      }
+
+      // Wait for this batch transaction to complete
+      await new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(new Error('Failed to update chunks with terms'));
+      });
+
+      // Yield to event loop between batches to prevent UI freezing
+      if (batchEnd < chunkTerms.length) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+
+    logger.debug('DATABASE', `✓ Updated ${chunkTerms.length} chunks with terms for paper: ${paperId}`);
+    db.close();
+  } catch (error) {
+    db.close();
+    logger.error('DATABASE', 'Error updating chunk terms:', error);
+    throw error;
+  }
+}
+
+/**
  * Update analysis for a paper
  */
 export async function updatePaperAnalysis(paperId: string, analysis: any, outputLanguage?: string): Promise<boolean> {

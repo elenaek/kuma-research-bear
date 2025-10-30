@@ -9,7 +9,7 @@ interface GlossarySectionProps {
   glossary: GlossaryResult | null;
   isGenerating: boolean;
   glossaryProgress?: {
-    stage: 'extracting' | 'filtering-terms' | 'generating-definitions';
+    stage: 'extracting' | 'extracting-terms-from-chunks' | 'filtering-terms' | 'generating-definitions';
     current?: number;
     total?: number;
   } | null;
@@ -42,6 +42,9 @@ export const GlossarySection = memo(function GlossarySection(props: GlossarySect
       if (glossaryProgress.stage === 'extracting') {
         progressMessage = 'Extracting keyword candidates...';
         progressDetail = 'Kuma is identifying potential technical terms.';
+      } else if (glossaryProgress.stage === 'extracting-terms-from-chunks') {
+        progressMessage = `Extracting terms from document sections... ${glossaryProgress.current || 0}/${glossaryProgress.total || 0}`;
+        progressDetail = 'Kuma is analyzing each section to identify key technical terms and concepts.';
       } else if (glossaryProgress.stage === 'filtering-terms') {
         progressMessage = 'Filtering for technical terms...';
         progressDetail = 'Kuma is identifying actual technical terminology and removing non-technical terms.';
@@ -57,6 +60,17 @@ export const GlossarySection = memo(function GlossarySection(props: GlossarySect
           <LottiePlayer path="/lotties/kuma-thinking-glasses.lottie" size={100} className="mx-auto mb-1" autoStartLoop={true} loopPurpose={LoopPurpose.SIDEPANEL} />
           <p class="text-gray-900 font-medium text-base">{progressMessage}</p>
           <p class="text-sm text-gray-600">{progressDetail}</p>
+
+          {glossaryProgress?.stage === 'extracting-terms-from-chunks' && glossaryProgress.current && glossaryProgress.total && (
+            <div class="mt-4 w-full max-w-xs mx-auto">
+              <div class="w-full bg-gray-200 rounded-full h-2.5">
+                <div
+                  class="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${(glossaryProgress.current / glossaryProgress.total) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          )}
 
           {glossaryProgress?.stage === 'generating-definitions' && glossaryProgress.current && glossaryProgress.current > 0 && glossaryProgress.total && glossaryProgress.total > 0 && (
             <div class="mt-4 w-full max-w-xs mx-auto">

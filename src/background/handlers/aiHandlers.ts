@@ -611,9 +611,32 @@ export async function handleAnalyzePaper(payload: any, tabId?: number): Promise<
           hierarchicalSummary = result.summary;
 
           // Update stored paper with hierarchical summary for future use
-          const { updatePaper } = await import('../../utils/dbService.ts');
+          const { updatePaper, getPaperChunks, updateChunkTerms } = await import('../../utils/dbService.ts');
           await updatePaper(storedPaper.id, { hierarchicalSummary });
           logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Hierarchical summary generated and stored');
+
+          // Store chunk terms for future use (glossarization, etc.)
+          if (result.chunkTerms && result.chunkTerms.length > 0) {
+            try {
+              const chunks = await getPaperChunks(storedPaper.id);
+
+              // Map chunkTerms array indices to actual chunk IDs
+              const chunkTermsWithIds = result.chunkTerms
+                .map((terms, index) => ({
+                  chunkId: chunks[index]?.id,
+                  terms: terms || []
+                }))
+                .filter(item => item.chunkId); // Only include valid chunk IDs
+
+              if (chunkTermsWithIds.length > 0) {
+                await updateChunkTerms(storedPaper.id, chunkTermsWithIds);
+                logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] ✓ Stored ${chunkTermsWithIds.length} chunk term arrays from hierarchical summarization`);
+              }
+            } catch (error) {
+              logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Failed to store chunk terms from hierarchical summarization:', error);
+              // Non-critical error, continue with analysis
+            }
+          }
         } catch (error) {
           logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Failed to generate hierarchical summary, using truncated content:', error);
           // Fallback to truncated content
@@ -860,100 +883,116 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
         });
       }
 
-      // Step 1: Aggregate terms from chunks
+      // Step 1: Extract terms from text chunks (same chunking as hierarchical summarization)
       sendProgress('extracting');
-      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Step 1: Aggregating terms from chunks...');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Step 1: Extracting terms from text chunks...');
 
-      const { getPaperChunks } = await import('../../utils/dbService.ts');
-      const chunks = await getPaperChunks(storedPaper.id);
+      // Use same chunking method as hierarchical summarization (5000 chars, 1000 overlap)
+      const { chunkContent } = await import('../../utils/contentExtractor.ts');
+      const fullText = storedPaper.fullText || storedPaper.abstract;
+      const textChunks = chunkContent(fullText, 5000, 1000);
 
-      // Check if chunks have terms (new papers will, old papers won't)
-      const hasTerms = chunks.some(chunk => chunk.terms && chunk.terms.length > 0);
+      // Transform to ContentChunk format for consistency with downstream code
+      const chunks = textChunks.map((chunk, index) => ({
+        id: `chunk_${storedPaper.id}_${index}`,
+        paperId: storedPaper.id,
+        content: chunk.content,
+        index,
+        section: chunk.heading,
+        startChar: chunk.startIndex,
+        endChar: chunk.endIndex,
+        tokenCount: Math.ceil(chunk.content.length / 4),
+      }));
 
-      let deduplicatedTerms: string[];
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Created', chunks.length, 'text chunks (5000 chars, 1000 overlap)');
 
-      if (!hasTerms) {
-        // Fallback to Gemini-based extraction for legacy papers without pre-extracted chunk terms
-        logger.warn('BACKGROUND_SCRIPT', '[AIHandlers] Chunks do not have terms. Using Gemini fallback for legacy paper...');
-        sendProgress('extracting');
+      // Extract terms from each chunk (10 terms per chunk, same as hierarchical summarization)
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Extracting terms from text chunks...');
 
-        const paperContent = storedPaper.fullText || storedPaper.abstract;
-        const extractedTerms = await aiService.extractTermsFromText(
-          paperContent,
+      // Report initial progress
+      sendProgress('extracting-terms-from-chunks', 0, chunks.length);
+
+      // Extract terms from each chunk SEQUENTIALLY (Chrome's built-in AI can only process 1 task at a time)
+      const chunkTermsResults = [];
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Extracting terms from chunk ${i + 1}/${chunks.length}...`);
+
+        const terms = await aiService.extractTermsFromChunk(
+          chunk.content,
           storedPaper.title,
-          `${glossaryContextId}-extract-fallback`,
-          50
+          `${glossaryContextId}-extract-chunk-${i}`,
+          10 // Extract 10 terms per chunk
         );
 
-        if (extractedTerms.length === 0) {
-          throw new Error('Failed to extract terms via Gemini fallback');
+        chunkTermsResults.push({ chunkId: chunk.id, terms });
+
+        // Update progress after each chunk
+        sendProgress('extracting-terms-from-chunks', i + 1, chunks.length);
+        logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] ✓ Chunk ${i + 1}/${chunks.length} complete, extracted ${terms.length} terms`);
+
+        // Small delay between chunks to prevent resource contention
+        if (i < chunks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 150));
         }
-
-        // Simple deduplication (case-insensitive)
-        deduplicatedTerms = Array.from(
-          new Map(extractedTerms.map(term => [term.toLowerCase(), term])).values()
-        );
-
-        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Gemini fallback extraction complete:', deduplicatedTerms.length, 'terms');
-      } else {
-        // New approach: Collect all terms from all chunks
-        const allTerms: string[] = [];
-        chunks.forEach(chunk => {
-          if (chunk.terms && chunk.terms.length > 0) {
-            allTerms.push(...chunk.terms);
-          }
-        });
-
-        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Aggregated', allTerms.length, 'terms from', chunks.length, 'chunks');
-        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Sample terms:', allTerms.slice(0, 10).join(', '));
-
-        if (allTerms.length === 0) {
-          throw new Error('No terms found in chunks');
-        }
-
-        // Step 2: Batched deduplication (200 terms per batch to avoid context limits)
-        sendProgress('filtering-terms');
-        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Step 2: Deduplicating terms in batches...');
-
-        const batchSize = 200;
-        const deduplicatedBatches: string[] = [];
-
-        for (let i = 0; i < allTerms.length; i += batchSize) {
-          const batch = allTerms.slice(i, i + batchSize);
-          logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Deduplicating batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(allTerms.length / batchSize)} (${batch.length} terms)...`);
-
-          try {
-            const deduped = await aiService.deduplicateTermsBatch(
-              batch,
-              storedPaper.title,
-              Math.ceil(50 * (batch.length / allTerms.length)), // Proportional target
-              `${glossaryContextId}-dedupe-${i}`
-            );
-            deduplicatedBatches.push(...deduped);
-          } catch (error) {
-            logger.error('BACKGROUND_SCRIPT', `[AIHandlers] Error deduplicating batch:`, error);
-            // Continue with next batch
-          }
-        }
-
-        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ After batched deduplication:', deduplicatedBatches.length, 'terms');
-
-        // Final deduplication pass if we have too many terms
-        if (deduplicatedBatches.length > 40) {
-          logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Running final deduplication pass...');
-          deduplicatedTerms = await aiService.deduplicateTermsBatch(
-            deduplicatedBatches,
-            storedPaper.title,
-            50, // Target 50 final terms
-            `${glossaryContextId}-final-dedupe`
-          );
-        } else {
-          deduplicatedTerms = deduplicatedBatches;
-        }
-
-        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Final deduplicated terms:', deduplicatedTerms.length);
-        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Terms:', deduplicatedTerms.slice(0, 10).join(', '));
       }
+
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Extracted terms from all', chunks.length, 'chunks');
+
+      // Note: Terms extracted from text chunks (not stored in database)
+      // Database chunks may have different boundaries (paragraph-based vs sentence-based)
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Terms extracted from text chunks (5000/1000), matching hierarchical summarization');
+
+      // Aggregate all terms from chunks
+      const allTerms = chunkTermsResults.flatMap(r => r.terms);
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Aggregated', allTerms.length, 'terms from chunks');
+
+      if (allTerms.length === 0) {
+        throw new Error('No terms extracted from chunks');
+      }
+
+      // Step 2: Batched deduplication (200 terms per batch to avoid context limits)
+      sendProgress('filtering-terms');
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Step 2: Deduplicating terms in batches...');
+
+      const dedupeBatchSize = 200;
+      const deduplicatedBatches: string[] = [];
+
+      for (let i = 0; i < allTerms.length; i += dedupeBatchSize) {
+        const batch = allTerms.slice(i, i + dedupeBatchSize);
+        logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Deduplicating batch ${Math.floor(i / dedupeBatchSize) + 1}/${Math.ceil(allTerms.length / dedupeBatchSize)} (${batch.length} terms)...`);
+
+        try {
+          const deduped = await aiService.deduplicateTermsBatch(
+            batch,
+            storedPaper.title,
+            Math.ceil(50 * (batch.length / allTerms.length)), // Proportional target
+            `${glossaryContextId}-dedupe-${i}`
+          );
+          deduplicatedBatches.push(...deduped);
+        } catch (error) {
+          logger.error('BACKGROUND_SCRIPT', `[AIHandlers] Error deduplicating batch:`, error);
+          // Continue with next batch
+        }
+      }
+
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ After batched deduplication:', deduplicatedBatches.length, 'terms');
+
+      // Final deduplication pass if we have too many terms
+      let deduplicatedTerms: string[];
+      if (deduplicatedBatches.length > 60) {
+        logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Final deduplication pass to reach target of ~50 terms...');
+        deduplicatedTerms = await aiService.deduplicateTermsBatch(
+          deduplicatedBatches,
+          storedPaper.title,
+          50,
+          `${glossaryContextId}-dedupe-final`
+        );
+      } else {
+        deduplicatedTerms = deduplicatedBatches;
+      }
+
+      logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ Final deduplicated terms:', deduplicatedTerms.length);
 
       // Step 3: Generate definitions for each technical term using RAG + GeminiNano
       sendProgress('generating-definitions', 0, deduplicatedTerms.length);
@@ -963,14 +1002,14 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
       let successCount = 0;
 
       // Process definitions in batches (10 at a time to avoid input size limits)
-      const batchSize = 10;
+      const definitionBatchSize = 10;
       const totalTerms = deduplicatedTerms.length;
 
-      for (let i = 0; i < totalTerms; i += batchSize) {
-        const batch = deduplicatedTerms.slice(i, i + batchSize);
+      for (let i = 0; i < totalTerms; i += definitionBatchSize) {
+        const batch = deduplicatedTerms.slice(i, i + definitionBatchSize);
 
         try {
-          logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Generating ${batch.length} definitions in single prompt call (batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(totalTerms / batchSize)})...`);
+          logger.debug('BACKGROUND_SCRIPT', `[AIHandlers] Generating ${batch.length} definitions in single prompt call (batch ${Math.floor(i / definitionBatchSize) + 1}/${Math.ceil(totalTerms / definitionBatchSize)})...`);
 
           // Generate all definitions in the batch with a SINGLE prompt call
           const batchTerms = await aiService.generateDefinitionsBatchWithRAG(
@@ -978,7 +1017,8 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
             storedPaper.id,
             storedPaper.title,
             `${glossaryContextId}-batch-${i}`,
-            true // Use keyword-only search (faster for exact terms)
+            true, // Use keyword-only search (faster for exact terms)
+            { recentMessages: [] } // Conversation context for budget calculation
           );
 
           // Collect successful results
@@ -999,10 +1039,10 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
         }
 
         // Update progress
-        sendProgress('generating-definitions', Math.min(i + batchSize, totalTerms), totalTerms);
+        sendProgress('generating-definitions', Math.min(i + definitionBatchSize, totalTerms), totalTerms);
 
         // Small delay between batches
-        if (i + batchSize < totalTerms) {
+        if (i + definitionBatchSize < totalTerms) {
           await new Promise(resolve => setTimeout(resolve, 300));
         }
       }

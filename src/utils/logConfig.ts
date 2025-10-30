@@ -32,7 +32,7 @@ export enum LogLevel {
  * Default: LogLevel.WARN (only warnings and errors)
  * Set to LogLevel.DEBUG to see all logs
  */
-export const CURRENT_LOG_LEVEL = LogLevel.WARN;
+export const CURRENT_LOG_LEVEL = LogLevel.DEBUG;
 
 export interface LogConfig {
   // LaTeX and MathJax rendering
@@ -82,7 +82,7 @@ export const LOG_CONFIG: LogConfig = {
   MATHJAX_RENDER: false,          // MathJax rendering process
 
   // AI and LLM
-  AI_SERVICE: false,              // AI service calls and responses
+  AI_SERVICE: true,               // AI service calls and responses
   PROMPT_ENGINEERING: false,      // Prompt construction and validation
 
   // Chat
@@ -101,7 +101,7 @@ export const LOG_CONFIG: LogConfig = {
   // Chrome Extension
   CHROME_SERVICE: false,          // Chrome API interactions
   CONTENT_SCRIPT: false,          // Content script lifecycle
-  BACKGROUND_SCRIPT: false,       // Background script events
+  BACKGROUND_SCRIPT: true,       // Background script events
 
   // Performance
   PERFORMANCE: false,             // Timing and performance metrics
