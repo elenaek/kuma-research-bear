@@ -1,3 +1,4 @@
+import { memo } from 'preact/compat';
 import { FileText, AlertTriangle, TrendingUp, AlertCircle, CheckCircle, Sparkles } from 'lucide-preact';
 import { PaperAnalysisResult } from '../../types/index.ts';
 import { Tooltip } from '../../components/Tooltip.tsx';
@@ -19,8 +20,9 @@ interface AnalysisSectionProps {
 /**
  * Analysis Section Component
  * Displays paper analysis results including methodology, confounders, implications, and limitations
+ * Memoized to prevent unnecessary re-renders
  */
-export function AnalysisSection(props: AnalysisSectionProps) {
+export const AnalysisSection = memo(function AnalysisSection(props: AnalysisSectionProps) {
   const { analysis, isAnalyzing, analysisProgress, onGenerateAnalysis } = props;
 
   // Helper to get step label
@@ -350,4 +352,4 @@ export function AnalysisSection(props: AnalysisSectionProps) {
       )}
     </>
   );
-}
+});

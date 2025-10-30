@@ -1,3 +1,4 @@
+import { memo } from 'preact/compat';
 import { useState, useRef, useEffect } from 'preact/hooks';
 import {
   PawPrint,
@@ -58,8 +59,9 @@ interface IntegratedHeaderProps {
 /**
  * Integrated Header Component
  * Combines Kuma branding, paper navigation, and management controls
+ * Memoized to prevent unnecessary re-renders
  */
-export function IntegratedHeader(props: IntegratedHeaderProps) {
+export const IntegratedHeader = memo(function IntegratedHeader(props: IntegratedHeaderProps) {
   const {
     papers,
     currentIndex,
@@ -481,4 +483,4 @@ export function IntegratedHeader(props: IntegratedHeaderProps) {
       )}
     </header>
   );
-}
+});

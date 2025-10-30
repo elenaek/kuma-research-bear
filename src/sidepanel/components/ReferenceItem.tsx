@@ -2,6 +2,7 @@ import { h } from 'preact';
 import { useState } from 'preact/hooks';
 import { Citation, CitationFormat } from '../../types/index.ts';
 import { generateReferenceCitation } from '../../utils/citationFormatters.ts';
+import { logger } from '../../utils/logger.ts';
 
 interface ReferenceItemProps {
   citation: Citation;
@@ -20,7 +21,7 @@ export function ReferenceItem({ citation, format, index }: ReferenceItemProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('[Reference Item] Error copying:', error);
+      logger.error('UI', '[Reference Item] Error copying:', error);
     }
   };
 

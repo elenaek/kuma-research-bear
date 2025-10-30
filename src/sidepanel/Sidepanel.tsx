@@ -480,17 +480,16 @@ export function Sidepanel() {
 
   async function loadExplanation() {
     try {
-      // Load all papers from IndexedDB
-      const papers = await ChromeService.getAllPapers();
+      // Parallelize independent async operations for faster load
+      const [papers, [tab]] = await Promise.all([
+        ChromeService.getAllPapers(),
+        chrome.tabs.query({ active: true, currentWindow: true })
+      ]);
+
       paperNavigation.setAllPapers(papers);
       logger.debug('UI', '[Sidepanel] Loaded', papers.length, 'papers from IndexedDB');
 
-      // Get current tab URL
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const currentUrl = tab?.url;
-
-      // Collect debug info
-      await collectDebugInfo();
 
       // Query IndexedDB for paper matching current tab URL (single source of truth)
       if (!currentUrl) {

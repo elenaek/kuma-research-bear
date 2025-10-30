@@ -1,3 +1,4 @@
+import { memo } from 'preact/compat';
 import { BookOpen, Sparkles } from 'lucide-preact';
 import { GlossaryResult } from '../../types/index.ts';
 import { GlossaryList } from '../../components/GlossaryCard.tsx';
@@ -18,8 +19,9 @@ interface GlossarySectionProps {
 /**
  * Glossary Section Component
  * Displays glossary of terms for the paper
+ * Memoized to prevent unnecessary re-renders
  */
-export function GlossarySection(props: GlossarySectionProps) {
+export const GlossarySection = memo(function GlossarySection(props: GlossarySectionProps) {
   const { glossary, isGenerating, glossaryProgress, onGenerateGlossary } = props;
 
   // Show glossary if available
@@ -93,4 +95,4 @@ export function GlossarySection(props: GlossarySectionProps) {
       </div>
     </div>
   );
-}
+});

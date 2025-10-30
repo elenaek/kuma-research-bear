@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import { StoredPaper, QuestionAnswer } from '../../types/index.ts';
 import * as ChromeService from '../../services/ChromeService.ts';
+import { logger } from '../../utils/logger.ts';
 
 interface UsePaperNavigationProps {
   onPaperSwitch?: (paper: StoredPaper) => Promise<void>;
@@ -46,7 +47,7 @@ export function usePaperNavigation(props: UsePaperNavigationProps = {}): UsePape
 
     if (index < 0 || index >= papers.length) return;
 
-    console.log(`[usePaperNavigation] Switching to paper at index ${index}`);
+    logger.debug('UI', '[usePaperNavigation] Switching to paper at index', index);
 
     // Switch to new paper
     setCurrentPaperIndex(index);
@@ -111,7 +112,7 @@ export function usePaperNavigation(props: UsePaperNavigationProps = {}): UsePape
       const success = await ChromeService.deletePaper(currentPaper.id);
 
       if (success) {
-        console.log('[usePaperNavigation] Paper deleted successfully');
+        logger.debug('UI', '[usePaperNavigation] Paper deleted successfully');
 
         // Notify callback with the deleted paper
         if (onPaperDelete) {

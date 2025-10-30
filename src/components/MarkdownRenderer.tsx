@@ -1,8 +1,18 @@
-import { useState, useEffect, useRef } from 'preact/hooks';
+import { useState, useEffect, useRef, useMemo } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { repairLatexCommands } from '../utils/latexRepair.ts';
+
+// Cache for MathJax modules to avoid re-importing on every render
+let mathjaxModulesCache: {
+  mathjax: any;
+  TeX: any;
+  SVG: any;
+  liteAdaptor: any;
+  RegisterHTMLHandler: any;
+  AllPackages: any;
+} | null = null;
 
 /**
  * MarkdownRenderer Component
@@ -159,7 +169,7 @@ function calculatePopoverPosition(
 
 /**
  * Render LaTeX expressions using MathJax 3 and replace placeholders with rendered SVG
- * Uses dynamic import to load MathJax only when needed
+ * Caches MathJax modules for better performance
  */
 async function renderLatexExpressions(
   content: string,
@@ -170,15 +180,20 @@ async function renderLatexExpressions(
   }
 
   try {
-    // Dynamically import MathJax modules only when LaTeX content is detected
-    const [{ mathjax }, { TeX }, { SVG }, { liteAdaptor }, { RegisterHTMLHandler }, { AllPackages }] = await Promise.all([
-      import('mathjax-full/js/mathjax.js'),
-      import('mathjax-full/js/input/tex.js'),
-      import('mathjax-full/js/output/svg.js'),
-      import('mathjax-full/js/adaptors/liteAdaptor.js'),
-      import('mathjax-full/js/handlers/html.js'),
-      import('mathjax-full/js/input/tex/AllPackages.js'),
-    ]);
+    // Load MathJax modules once and cache them
+    if (!mathjaxModulesCache) {
+      const [{ mathjax }, { TeX }, { SVG }, { liteAdaptor }, { RegisterHTMLHandler }, { AllPackages }] = await Promise.all([
+        import('mathjax-full/js/mathjax.js'),
+        import('mathjax-full/js/input/tex.js'),
+        import('mathjax-full/js/output/svg.js'),
+        import('mathjax-full/js/adaptors/liteAdaptor.js'),
+        import('mathjax-full/js/handlers/html.js'),
+        import('mathjax-full/js/input/tex/AllPackages.js'),
+      ]);
+      mathjaxModulesCache = { mathjax, TeX, SVG, liteAdaptor, RegisterHTMLHandler, AllPackages };
+    }
+
+    const { mathjax, TeX, SVG, liteAdaptor, RegisterHTMLHandler, AllPackages } = mathjaxModulesCache;
 
     // Initialize MathJax with SVG output
     const adaptor = liteAdaptor();
@@ -254,31 +269,8 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
   useEffect(() => {
     let isStale = false; // Flag to prevent updating with stale renders
 
-    // Process content asynchronously
+    // Process content asynchronously - single pass with LaTeX rendering
     const processContent = async () => {
-      // OPTIMIZATION: First pass - show markdown WITHOUT LaTeX processing
-      // This provides immediate feedback during streaming
-      const quickHTML = marked.parse(safeContent) as string;
-      const quickSanitized = DOMPurify.sanitize(quickHTML, {
-        ALLOWED_TAGS: [
-          // Standard HTML tags
-          'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-          'p', 'br', 'hr',
-          'strong', 'em', 'code', 'pre',
-          'ul', 'ol', 'li',
-          'a', 'blockquote',
-          'table', 'thead', 'tbody', 'tr', 'th', 'td',
-          'del', 'ins', 'sub', 'sup',
-          'span', 'div',
-        ],
-        ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style'],
-      });
-
-      // Show interim content immediately (LaTeX appears in original syntax like $x^2$)
-      if (!isStale) {
-        setProcessedHTML(quickSanitized);
-      }
-
       // Step 1: Extract LaTeX and replace with placeholders (protects from markdown escaping)
       const { content: contentWithPlaceholders, expressions } = extractLatexWithPlaceholders(safeContent);
 

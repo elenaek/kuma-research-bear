@@ -1,3 +1,4 @@
+import { memo } from 'preact/compat';
 import { Loader } from 'lucide-preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp } from 'lucide-preact';
@@ -24,8 +25,9 @@ interface QACardProps {
 /**
  * Individual Q&A Card Component
  * Collapsible card for each question-answer pair
+ * Memoized to prevent unnecessary re-renders
  */
-function QACard(props: QACardProps) {
+const QACard = memo(function QACard(props: QACardProps) {
   const { qa, index, defaultOpen } = props;
   const [isExpanded, setIsExpanded] = useState(qa.question.length > 0 && qa.answer.length === 0 ? true : defaultOpen);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -124,13 +126,14 @@ function QACard(props: QACardProps) {
       )}
     </div>
   );
-}
+});
 
 /**
  * Q&A Section Component
  * Displays question input form and Q&A history
+ * Memoized to prevent unnecessary re-renders
  */
-export function QASection(props: QASectionProps) {
+export const QASection = memo(function QASection(props: QASectionProps) {
   const { question, setQuestion, isAsking, qaHistory, storedPaper, onAskQuestion, newlyAddedQAIndex } = props;
 
   return (
@@ -185,4 +188,4 @@ export function QASection(props: QASectionProps) {
       )}
     </>
   );
-}
+});

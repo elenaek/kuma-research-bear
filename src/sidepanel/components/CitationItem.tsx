@@ -2,6 +2,7 @@ import { h } from 'preact';
 import { useState, useRef, useEffect } from 'preact/hooks';
 import { Citation, CitationFormat } from '../../types/index.ts';
 import { generateInlineCitation, generateQuoteCitation } from '../../utils/citationFormatters.ts';
+import { logger } from '../../utils/logger.ts';
 
 interface CitationItemProps {
   citation: Citation;
@@ -98,7 +99,7 @@ export function CitationItem({ citation, format, onDelete }: CitationItemProps) 
         }
 
         if (response && response.success) {
-          console.log('[Citation Item] Citation deleted successfully');
+          logger.debug('UI', '[Citation Item] Citation deleted successfully');
           onDelete(citation.id);
         } else {
           console.error('[Citation Item] Failed to delete citation');

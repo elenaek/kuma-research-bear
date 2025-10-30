@@ -11,6 +11,7 @@ import {
 import { CitationItem } from './CitationItem.tsx';
 import { ReferenceItem } from './ReferenceItem.tsx';
 import { generateInlineCitation, generateReferenceCitation } from '../../utils/citationFormatters.ts';
+import { logger } from '../../utils/logger.ts';
 
 export function CitationsSection() {
   const [citations, setCitations] = useState<Citation[]>([]);
@@ -34,7 +35,7 @@ export function CitationsSection() {
     // Listen for citation added events via Chrome runtime messaging
     const handleMessage = (message: any) => {
       if (message.type === 'CITATION_ADDED') {
-        console.log('[Citations Tab] Citation added, reloading...');
+        logger.debug('UI', '[Citations Tab] Citation added, reloading...');
         loadCitations();
       }
     };
@@ -52,7 +53,7 @@ export function CitationsSection() {
       const allCitations = await getAllCitations();
       setCitations(allCitations);
     } catch (error) {
-      console.error('[Citations Tab] Error loading citations:', error);
+      logger.error('UI', '[Citations Tab] Error loading citations:', error);
     } finally {
       setLoading(false);
     }
@@ -63,7 +64,7 @@ export function CitationsSection() {
       const savedFormat = await getSelectedFormat();
       setFormat(savedFormat);
     } catch (error) {
-      console.error('[Citations Tab] Error loading format:', error);
+      logger.error('UI', '[Citations Tab] Error loading format:', error);
     }
   };
 
@@ -72,7 +73,7 @@ export function CitationsSection() {
     try {
       await setSelectedFormat(newFormat);
     } catch (error) {
-      console.error('[Citations Tab] Error saving format:', error);
+      logger.error('UI', '[Citations Tab] Error saving format:', error);
     }
   };
 
@@ -97,7 +98,7 @@ export function CitationsSection() {
       setCopiedAll(true);
       setTimeout(() => setCopiedAll(false), 2000);
     } catch (error) {
-      console.error('[Citations Tab] Error copying all references:', error);
+      logger.error('UI', '[Citations Tab] Error copying all references:', error);
     }
   };
 
@@ -106,7 +107,7 @@ export function CitationsSection() {
       await resetCitationsOrder();
       await loadCitations();
     } catch (error) {
-      console.error('[Citations Tab] Error resetting order:', error);
+      logger.error('UI', '[Citations Tab] Error resetting order:', error);
     }
   };
 

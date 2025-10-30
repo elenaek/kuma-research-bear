@@ -1,5 +1,6 @@
 import * as ChromeService from '../../services/ChromeService.ts';
 import { StoredPaper } from '../../types/index.ts';
+import { logger } from '../../utils/logger.ts';
 
 interface UsePaperDataReturn {
   checkForStoredPaper: (paperUrl: string, maxRetries?: number) => Promise<StoredPaper | null>;
@@ -20,13 +21,13 @@ export function usePaperData(): UsePaperDataReturn {
    */
   async function checkForStoredPaper(paperUrl: string, maxRetries = 5): Promise<StoredPaper | null> {
     for (let i = 0; i < maxRetries; i++) {
-      console.log(`[usePaperData] Checking if paper is stored (attempt ${i + 1}/${maxRetries})...`);
+      logger.debug('UI', `[usePaperData] Checking if paper is stored (attempt ${i + 1}/${maxRetries})...`);
 
       try {
         const stored = await ChromeService.getPaperByUrl(paperUrl);
 
         if (stored) {
-          console.log(`[usePaperData] ✓ Paper found in storage!`, {
+          logger.debug('UI', '[usePaperData] ✓ Paper found in storage!', {
             id: stored.id,
             title: stored.title,
             chunkCount: stored.chunkCount,
@@ -35,20 +36,20 @@ export function usePaperData(): UsePaperDataReturn {
           return stored;
         }
 
-        console.log(`[usePaperData] Paper not found yet (attempt ${i + 1}/${maxRetries})`);
+        logger.debug('UI', `[usePaperData] Paper not found yet (attempt ${i + 1}/${maxRetries})`);
       } catch (error) {
-        console.error(`[usePaperData] Error checking storage (attempt ${i + 1}/${maxRetries}):`, error);
+        logger.error('UI', `[usePaperData] Error checking storage (attempt ${i + 1}/${maxRetries}):`, error);
       }
 
       // Wait before next retry with exponential backoff
       if (i < maxRetries - 1) {
         const delay = 100 * Math.pow(2, i);
-        console.log(`[usePaperData] Waiting ${delay}ms before next attempt...`);
+        logger.debug('UI', `[usePaperData] Waiting ${delay}ms before next attempt...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
-    console.warn(`[usePaperData] Paper not found after ${maxRetries} attempts`);
+    logger.warn('UI', `[usePaperData] Paper not found after ${maxRetries} attempts`);
     return null;
   }
 
