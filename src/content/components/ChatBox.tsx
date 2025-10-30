@@ -120,7 +120,6 @@ export const ChatBox = ({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const savedScrollPosition = useRef<number | null>(null);
   const isUserNearBottomRef = useRef(true); // Start true (initially at bottom)
-  const dragRafPending = useRef(false); // For throttling position updates during drag
 
   // Threshold for "near bottom" detection (in pixels)
   const SCROLL_NEAR_BOTTOM_THRESHOLD = 100;
@@ -454,15 +453,6 @@ export const ChatBox = ({
         };
 
         setPosition(newPosition);
-
-        // Throttled position change notification (for compass arrow tracking)
-        if (!dragRafPending.current) {
-          dragRafPending.current = true;
-          requestAnimationFrame(() => {
-            onPositionChange(newPosition);
-            dragRafPending.current = false;
-          });
-        }
       } else if (isResizing && resizeDirection) {
         const newPosition = { ...position };
 
