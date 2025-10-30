@@ -52,6 +52,20 @@ class ChatboxInjector {
   private documentScrollListener: (() => void) | null = null;
   private resizeListener: (() => void) | null = null;
   private previousCompassAngle: number | null = null; // Track previous angle to prevent 360° spins
+
+  // Performance optimization: Intersection Observers
+  private chatboxObserver: IntersectionObserver | null = null;
+  private imageButtonObserver: IntersectionObserver | null = null;
+  private isChatboxVisible = true;
+  private isImageButtonVisible = true;
+
+  // Performance optimization: Idle detection
+  private idleTimer: number | null = null;
+  private isUserIdle = false;
+  private lastActivityTime = Date.now();
+  private idleTimeoutMs = 3000; // 3 seconds of inactivity before pausing
+  private activityListener: (() => void) | null = null;
+
   private initialInputValue = '';
   private isRegeneratingExplanation = false;
   private isGeneratingEmbeddings = false; // Track if embeddings are being generated
@@ -1664,10 +1678,12 @@ class ChatboxInjector {
     logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Scrolled to image:', activeTab.imageUrl);
   }
 
-  private handlePositionChange(position: ChatboxPosition) {
+  private handlePositionChange(position: ChatboxPosition, shouldSave = true) {
     this.settings.position = position;
-    this.saveSettings();
-    this.render(); // Update compass arrow on position change
+    if (shouldSave) {
+      this.saveSettings(); // Only save to storage when shouldSave=true (e.g., on mouseup)
+    }
+    this.render(); // Always update UI for compass tracking
   }
 
   private handleFirstInteraction() {
@@ -1730,6 +1746,22 @@ class ChatboxInjector {
   }
 
   /**
+   * Check if compass updates should be paused (performance optimization)
+   * Pauses when elements are off-screen or user is idle
+   */
+  private shouldPauseCompassUpdates(): boolean {
+    // Pause if chatbox or image button is not visible
+    if (!this.isChatboxVisible || !this.isImageButtonVisible) {
+      return true;
+    }
+    // Pause if user is idle
+    if (this.isUserIdle) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * Set up event listeners to track compass arrow position dynamically
    */
   private setupCompassTracking() {
@@ -1747,7 +1779,13 @@ class ChatboxInjector {
 
     // Throttled render for performance (using requestAnimationFrame)
     let rafPending = false;
-    const throttledRender = () => {
+    const throttledRender = (bypassPauseCheck = false) => {
+      // Only check pause for non-scroll/resize triggers
+      // Scroll/resize events ARE user activity and should always update
+      if (!bypassPauseCheck && this.shouldPauseCompassUpdates()) {
+        return;
+      }
+
       if (!rafPending) {
         rafPending = true;
         requestAnimationFrame(() => {
@@ -1759,21 +1797,101 @@ class ChatboxInjector {
 
     // Listen to scroll events on both window and document
     // (Some sites use scrollable divs instead of window scroll)
-    this.scrollListener = throttledRender;
+    // Scroll events ARE user activity - always render (bypass pause check)
+    this.scrollListener = () => throttledRender(true);
     window.addEventListener('scroll', this.scrollListener, { passive: true } as any);
 
-    this.documentScrollListener = throttledRender;
+    this.documentScrollListener = () => throttledRender(true);
     document.addEventListener('scroll', this.documentScrollListener, { passive: true, capture: true } as any);
 
     // Listen to resize events
-    this.resizeListener = throttledRender;
+    // Resize events also indicate user activity - always render (bypass pause check)
+    this.resizeListener = () => throttledRender(true);
     window.addEventListener('resize', this.resizeListener);
+
+    // Set up Intersection Observer for chatbox (performance optimization)
+    // Pause updates when chatbox is off-screen
+    if (this.container) {
+      this.chatboxObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            const wasVisible = this.isChatboxVisible;
+            this.isChatboxVisible = entry.isIntersecting;
+
+            // If just became visible and was paused, trigger a render
+            // Respect pause check for visibility changes (don't bypass)
+            if (!wasVisible && this.isChatboxVisible && !this.shouldPauseCompassUpdates()) {
+              throttledRender(false);
+            }
+          });
+        },
+        { threshold: 0.1 } // Trigger when at least 10% visible
+      );
+      this.chatboxObserver.observe(this.container);
+    }
+
+    // Set up Intersection Observer for image button (performance optimization)
+    // Pause updates when image button is off-screen
+    if (activeTab.imageButtonElement) {
+      this.imageButtonObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            const wasVisible = this.isImageButtonVisible;
+            this.isImageButtonVisible = entry.isIntersecting;
+
+            // If just became visible and was paused, trigger a render
+            // Respect pause check for visibility changes (don't bypass)
+            if (!wasVisible && this.isImageButtonVisible && !this.shouldPauseCompassUpdates()) {
+              throttledRender(false);
+            }
+          });
+        },
+        { threshold: 0.1 } // Trigger when at least 10% visible
+      );
+      this.imageButtonObserver.observe(activeTab.imageButtonElement);
+    }
+
+    // Set up idle detection (performance optimization)
+    // Pause updates after 3 seconds of user inactivity
+    const resetIdleTimer = () => {
+      this.lastActivityTime = Date.now();
+
+      // If was idle and now active, clear idle state and trigger render
+      if (this.isUserIdle) {
+        this.isUserIdle = false;
+        if (!this.shouldPauseCompassUpdates()) {
+          // Respect pause check for idle state changes (don't bypass)
+          throttledRender(false);
+        }
+      }
+
+      // Clear existing timer
+      if (this.idleTimer !== null) {
+        window.clearTimeout(this.idleTimer);
+      }
+
+      // Set new timer
+      this.idleTimer = window.setTimeout(() => {
+        this.isUserIdle = true;
+      }, this.idleTimeoutMs);
+    };
+
+    // Track user activity with various events
+    this.activityListener = resetIdleTimer;
+    window.addEventListener('mousemove', this.activityListener, { passive: true } as any);
+    window.addEventListener('scroll', this.activityListener, { passive: true } as any);
+    window.addEventListener('keydown', this.activityListener, { passive: true } as any);
+    window.addEventListener('touchstart', this.activityListener, { passive: true } as any);
+
+    // Initialize idle timer
+    resetIdleTimer();
   }
 
   /**
    * Clean up compass tracking event listeners
    */
   private cleanupCompassTracking() {
+    // Clean up scroll and resize listeners
     if (this.scrollListener) {
       window.removeEventListener('scroll', this.scrollListener);
       this.scrollListener = null;
@@ -1786,6 +1904,36 @@ class ChatboxInjector {
       window.removeEventListener('resize', this.resizeListener);
       this.resizeListener = null;
     }
+
+    // Clean up Intersection Observers (performance optimization)
+    if (this.chatboxObserver) {
+      this.chatboxObserver.disconnect();
+      this.chatboxObserver = null;
+    }
+    if (this.imageButtonObserver) {
+      this.imageButtonObserver.disconnect();
+      this.imageButtonObserver = null;
+    }
+    // Reset visibility state
+    this.isChatboxVisible = true;
+    this.isImageButtonVisible = true;
+
+    // Clean up idle detection (performance optimization)
+    if (this.activityListener) {
+      window.removeEventListener('mousemove', this.activityListener);
+      window.removeEventListener('scroll', this.activityListener);
+      window.removeEventListener('keydown', this.activityListener);
+      window.removeEventListener('touchstart', this.activityListener);
+      this.activityListener = null;
+    }
+    if (this.idleTimer !== null) {
+      window.clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+    // Reset idle state
+    this.isUserIdle = false;
+    this.lastActivityTime = Date.now();
+
     // Reset angle tracking when disabling compass
     this.previousCompassAngle = null;
   }

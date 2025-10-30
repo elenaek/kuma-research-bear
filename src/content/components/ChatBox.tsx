@@ -31,7 +31,7 @@ interface ChatBoxProps {
 
   // Position
   initialPosition: ChatboxPosition;
-  onPositionChange: (position: ChatboxPosition) => void;
+  onPositionChange: (position: ChatboxPosition, shouldSave?: boolean) => void;
 
   // State
   disabled: boolean; // Disable when no paper is ready
@@ -453,6 +453,8 @@ export const ChatBox = ({
         };
 
         setPosition(newPosition);
+        // Update compass in real-time during drag without saving to storage
+        onPositionChange(newPosition, false);
       } else if (isResizing && resizeDirection) {
         const newPosition = { ...position };
 
@@ -474,12 +476,15 @@ export const ChatBox = ({
         }
 
         setPosition(newPosition);
+        // Update compass in real-time during resize without saving to storage
+        onPositionChange(newPosition, false);
       }
     };
 
     const handleMouseUp = () => {
       if (isDragging || isResizing) {
-        onPositionChange(position);
+        // Save final position to storage on mouseup
+        onPositionChange(position, true);
       }
       setIsDragging(false);
       setIsResizing(false);
