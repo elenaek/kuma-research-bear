@@ -21,6 +21,7 @@ const LATEX_COMMANDS = {
     'tau',
     'top', 'bot',
     'text', 'textbf', 'textit', 'textrm', 'texttt', 'textsf',
+    'tilde',
     'triangle', 'triangleq', 'triangleleft', 'triangleright',
     'times',
     'to',
@@ -51,7 +52,7 @@ const LATEX_COMMANDS = {
     'beta',
     'bigcap', 'bigcup', 'bigvee', 'bigwedge',
     'binom',
-    'bar', 'bold',
+    'bar', 'bold', 'boldsymbol',
     'bot',
   ],
 
