@@ -2143,7 +2143,9 @@ IMPORTANT: Respond in ${languageName}. Your entire answer must be in ${languageN
     const session = await this.getOrCreateSession(languageContextId, {
       systemPrompt,
       expectedInputs: [{ type: "text", languages: ["en"] }],
-      expectedOutputs: [{ type: "text", languages: [outputLanguage] }]
+      expectedOutputs: [{ type: "text", languages: [outputLanguage] }],
+      temperature: 0,
+      topK: 3
     });
 
     // Validate prompt size with retry logic

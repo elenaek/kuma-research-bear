@@ -256,7 +256,11 @@ export function Sidepanel() {
 
               // Update glossary
               if (freshPaper.glossary) {
-                setGlossary(freshPaper.glossary);
+                const sortedGlossary = {
+                  ...freshPaper.glossary,
+                  terms: [...freshPaper.glossary.terms].sort((a, b) => a.acronym.localeCompare(b.acronym))
+                };
+                setGlossary(sortedGlossary);
               }
             }
           }
@@ -310,10 +314,18 @@ export function Sidepanel() {
           logger.debug('UI', '[Sidepanel] Glossary batch complete:', terms.length, 'new terms');
 
           // Update glossary state with new terms (append to existing)
-          setGlossary((prevGlossary) => ({
-            terms: [...(prevGlossary?.terms || []), ...terms],
-            timestamp: prevGlossary?.timestamp || Date.now(),
-          }));
+          setGlossary((prevGlossary) => {
+            // Merge new terms with existing terms
+            const allTerms = [...(prevGlossary?.terms || []), ...terms];
+
+            // Sort alphabetically by acronym for consistent display
+            allTerms.sort((a, b) => a.acronym.localeCompare(b.acronym));
+
+            return {
+              terms: allTerms,
+              timestamp: prevGlossary?.timestamp || Date.now(),
+            };
+          });
         }
       }
     };
@@ -492,7 +504,11 @@ export function Sidepanel() {
     // Load glossary
     if (paper.glossary) {
       logger.debug('UI', '[Sidepanel] Loading glossary from paper');
-      setGlossary(paper.glossary);
+      const sortedGlossary = {
+        ...paper.glossary,
+        terms: [...paper.glossary.terms].sort((a, b) => a.acronym.localeCompare(b.acronym))
+      };
+      setGlossary(sortedGlossary);
     } else {
       setGlossary(null);
     }
@@ -691,7 +707,11 @@ export function Sidepanel() {
 
       if (response.success && response.glossary) {
         logger.debug('UI', '✓ Glossary generated successfully');
-        setGlossary(response.glossary);
+        const sortedGlossary = {
+          ...response.glossary,
+          terms: [...response.glossary.terms].sort((a, b) => a.acronym.localeCompare(b.acronym))
+        };
+        setGlossary(sortedGlossary);
 
         // Update storedPaper and allPapers to reflect the new glossary
         // This prevents the glossary from being cleared when switchToPaper is called
@@ -1055,7 +1075,11 @@ Source: ${paper.url}
     // Load glossary from IndexedDB (single source of truth)
     if (paperToUse.glossary) {
       logger.debug('UI', '[Sidepanel] Loading glossary from IndexedDB');
-      setGlossary(paperToUse.glossary);
+      const sortedGlossary = {
+        ...paperToUse.glossary,
+        terms: [...paperToUse.glossary.terms].sort((a, b) => a.acronym.localeCompare(b.acronym))
+      };
+      setGlossary(sortedGlossary);
     } else {
       // Paper switching should NOT auto-trigger glossary generation (prevents retrigger bug)
       // Glossary is only auto-triggered during initial load in loadExplanation()

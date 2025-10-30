@@ -1055,8 +1055,12 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
               const { updatePartialPaperGlossary } = await import('../../utils/dbService.ts');
               const { getOutputLanguage } = await import('../../utils/settingsService.ts');
               const outputLanguage = await getOutputLanguage();
+
+              // Sort glossaryTerms alphabetically for consistent display
+              glossaryTerms.sort((a, b) => a.acronym.localeCompare(b.acronym));
+
               const partialGlossary = {
-                terms: glossaryTerms,  // All terms so far
+                terms: glossaryTerms,  // All terms so far, now sorted
                 timestamp: Date.now(),
               };
               await updatePartialPaperGlossary(storedPaper.id, partialGlossary, outputLanguage);
