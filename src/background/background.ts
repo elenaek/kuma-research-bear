@@ -133,7 +133,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.contextMenus.create({
     id: CONTEXT_MENU_HEADER_SYSTEM_ID,
     title: '────────── System ──────────',
-    contexts: ['page'],
+    contexts: ['page', 'frame'],
     enabled: false, // Disabled = non-clickable header
   });
 
@@ -141,7 +141,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.contextMenus.create({
     id: CONTEXT_MENU_DETECT_ID,
     title: 'Detect Paper with Kuma',
-    contexts: ['page'],
+    contexts: ['page', 'frame'],
     enabled: true, // Initially enabled, will be disabled when paper is already stored
   });
 
@@ -149,7 +149,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.contextMenus.create({
     id: CONTEXT_MENU_SIDEPANEL_ID,
     title: 'Open Sidepanel',
-    contexts: ['page'],
+    contexts: ['page', 'frame'],
     enabled: true, // Always enabled
   });
 
@@ -157,7 +157,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.contextMenus.create({
     id: CONTEXT_MENU_SEPARATOR_1_ID,
     type: 'separator',
-    contexts: ['page'],
+    contexts: ['page', 'frame'],
   });
 
   // ========================================
@@ -168,7 +168,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.contextMenus.create({
     id: CONTEXT_MENU_HEADER_ACTIONS_ID,
     title: '────────── Actions ──────────',
-    contexts: ['page'],
+    contexts: ['page', 'frame'],
     enabled: false, // Disabled = non-clickable header
   });
 
@@ -184,7 +184,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.contextMenus.create({
     id: CONTEXT_MENU_PAGE_ID,
     title: 'Chat with Kuma',
-    contexts: ['page'],
+    contexts: ['page', 'frame'],
     enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
   });
 
@@ -200,7 +200,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.contextMenus.create({
     id: CONTEXT_MENU_SEPARATOR_2_ID,
     type: 'separator',
-    contexts: ['page'],
+    contexts: ['page', 'frame'],
   });
 
   // ========================================
@@ -211,7 +211,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.contextMenus.create({
     id: CONTEXT_MENU_HEADER_SETTINGS_ID,
     title: '────────── Settings ──────────',
-    contexts: ['page'],
+    contexts: ['page', 'frame'],
     enabled: false, // Disabled = non-clickable header
   });
 
@@ -219,7 +219,7 @@ chrome.runtime.onInstalled.addListener(async () => {
   chrome.contextMenus.create({
     id: CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID,
     title: 'Show Image Explanation Buttons',
-    contexts: ['page'],
+    contexts: ['page', 'frame'],
     type: 'checkbox',
     checked: true, // Default to checked
   });
@@ -663,6 +663,13 @@ export async function updateContextMenuForPaper(paperUrl: string) {
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab?.id) return;
+
+  // PDF plugin returns tab.id = -1, need to get the actual active tab
+  if (tab.id === -1) {
+    const tabs = await chrome.tabs.query({currentWindow: true, active: true});
+    if (!tabs[0]?.id) return;
+    tab = tabs[0];
+  }
 
   try {
     // Handle "Chat with Kuma" menu items
