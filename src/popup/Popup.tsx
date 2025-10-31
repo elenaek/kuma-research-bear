@@ -565,7 +565,7 @@ export function Popup() {
             aria-expanded={settingsExpanded}
             aria-label="Toggle settings"
           >
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 mx-auto">
               <Settings size={16} class="text-gray-600" />
               <span class="text-sm font-medium text-gray-700">Settings</span>
             </div>

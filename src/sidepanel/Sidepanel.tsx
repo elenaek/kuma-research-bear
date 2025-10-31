@@ -162,7 +162,8 @@ export function Sidepanel() {
           operationState.addAnalyzingPaper(paperUrl);
 
           // Restore analysis progress if available
-          if (state.analysisProgressStage) {
+          // ONLY update if this is the currently viewed paper to prevent contamination
+          if (state.analysisProgressStage && currentPaperUrlRef.current === paperUrl) {
             setAnalysisProgress({
               stage: state.analysisProgressStage as 'evaluating' | 'analyzing',
               current: state.currentAnalysisStep,
@@ -172,7 +173,10 @@ export function Sidepanel() {
         } else {
           operationState.removeAnalyzingPaper(paperUrl);
           // Clear analysis progress when generation stops
-          setAnalysisProgress(null);
+          // ONLY clear if this was the currently viewed paper
+          if (currentPaperUrlRef.current === paperUrl) {
+            setAnalysisProgress(null);
+          }
         }
 
         // Update glossary generating papers Set
@@ -180,7 +184,8 @@ export function Sidepanel() {
           operationState.addGlossaryGeneratingPaper(paperUrl);
 
           // Restore glossary progress if available
-          if (state.glossaryProgressStage) {
+          // ONLY update if this is the currently viewed paper to prevent contamination
+          if (state.glossaryProgressStage && currentPaperUrlRef.current === paperUrl) {
             setGlossaryProgress({
               stage: state.glossaryProgressStage as 'extracting' | 'filtering-terms' | 'generating-definitions',
               current: state.currentGlossaryTerm,
@@ -190,7 +195,10 @@ export function Sidepanel() {
         } else {
           operationState.removeGlossaryGeneratingPaper(paperUrl);
           // Clear glossary progress when generation stops
-          setGlossaryProgress(null);
+          // ONLY clear if this was the currently viewed paper
+          if (currentPaperUrlRef.current === paperUrl) {
+            setGlossaryProgress(null);
+          }
         }
 
         // Reload paper from IndexedDB when operations complete
@@ -512,6 +520,63 @@ export function Sidepanel() {
       setGlossary(sortedGlossary);
     } else {
       setGlossary(null);
+    }
+
+    // Query operation state to restore progress if paper is being analyzed/glossary-generated
+    // This ensures immediate progress display when switching back to an in-progress paper
+    try {
+      const stateResponse = await ChromeService.getOperationStateByPaper(paper.url);
+
+      if (stateResponse.success && stateResponse.state) {
+        const state = stateResponse.state;
+
+        // Update analysis state: both progress and operationState Set
+        if (state.isAnalyzing) {
+          operationState.addAnalyzingPaper(paper.url);
+
+          if (state.analysisProgressStage) {
+            setAnalysisProgress({
+              stage: state.analysisProgressStage as 'evaluating' | 'analyzing',
+              current: state.currentAnalysisStep,
+              total: state.totalAnalysisSteps,
+            });
+            logger.debug('UI', '[loadPaperData] Restored analysis progress:', state.analysisProgressStage, state.currentAnalysisStep, '/', state.totalAnalysisSteps);
+          }
+        } else {
+          operationState.removeAnalyzingPaper(paper.url);
+          setAnalysisProgress(null);
+        }
+
+        // Update glossary state: both progress and operationState Set
+        if (state.isGeneratingGlossary) {
+          operationState.addGlossaryGeneratingPaper(paper.url);
+
+          if (state.glossaryProgressStage) {
+            setGlossaryProgress({
+              stage: state.glossaryProgressStage as 'extracting' | 'filtering-terms' | 'generating-definitions',
+              current: state.currentGlossaryTerm,
+              total: state.totalGlossaryTerms,
+            });
+            logger.debug('UI', '[loadPaperData] Restored glossary progress:', state.glossaryProgressStage, state.currentGlossaryTerm, '/', state.totalGlossaryTerms);
+          }
+        } else {
+          operationState.removeGlossaryGeneratingPaper(paper.url);
+          setGlossaryProgress(null);
+        }
+      } else {
+        // No operation state found, clear both progress states and Sets
+        operationState.removeAnalyzingPaper(paper.url);
+        operationState.removeGlossaryGeneratingPaper(paper.url);
+        setAnalysisProgress(null);
+        setGlossaryProgress(null);
+      }
+    } catch (error) {
+      logger.warn('UI', '[loadPaperData] Could not load operation state for paper:', error);
+      // Clear both progress states and Sets on error to prevent contamination
+      operationState.removeAnalyzingPaper(paper.url);
+      operationState.removeGlossaryGeneratingPaper(paper.url);
+      setAnalysisProgress(null);
+      setGlossaryProgress(null);
     }
   }
 
@@ -1086,6 +1151,63 @@ Source: ${paper.url}
       // Glossary is only auto-triggered during initial load in loadExplanation()
       logger.debug('UI', '[Sidepanel] No glossary for this paper');
       setGlossary(null);
+    }
+
+    // Query operation state to restore progress if paper is being analyzed/glossary-generated
+    // This ensures immediate progress display when switching back to an in-progress paper
+    try {
+      const stateResponse = await ChromeService.getOperationStateByPaper(paperToUse.url);
+
+      if (stateResponse.success && stateResponse.state) {
+        const state = stateResponse.state;
+
+        // Update analysis state: both progress and operationState Set
+        if (state.isAnalyzing) {
+          operationState.addAnalyzingPaper(paperToUse.url);
+
+          if (state.analysisProgressStage) {
+            setAnalysisProgress({
+              stage: state.analysisProgressStage as 'evaluating' | 'analyzing',
+              current: state.currentAnalysisStep,
+              total: state.totalAnalysisSteps,
+            });
+            logger.debug('UI', '[switchToPaper] Restored analysis progress:', state.analysisProgressStage, state.currentAnalysisStep, '/', state.totalAnalysisSteps);
+          }
+        } else {
+          operationState.removeAnalyzingPaper(paperToUse.url);
+          setAnalysisProgress(null);
+        }
+
+        // Update glossary state: both progress and operationState Set
+        if (state.isGeneratingGlossary) {
+          operationState.addGlossaryGeneratingPaper(paperToUse.url);
+
+          if (state.glossaryProgressStage) {
+            setGlossaryProgress({
+              stage: state.glossaryProgressStage as 'extracting' | 'filtering-terms' | 'generating-definitions',
+              current: state.currentGlossaryTerm,
+              total: state.totalGlossaryTerms,
+            });
+            logger.debug('UI', '[switchToPaper] Restored glossary progress:', state.glossaryProgressStage, state.currentGlossaryTerm, '/', state.totalGlossaryTerms);
+          }
+        } else {
+          operationState.removeGlossaryGeneratingPaper(paperToUse.url);
+          setGlossaryProgress(null);
+        }
+      } else {
+        // No operation state found, clear both progress states and Sets
+        operationState.removeAnalyzingPaper(paperToUse.url);
+        operationState.removeGlossaryGeneratingPaper(paperToUse.url);
+        setAnalysisProgress(null);
+        setGlossaryProgress(null);
+      }
+    } catch (error) {
+      logger.warn('UI', '[switchToPaper] Could not load operation state for paper:', error);
+      // Clear both progress states and Sets on error to prevent contamination
+      operationState.removeAnalyzingPaper(paperToUse.url);
+      operationState.removeGlossaryGeneratingPaper(paperToUse.url);
+      setAnalysisProgress(null);
+      setGlossaryProgress(null);
     }
   }
 
