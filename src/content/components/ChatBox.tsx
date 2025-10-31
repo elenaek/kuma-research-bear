@@ -4,6 +4,7 @@ import { ChatMessage, ChatboxPosition, ChatTab, SourceInfo } from '../../types/i
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
 import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.tsx';
 import { AlertCircle } from 'lucide-preact';
+import { isPDFPage } from '../../utils/contentExtractor.ts';
 
 interface ChatBoxProps {
   tabs: ChatTab[];
@@ -627,6 +628,18 @@ export const ChatBox = ({
 
   // Get active tab
   const activeTab = tabs.find(t => t.id === activeTabId);
+  // Check if this is an image tab on a PDF page (compass and scroll-to-image won't work on PDFs)
+  const isPdfCapture = activeTab?.type === 'image' && isPDFPage();
+
+  // Debug logging
+  if (activeTab?.type === 'image') {
+    console.log('[ChatBox] Image tab detected:', {
+      imageUrl: activeTab.imageUrl,
+      isPdfPage: isPDFPage(),
+      isPdfCapture,
+      hasCompassAngle: compassArrowAngle !== undefined,
+    });
+  }
 
   if (isMinimized) {
     return (
@@ -653,7 +666,7 @@ export const ChatBox = ({
         >
           <div class="flex items-center gap-2">
             {/* Compass arrow for image tabs (even when minimized) */}
-            {activeTab && activeTab.type === 'image' && compassArrowAngle !== undefined && (
+            {activeTab && activeTab.type === 'image' && !isPdfCapture && compassArrowAngle !== undefined && (
               <svg
                 class="chatbox-compass-arrow"
                 width="20"
@@ -803,7 +816,7 @@ export const ChatBox = ({
       >
         <div class="flex items-center gap-2 flex-1 min-w-0" style={{margin: '5px'}}>
           {/* Compass arrow for image tabs */}
-          {activeTab && activeTab.type === 'image' && compassArrowAngle !== undefined && (
+          {activeTab && activeTab.type === 'image' && !isPdfCapture && compassArrowAngle !== undefined && (
             <svg
               class="chatbox-compass-arrow"
               width="20"
@@ -852,7 +865,7 @@ export const ChatBox = ({
             </svg>
           </button>
           {/* Scroll to image button - only for image tabs */}
-          {activeTab && activeTab.type === 'image' && onScrollToImage && (
+          {activeTab && activeTab.type === 'image' && !isPdfCapture && onScrollToImage && (
             <button
               class="chatbox-control-btn"
               onClick={onScrollToImage}
@@ -949,8 +962,8 @@ export const ChatBox = ({
                       src={screenCaptureUrl || activeTab.imageUrl}
                       alt="Explained image"
                       class="chatbox-image-thumbnail"
-                      title="Click to scroll to this image in the page"
-                      onClick={onScrollToImage}
+                      title={isPdfCapture ? "PDF capture" : "Click to scroll to this image in the page"}
+                      onClick={isPdfCapture ? undefined : onScrollToImage}
                       onError={(e) => {
                         // Hide image if it fails to load
                         (e.target as HTMLElement).style.display = 'none';
