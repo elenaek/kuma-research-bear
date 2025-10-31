@@ -17,6 +17,7 @@ import { getShowImageButtons, setShowImageButtons } from '../../utils/settingsSe
 import type { Persona, Purpose } from '../../types/personaPurpose.ts';
 import { PERSONA_PURPOSE_CONFIGS } from '../../types/personaPurpose.ts';
 import { getPersona, getPurpose, onPersonaChanged, onPurposeChanged } from '../../utils/settingsService.ts';
+import { MessageType } from '../../types/index.ts';
 
 /**
  * Settings Tab - Global extension settings
@@ -57,15 +58,16 @@ export function SettingsTab() {
       await setShowImageButtons(newValue);
       console.log('[SettingsTab] Image buttons visibility set to:', newValue);
 
-      // Notify content scripts about the change
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs[0]?.id) {
-          chrome.tabs.sendMessage(tabs[0].id, {
-            type: 'IMAGE_BUTTONS_VISIBILITY_CHANGED',
-            payload: { show: newValue }
-          });
+      // Broadcast change to all tabs (matches popup implementation)
+      const tabs = await chrome.tabs.query({});
+      for (const tab of tabs) {
+        if (tab.id) {
+          chrome.tabs.sendMessage(tab.id, {
+            type: MessageType.IMAGE_BUTTONS_VISIBILITY_CHANGED,
+            payload: { showImageButtons: newValue },
+          }).catch(() => {}); // Ignore errors for tabs without content script
         }
-      });
+      }
     } catch (error) {
       console.error('[SettingsTab] Error saving image buttons setting:', error);
       // Revert on error
@@ -116,7 +118,7 @@ export function SettingsTab() {
 
         {/* Configuration Info Card */}
         <div class="config-info card p-3 bg-blue-50 border border-blue-200 rounded-lg mt-4">
-          <h4 class="text-xs font-semibold text-blue-900 mb-2">Current Configuration</h4>
+          <h4 class="text-sm font-semibold text-blue-900 mb-2">Current Configuration</h4>
           <div class="grid grid-cols-2 gap-2 text-xs">
             <div>
               <span class="text-blue-700 font-medium">Tone:</span>
