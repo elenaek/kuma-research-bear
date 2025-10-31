@@ -844,12 +844,16 @@ User question: ${message}`;
               lastSummarizedIndex: newChatHistory.length - 7, // Index of last summarized message
               summaryCount
             };
-
+            const outputLanguage = await getOutputLanguage();
             // Clone session with updated history
             await aiService.cloneSessionWithHistory(
               contextId,
               newConversationState,
-              systemPrompt
+              systemPrompt,
+              {
+                expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
+                expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
+              }
             );
 
             // Save updated state to database
@@ -1586,13 +1590,15 @@ User question: ${message}`;
             summaryCount
           };
 
+          const outputLanguage = await getOutputLanguage();
           // Clone session with updated history (preserve multimodal image support)
           await aiService.cloneSessionWithHistory(
             contextId,
             newConversationState,
             systemPrompt,
             {
-              expectedInputs: [{ type: 'image', languages: ['en'] }]
+              expectedInputs: [{ type: 'image', languages: ['en', 'es', 'ja'] }],
+              expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
             }
           );
 

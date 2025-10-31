@@ -5,6 +5,7 @@
 
 import type { Persona, Purpose } from '../../types/personaPurpose.ts';
 import { PromptBuilder } from '../PromptBuilder.ts';
+import type { PromptLanguage } from '../types.ts';
 
 /**
  * Build the system prompt for paper chat sessions
@@ -18,7 +19,7 @@ import { PromptBuilder } from '../PromptBuilder.ts';
  * @param purpose - The purpose of the user 
  * @returns The chat system prompt
  */
-export function buildChatPrompt(paperTitle: string, persona?: Persona, purpose?: Purpose): string {
+export function buildChatPrompt(paperTitle: string, persona?: Persona, purpose?: Purpose, language?: PromptLanguage): string {
   const builder = new PromptBuilder()
     .withRole('kumaAssistant')
     .withTask('Answer questions about the research paper based on the provided context');
@@ -30,6 +31,7 @@ export function buildChatPrompt(paperTitle: string, persona?: Persona, purpose?:
   return builder
     .withCustomInstruction('honesty', 'If the context doesn\'t contain enough information, say so honestly')
     .withLatexSupport()
+    .withLanguage(language || 'en', 'standard')
     .withCustomInstruction('response-format', `Response Format:
 You will respond with a JSON object containing:
 - "answer": Your conversational response (see schema for formatting guidelines)
@@ -52,7 +54,7 @@ Only include sources you actually referenced. If you didn't use specific sources
  * @param purpose - The purpose of the user
  * @returns The image chat system prompt
  */
-export function buildImageChatPrompt(paperTitle: string, persona?: Persona, purpose?: Purpose): string {
+export function buildImageChatPrompt(paperTitle: string, persona?: Persona, purpose?: Purpose, language?: PromptLanguage): string {
   const builder = new PromptBuilder()
     .withCustomInstruction('role', 'You are Kuma, a friendly research bear assistant helping users understand images from research papers.')
     .withTask('Answer questions about the image and how it relates to the paper');
@@ -64,6 +66,7 @@ export function buildImageChatPrompt(paperTitle: string, persona?: Persona, purp
   return builder
     .withCustomInstruction('honesty', 'If the context doesn\'t contain enough information, say so honestly')
     .withLatexSupport()
+    .withLanguage(language || 'en', 'standard')
     .withCustomInstruction('response-format', `Response Format:
 You will respond with a JSON object containing:
 - "answer": Your conversational response (see schema for formatting guidelines)
