@@ -578,6 +578,18 @@
   cursor: nesw-resize;
 }
 
+/* Transparent overlay for capturing mouse events on PDF pages during drag/resize */
+.drag-resize-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2147483646; /* Below chatbox (2147483647) but above everything else */
+  background: transparent;
+  pointer-events: auto; /* Capture all mouse events */
+}
+
 /* Utility classes */
 .flex {
   display: flex;

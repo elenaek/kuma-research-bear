@@ -113,6 +113,17 @@ export const ChatBox = ({
   const [dragTimer, setDragTimer] = useState<number | null>(null);
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
   const [expandedSources, setExpandedSources] = useState<Set<number>>(new Set()); // Track which message indices have sources expanded
+  const [isOnPdfPage] = useState<boolean>(() => {
+    // Detect PDF page on mount
+    // Check 1: document contentType
+    if (document.contentType === 'application/pdf') return true;
+    // Check 2: URL ends with .pdf
+    if (window.location.href.match(/\.pdf(\?|#|$)/i)) return true;
+    // Check 3: Check for PDF embed elements
+    const pdfEmbed = document.querySelector('embed[type="application/pdf"]');
+    if (pdfEmbed) return true;
+    return false;
+  });
 
   const chatboxRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -711,6 +722,16 @@ export const ChatBox = ({
       <div class="resize-handle resize-nw" onMouseDown={(e) => handleResizeStart(e as any, 'nw')} />
       <div class="resize-handle resize-se" onMouseDown={(e) => handleResizeStart(e as any, 'se')} />
       <div class="resize-handle resize-sw" onMouseDown={(e) => handleResizeStart(e as any, 'sw')} />
+
+      {/* Transparent overlay for PDF pages - captures mouse events during drag/resize */}
+      {(isDragging || isResizing) && isOnPdfPage && (
+        <div
+          class="drag-resize-overlay"
+          style={{
+            cursor: isDragging ? 'move' : resizeDirection ? `${resizeDirection}-resize` : 'default',
+          }}
+        />
+      )}
 
       {/* Tab Bar (NEW - Multi-tab support) */}
       {tabs.length > 1 && (
