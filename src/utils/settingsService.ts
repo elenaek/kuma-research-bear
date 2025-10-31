@@ -45,7 +45,7 @@ export async function getOutputLanguage(): Promise<string> {
     }
 
     // No setting found, return browser language or default
-    return getBrowserLanguage();
+    return "en";
   } catch (error) {
     console.error('Error getting output language:', error);
     return 'en';

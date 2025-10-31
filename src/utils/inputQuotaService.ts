@@ -4,6 +4,8 @@
  * Uses Chrome Built-in AI API (LanguageModel.create() -> session.inputQuota)
  */
 
+import { getOutputLanguage } from "./settingsService.ts";
+
 /**
  * Singleton service for managing inputQuota detection and adaptive sizing
  */
@@ -27,7 +29,11 @@ class InputQuotaService {
       }
 
       // Create temporary session to detect quota
-      const tempSession = await LanguageModel.create();
+      const outputLanguage = await getOutputLanguage();
+      const tempSession = await LanguageModel.create({
+        expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
+        expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }], // Default for quota detection
+      });
       this.inputQuota = tempSession.inputQuota;
 
       // Clean up temporary session

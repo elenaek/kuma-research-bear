@@ -5,6 +5,7 @@
  */
 
 import { buildPaperDetectionPrompt } from '../prompts/templates/detection.ts';
+import { getOutputLanguage } from './settingsService.ts';
 
 export interface PaperDetectionResult {
   isResearchPaper: boolean;
@@ -205,9 +206,12 @@ async function aiDetectionFallback(): Promise<{ isResearchPaper: boolean; reason
     const sampleText = bodyText.substring(0, 2000);
 
     // Create session for detection
+    const outputLanguage = await getOutputLanguage();
     const session = await LanguageModel.create({
       temperature: 0.0, // Deterministic
       systemPrompt: buildPaperDetectionPrompt(),
+      expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
+      expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }], // Paper detection should be consistent
     });
 
     // Ask AI

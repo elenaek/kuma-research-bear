@@ -186,11 +186,13 @@ class ChromeAIService {
 
       // Multimodal capabilities are only available in origin trial
       // We need to try creating a session with image inputs to check support
+      const outputLanguage = await getOutputLanguage();
       let supportsImages = false;
       if (availability === 'available') {
         try {
           const testSession = await LanguageModel.create({
-            expectedInputs: [{ type: 'image' }],
+            expectedInputs: [{ type: 'image', languages: ["en", "es", "ja"] }],
+            expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en" ] }], // Default for test session
           });
           supportsImages = true;
           testSession.destroy();
@@ -252,7 +254,8 @@ class ChromeAIService {
       const session = await LanguageModel.create({
         temperature: 0.0,
         topK: 3,
-        expectedInputs: [{ type: 'image' }],
+        expectedInputs: [{ type: 'image', languages: ["en", "es", "ja"] }],
+        expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }], // Use user's preferred language
         systemPrompt: buildImageExplanationPrompt(persona, purpose),
       });
 
@@ -514,7 +517,7 @@ ${purpose === 'learning' ? `Explain this image in plain language.
       logger.debug('AI_SERVICE', `[AI] Creating new session for context: ${contextId}`);
 
       // Convert systemPrompt to initialPrompts if present (new API format)
-      let sessionOptions: any = options;
+      let sessionOptions: any = options || {};
       if (options?.systemPrompt) {
         sessionOptions = {
           ...options,
@@ -527,6 +530,21 @@ ${purpose === 'learning' ? `Explain this image in plain language.
         };
         // Remove deprecated systemPrompt field
         delete sessionOptions.systemPrompt;
+      }
+
+      // Add expectedOutputs if not already specified
+      if (!sessionOptions?.expectedOutputs) {
+        let outputLanguage = 'en'; // Default fallback
+        try {
+          outputLanguage = await getOutputLanguage();
+        } catch (error) {
+          logger.warn('AI_SERVICE', '[AI] Failed to get output language, using default "en":', error);
+        }
+        sessionOptions = {
+          ...sessionOptions,
+          expectedInputs: sessionOptions?.expectedInputs || [{ type: 'text', languages: ["en", "es", "ja"] }],
+          expectedOutputs: sessionOptions?.expectedOutputs || [{ type: 'text', languages: [outputLanguage || "en"] }],
+        };
       }
 
       // Add monitor callback for download progress if provided
@@ -838,8 +856,8 @@ ${abstract}`;
       systemPrompt,
       undefined,
       languageContextId,
-      [{ type: "text", languages: ["en"] }],  // expectedInputs
-      [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+      [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
+      [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
     );
 
     return {
@@ -1255,8 +1273,11 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
 
       // Try to create a session (triggers download if needed)
       // Add download progress tracking
+      const outputLanguage = await getOutputLanguage();
       const created = await this.createSession({
         systemPrompt: 'You are a helpful research assistant.',
+        expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
+        expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
       }, (progress) => {
         // Broadcast GeminiNano download progress (0-1 range)
         // Map to 0-80% of combined progress
@@ -1355,8 +1376,11 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
 
       if (capabilities.availability === 'available') {
         // AI is now available - try to create a session
+        const outputLanguage = await getOutputLanguage();
         const created = await this.createSession({
           systemPrompt: 'You are a helpful research assistant.',
+          expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
+          expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
         });
 
         if (created) {
@@ -1507,8 +1531,8 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
             systemPrompt,
             schema,
             languageContextId,
-            [{ type: "text", languages: ["en"] }],  // expectedInputs
-            [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+            [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
+            [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
           );
 
           // Clean up session immediately after successful use
@@ -1642,8 +1666,8 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
             systemPrompt,
             schema,
             languageContextId,
-            [{ type: "text", languages: ["en"] }],  // expectedInputs
-            [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+            [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
+            [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
           );
 
           // Clean up session immediately after successful use
@@ -1773,8 +1797,8 @@ Provide a comprehensive analysis of real-world applications, significance, and f
             systemPrompt,
             schema,
             languageContextId,
-            [{ type: "text", languages: ["en"] }],  // expectedInputs
-            [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+            [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
+            [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
           );
 
           // Clean up session immediately after successful use
@@ -1904,8 +1928,8 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
             systemPrompt,
             schema,
             languageContextId,
-            [{ type: "text", languages: ["en"] }],  // expectedInputs
-            [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+            [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
+            [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
           );
 
           // Clean up session immediately after successful use
@@ -2048,8 +2072,8 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
     // Create session first for validation
     const session = await this.getOrCreateSession(languageContextId, {
       systemPrompt,
-      expectedInputs: [{ type: "text", languages: ["en"] }],
-      expectedOutputs: [{ type: "text", languages: [outputLanguage] }]
+      expectedInputs: [{ type: "text", languages: ["en", "es", "ja"] }],
+      expectedOutputs: [{ type: "text", languages: [outputLanguage || "en"] }]
     });
 
     // Validate prompt size with retry logic
@@ -2117,8 +2141,8 @@ Use markdown formatting for better readability:
         systemPrompt,
         undefined,
         languageContextId,
-        [{ type: "text", languages: ["en"] }],  // expectedInputs
-        [{ type: "text", languages: [outputLanguage] }]  // expectedOutputs
+        [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
+        [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
       );
 
       // Extract section references from the answer (simple heuristic)
@@ -2207,8 +2231,8 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
         systemPrompt,
         undefined, // No schema - simple text response
         contextId,
-        [{ type: "text", languages: ["en"] }],
-        [{ type: "text", languages: [outputLanguage] }],
+        [{ type: "text", languages: ["en", "es", "ja"] }],
+        [{ type: "text", languages: [outputLanguage || "en"] }],
         0,  // temperature
         3   // topK
       );
@@ -2468,8 +2492,8 @@ For mathematical expressions in definitions, contexts, or analogies:
         systemPrompt,
         singleTermSchema as JSONSchema,
         languageContextId,
-        [{ type: "text", languages: ["en"] }],
-        [{ type: "text", languages: [outputLanguage] }],
+        [{ type: "text", languages: ["en", "es", "ja"] }],
+        [{ type: "text", languages: [outputLanguage || "en"] }],
         0,  // temperature
         3   // topK
       );
@@ -3037,8 +3061,8 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
         systemPrompt,
         undefined, // No schema - simple text response
         contextId,
-        [{ type: "text", languages: ["en"] }],
-        [{ type: "text", languages: [outputLanguage] }],
+        [{ type: "text", languages: ["en", "es", "ja"] }],
+        [{ type: "text", languages: [outputLanguage || "en"] }],
         0,  // temperature
         3   // topK
       );
@@ -3382,10 +3406,15 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       }
     }
 
+    // Get output language if not already in options
+    const outputLanguage = await getOutputLanguage();
+
     // Create new session with conversation history
     const newSession = await LanguageModel.create({
       ...options,
       initialPrompts,
+      expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
+      expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }],
     });
 
     // Update session map
