@@ -3,6 +3,7 @@
  * Used for explaining terms, abstracts, and sections of research papers
  */
 
+import type { Persona, Purpose } from '../../types/personaPurpose.ts';
 import { PromptBuilder } from '../PromptBuilder.ts';
 import type { PromptLanguage } from '../types.ts';
 
@@ -13,11 +14,19 @@ import type { PromptLanguage } from '../types.ts';
  * This prompt instructs the AI to explain technical and scientific
  * terms in simple, accessible language.
  *
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The term explanation system prompt
  */
-export function buildExplainTermPrompt(): string {
-  return new PromptBuilder()
-    .withRole('explainer', 'termExplainer')
+export function buildExplainTermPrompt(persona?: Persona, purpose?: Purpose): string {
+  const builder = new PromptBuilder()
+    .withRole('explainer', 'termExplainer');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .buildString();
 }
 
@@ -29,12 +38,24 @@ export function buildExplainTermPrompt(): string {
  * in simple terms with markdown formatting and LaTeX math support.
  *
  * @param language - Target output language (en, es, ja)
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The abstract explanation system prompt
  */
-export function buildExplainAbstractPrompt(language: PromptLanguage): string {
-  return new PromptBuilder()
+export function buildExplainAbstractPrompt(
+  language: PromptLanguage,
+  persona?: Persona,
+  purpose?: Purpose
+): string {
+  const builder = new PromptBuilder()
     .withRole('explainer')
-    .withTask('Your goal is to make research papers accessible to people without specialized knowledge.')
+    .withTask('Your goal is to make research papers accessible to people without specialized knowledge.');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withCustomInstruction('approach', 'Break down technical jargon, use analogies when helpful, and focus on the key insights.')
     .withMarkdownFormatting(true)
     .withLatexSupport()
@@ -49,14 +70,22 @@ export function buildExplainAbstractPrompt(language: PromptLanguage): string {
  * This prompt instructs the AI to explain scientific figures and images
  * from research papers, with LaTeX support for mathematical notation.
  *
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The image explanation system prompt
  */
-export function buildImageExplanationPrompt(): string {
-  return new PromptBuilder()
+export function buildImageExplanationPrompt(persona?: Persona, purpose?: Purpose): string {
+  const builder = new PromptBuilder()
     .withRole('expertResearchAssistant')
-    .withTask('Provide clear, concise explanations of images in the context of the paper.')
+    .withTask('Provide clear, concise explanations of images in the context of the paper.');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withLatexSupport()
-    .withMarkdownFormatting(true)
+    .withMarkdownFormatting()
     .buildString();
 }
 

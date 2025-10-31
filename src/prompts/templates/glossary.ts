@@ -5,6 +5,7 @@
 
 import { PromptBuilder } from '../PromptBuilder.ts';
 import type { PromptLanguage } from '../types.ts';
+import type { Persona, Purpose } from '../../types/personaPurpose.ts';
 
 /**
  * Build the system prompt for extracting terms from text
@@ -14,11 +15,23 @@ import type { PromptLanguage } from '../types.ts';
  * and acronyms from research paper text.
  *
  * @param language - Target output language (en, es, ja)
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The term extraction system prompt
  */
-export function buildExtractTermsPrompt(language: PromptLanguage): string {
-  return new PromptBuilder()
-    .withCustomInstruction('role', 'You are a research paper expert who identifies important technical terms and acronyms for glossaries.')
+export function buildExtractTermsPrompt(
+  language: PromptLanguage,
+  persona?: Persona,
+  purpose?: Purpose
+): string {
+  const builder = new PromptBuilder()
+    .withCustomInstruction('role', 'You are a research paper expert who identifies important technical terms and acronyms for glossaries.');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withLanguage(language, 'standard')
     .buildString();
 }
@@ -32,11 +45,24 @@ export function buildExtractTermsPrompt(language: PromptLanguage): string {
  *
  * @param paperTitle - The title of the paper
  * @param termCount - Number of terms to extract
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The chunk term extraction system prompt
  */
-export function buildExtractChunkTermsPrompt(paperTitle: string, termCount: number): string {
-  return new PromptBuilder()
-    .withCustomInstruction('role', 'You are a research paper analyzer extracting technical terms.')
+export function buildExtractChunkTermsPrompt(
+  paperTitle: string,
+  termCount: number,
+  persona?: Persona,
+  purpose?: Purpose
+): string {
+  const builder = new PromptBuilder()
+    .withCustomInstruction('role', 'You are a research paper analyzer extracting technical terms.');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withCustomInstruction('critical', `CRITICAL:
 - Extract ONLY the ${termCount} most important technical terms, acronyms, and domain-specific jargon
 - Preserve ALL acronyms exactly (e.g., "SES", "RCT", "fMRI")
@@ -57,11 +83,23 @@ Paper: ${paperTitle}`)
  * for technical terms based on paper context.
  *
  * @param language - Target output language (en, es, ja)
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The definition generation system prompt
  */
-export function buildDefinitionPrompt(language: PromptLanguage): string {
-  return new PromptBuilder()
-    .withCustomInstruction('role', 'You are a research paper terminology expert who provides clear, accurate definitions for technical terms and acronyms.')
+export function buildDefinitionPrompt(
+  language: PromptLanguage,
+  persona?: Persona,
+  purpose?: Purpose
+): string {
+  const builder = new PromptBuilder()
+    .withCustomInstruction('role', 'You are a research paper terminology expert who provides clear, accurate definitions for technical terms and acronyms.');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withCustomInstruction('math', `When mathematical expressions, equations, or formulas are needed in definitions or contexts:
 - Use $expression$ for inline math (e.g., $E = mc^2$, $\\alpha$)
 - Use $$expression$$ for display equations on separate lines
@@ -80,12 +118,25 @@ export function buildDefinitionPrompt(language: PromptLanguage): string {
  *
  * @param language - Target output language (en, es, ja)
  * @param targetCount - Number of unique terms to select
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The term deduplication system prompt
  */
-export function buildDeduplicateTermsPrompt(language: PromptLanguage, targetCount: number): string {
-  return new PromptBuilder()
+export function buildDeduplicateTermsPrompt(
+  language: PromptLanguage,
+  targetCount: number,
+  persona?: Persona,
+  purpose?: Purpose
+): string {
+  const builder = new PromptBuilder()
     .withCustomInstruction('role', 'You are a research paper glossary expert who deduplicates and selects technical terms.')
-    .withTask(`Your task is to remove duplicates and select the TOP ${targetCount} most important unique terms.`)
+    .withTask(`Your task is to remove duplicates and select the TOP ${targetCount} most important unique terms.`);
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withLanguage(language, 'standard')
     .buildString();
 }

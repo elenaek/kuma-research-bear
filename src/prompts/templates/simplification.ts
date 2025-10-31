@@ -4,6 +4,7 @@
  */
 
 import { PromptBuilder } from '../PromptBuilder.ts';
+import type { Persona, Purpose } from '../../types/personaPurpose.ts';
 
 /**
  * Build the system prompt for text simplification
@@ -13,11 +14,19 @@ import { PromptBuilder } from '../PromptBuilder.ts';
  * in simpler language while preserving the original meaning.
  * Includes instructions for LaTeX mathematical expressions.
  *
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The text simplification system prompt
  */
-export function buildSimplifyTextPrompt(): string {
-  return new PromptBuilder()
-    .withRole('simplifier')
+export function buildSimplifyTextPrompt(persona?: Persona, purpose?: Purpose): string {
+  const builder = new PromptBuilder()
+    .withRole('simplifier');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withCustomInstruction('preserve-meaning', 'while preserving the original meaning.')
     .withLatexSupport()
     .buildString();

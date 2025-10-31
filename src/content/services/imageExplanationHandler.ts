@@ -445,7 +445,13 @@ class ImageExplanationHandler {
       }
 
       .image-explain-button.has-explanation {
-        /* Optional: Could add a subtle glow or indicator */
+        opacity: 0.3;
+      }
+
+      .image-explain-button.has-explanation:hover {
+        opacity: 1.0;
+        transform: scale(1.15);
+        filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
       }
 
       .image-explain-button.loading {

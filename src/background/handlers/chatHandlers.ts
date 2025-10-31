@@ -6,6 +6,7 @@ import { inputQuotaService } from '../../utils/inputQuotaService.ts';
 import { JSONSchema } from '../../utils/typeToSchema.ts';
 import { logger } from '../../utils/logger.ts';
 import { buildChatPrompt, buildImageChatPrompt } from '../../prompts/templates/chat.ts';
+import { getPersona, getPurpose } from '../../utils/settingsService.ts';
 
 /**
  * Chat Message Handlers
@@ -434,11 +435,11 @@ async function processAndStreamResponse(
     // Context ID for this paper's chat session
     const contextId = `chat-${storedPaper.id}`;
 
-    // chatHistory and conversationState already retrieved above (lines 202-208)
-
     // System prompt for the chat session (WITHOUT RAG context to save quota)
     // RAG context will be included in the actual user prompt instead
-    const systemPrompt = buildChatPrompt(storedPaper.title);
+    const persona = await getPersona();
+    const purpose = await getPurpose();
+    const systemPrompt = buildChatPrompt(storedPaper.title, persona, purpose);
 
     // Check if we need to create a new session with conversation history
     let session = aiService['sessions'].get(contextId);

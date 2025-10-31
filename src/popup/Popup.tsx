@@ -11,11 +11,14 @@ import { OperationBadges } from './components/OperationBadges.tsx';
 import { ActionButtons } from './components/ActionButtons.tsx';
 import { LoopPurpose, LottiePlayer, LottiePlayerHandle } from '../shared/components/LottiePlayer.tsx';
 import { LanguageDropdown } from './components/LanguageDropdown.tsx';
+import { PersonaSelector } from './components/PersonaSelector.tsx';
+import { PurposeSelector } from './components/PurposeSelector.tsx';
 import { ImageButtonsToggle } from './components/ImageButtonsToggle.tsx';
 import { normalizeUrl } from '../utils/urlUtils.ts';
 import { MessageType } from '../types/index.ts';
 import { getShowImageButtons, setShowImageButtons as saveShowImageButtons } from '../utils/settingsService.ts';
 import { logger } from '../utils/logger.ts';
+import { Settings, ChevronDown, ChevronUp } from 'lucide-preact';
 
 export function Popup() {
   // Ref for Lottie animation control
@@ -37,6 +40,9 @@ export function Popup() {
 
   // Image buttons toggle state
   const [showImageButtons, setShowImageButtons] = useState(true);
+
+  // Settings collapsible state
+  const [settingsExpanded, setSettingsExpanded] = useState(false);
 
   // Custom hooks
   const aiStatus = useAIStatus();
@@ -420,8 +426,8 @@ export function Popup() {
   return (
     <div class="w-90 max-h-96 bg-gradient-to-br from-gray-50 to-gray-100">
       <div class="p-6">
-        {/* Language Selector - Top Left Corner */}
-        <div class="absolute p-2 top-0 left-0 hover:cursor-pointer">
+        {/* Settings Controls - Top Left Corner */}
+        <div class="absolute p-2 top-0 left-0 flex flex-col gap-2 hover:cursor-pointer">
           <LanguageDropdown />
         </div>
 
@@ -550,11 +556,45 @@ export function Popup() {
           onOpenChat={handleOpenChat}
         />
 
-        {/* Image Buttons Toggle */}
-        <ImageButtonsToggle
-          showImageButtons={showImageButtons}
-          onToggle={handleToggleImageButtons}
-        />
+        {/* Collapsible Settings Section */}
+        <div class="mt-6 border-t border-gray-200 pt-4">
+          {/* Settings Toggle Button */}
+          <button
+            onClick={() => setSettingsExpanded(!settingsExpanded)}
+            class="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors hover:cursor-pointer"
+            aria-expanded={settingsExpanded}
+            aria-label="Toggle settings"
+          >
+            <div class="flex items-center gap-2">
+              <Settings size={16} class="text-gray-600" />
+              <span class="text-sm font-medium text-gray-700">Settings</span>
+            </div>
+            {settingsExpanded ? (
+              <ChevronUp size={16} class="text-gray-600" />
+            ) : (
+              <ChevronDown size={16} class="text-gray-600" />
+            )}
+          </button>
+
+          {/* Collapsible Settings Content */}
+          {settingsExpanded && (
+            <div class="flex flex-col gap-4 mt-4 px-2">
+              {/* Persona and Purpose Selectors */}
+              <div class="flex flex-col gap-2 text-center">
+                <label class="text-sm font-light text-gray-700">You are a...</label>
+                <PersonaSelector />
+                <label class="text-sm font-light text-gray-700">and you want to...</label>
+                <PurposeSelector />
+              </div>
+
+              {/* Image Buttons Toggle */}
+              <ImageButtonsToggle
+                showImageButtons={showImageButtons}
+                onToggle={handleToggleImageButtons}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

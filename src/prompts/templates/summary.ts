@@ -4,6 +4,7 @@
  */
 
 import { PromptBuilder } from '../PromptBuilder.ts';
+import type { Persona, Purpose } from '../../types/personaPurpose.ts';
 
 /**
  * Build the system prompt for summary generation
@@ -12,11 +13,19 @@ import { PromptBuilder } from '../PromptBuilder.ts';
  * This prompt instructs the AI to create concise summaries
  * with key points, using markdown formatting and LaTeX support.
  *
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The summary generation system prompt
  */
-export function buildSummaryPrompt(): string {
-  return new PromptBuilder()
-    .withRole('researchAssistant', 'summaryCreator')
+export function buildSummaryPrompt(persona?: Persona, purpose?: Purpose): string {
+  const builder = new PromptBuilder()
+    .withRole('researchAssistant', 'summaryCreator');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withCustomInstruction('task', 'Extract the most important information and present it clearly.')
     .withMarkdownFormatting(true)
     .withLatexSupport()

@@ -3,6 +3,7 @@
  * Used for interactive chat sessions with papers and images
  */
 
+import type { Persona, Purpose } from '../../types/personaPurpose.ts';
 import { PromptBuilder } from '../PromptBuilder.ts';
 
 /**
@@ -13,12 +14,20 @@ import { PromptBuilder } from '../PromptBuilder.ts';
  * about research papers with proper citation and JSON formatting.
  *
  * @param paperTitle - The title of the paper being discussed
+ * @param persona - The persona of the user 
+ * @param purpose - The purpose of the user 
  * @returns The chat system prompt
  */
-export function buildChatPrompt(paperTitle: string): string {
-  return new PromptBuilder()
+export function buildChatPrompt(paperTitle: string, persona?: Persona, purpose?: Purpose): string {
+  const builder = new PromptBuilder()
     .withRole('kumaAssistant')
-    .withTask('Answer questions about the research paper based on the provided context')
+    .withTask('Answer questions about the research paper based on the provided context');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withCustomInstruction('honesty', 'If the context doesn\'t contain enough information, say so honestly')
     .withLatexSupport()
     .withCustomInstruction('response-format', `Response Format:
@@ -39,12 +48,20 @@ Only include sources you actually referenced. If you didn't use specific sources
  * about images from research papers with proper citation and JSON formatting.
  *
  * @param paperTitle - The title of the paper containing the image
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The image chat system prompt
  */
-export function buildImageChatPrompt(paperTitle: string): string {
-  return new PromptBuilder()
+export function buildImageChatPrompt(paperTitle: string, persona?: Persona, purpose?: Purpose): string {
+  const builder = new PromptBuilder()
     .withCustomInstruction('role', 'You are Kuma, a friendly research bear assistant helping users understand images from research papers.')
-    .withTask('Answer questions about the image and how it relates to the paper')
+    .withTask('Answer questions about the image and how it relates to the paper');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withCustomInstruction('honesty', 'If the context doesn\'t contain enough information, say so honestly')
     .withLatexSupport()
     .withCustomInstruction('response-format', `Response Format:

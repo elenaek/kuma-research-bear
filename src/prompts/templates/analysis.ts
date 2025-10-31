@@ -5,6 +5,7 @@
 
 import { PromptBuilder } from '../PromptBuilder.ts';
 import type { PromptLanguage } from '../types.ts';
+import type { Persona, Purpose } from '../../types/personaPurpose.ts';
 
 /**
  * Build the system prompt for methodology analysis
@@ -14,11 +15,23 @@ import type { PromptLanguage } from '../types.ts';
  * for their study design, methods, and rigor.
  *
  * @param language - Target output language (en, es, ja)
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The methodology analysis system prompt
  */
-export function buildMethodologyAnalysisPrompt(language: PromptLanguage): string {
-  return new PromptBuilder()
-    .withRole('analyzer', 'methodology')
+export function buildMethodologyAnalysisPrompt(
+  language: PromptLanguage,
+  persona?: Persona,
+  purpose?: Purpose
+): string {
+  const builder = new PromptBuilder()
+    .withRole('analyzer', 'methodology');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withLatexSupport()
     .withMarkdownFormatting()
     .withLanguage(language, 'analysis')
@@ -33,11 +46,23 @@ export function buildMethodologyAnalysisPrompt(language: PromptLanguage): string
  * confounding variables in research studies.
  *
  * @param language - Target output language (en, es, ja)
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The confounder analysis system prompt
  */
-export function buildConfounderAnalysisPrompt(language: PromptLanguage): string {
-  return new PromptBuilder()
-    .withRole('analyzer', 'confounders')
+export function buildConfounderAnalysisPrompt(
+  language: PromptLanguage,
+  persona?: Persona,
+  purpose?: Purpose
+): string {
+  const builder = new PromptBuilder()
+    .withRole('analyzer', 'confounders');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withLatexSupport()
     .withMarkdownFormatting()
     .withLanguage(language, 'analysis')
@@ -52,11 +77,23 @@ export function buildConfounderAnalysisPrompt(language: PromptLanguage): string 
  * and significance of research.
  *
  * @param language - Target output language (en, es, ja)
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The implication analysis system prompt
  */
-export function buildImplicationAnalysisPrompt(language: PromptLanguage): string {
-  return new PromptBuilder()
-    .withRole('analyzer', 'implications')
+export function buildImplicationAnalysisPrompt(
+  language: PromptLanguage,
+  persona?: Persona,
+  purpose?: Purpose
+): string {
+  const builder = new PromptBuilder()
+    .withRole('analyzer', 'implications');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withLatexSupport()
     .withMarkdownFormatting()
     .withLanguage(language, 'analysis')
@@ -71,11 +108,23 @@ export function buildImplicationAnalysisPrompt(language: PromptLanguage): string
  * and constraints in studies.
  *
  * @param language - Target output language (en, es, ja)
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
  * @returns The limitation analysis system prompt
  */
-export function buildLimitationAnalysisPrompt(language: PromptLanguage): string {
-  return new PromptBuilder()
-    .withRole('analyzer', 'limitations')
+export function buildLimitationAnalysisPrompt(
+  language: PromptLanguage,
+  persona?: Persona,
+  purpose?: Purpose
+): string {
+  const builder = new PromptBuilder()
+    .withRole('analyzer', 'limitations');
+
+  // Add persona/purpose if provided
+  if (persona) builder.withPersona(persona);
+  if (purpose) builder.withPurpose(purpose);
+
+  return builder
     .withLatexSupport()
     .withMarkdownFormatting()
     .withLanguage(language, 'analysis')

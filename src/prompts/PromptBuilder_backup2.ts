@@ -6,8 +6,6 @@
  * const prompt = new PromptBuilder()
  *   .withRole('researchAssistant')
  *   .withTask('Explain complex academic papers')
- *   .withPersona('professional')
- *   .withPurpose('learning')
  *   .withLatexSupport()
  *   .withLanguage('en')
  *   .build();
@@ -15,7 +13,6 @@
  */
 
 import type { RoleType, PromptLanguage, BuiltPrompt, PromptComponent } from './types';
-import type { Persona, Purpose } from '../types/personaPurpose';
 import { ROLES, ANALYZER_ROLES, UTILITY_ROLES } from './components/roles.ts';
 import {
   LATEX_RULES,
@@ -24,8 +21,6 @@ import {
   JSON_FORMAT_REMINDER,
 } from './components/formatting.ts';
 import { getLanguageInstruction, getGlossaryLanguageInstruction } from './components/language.ts';
-import { getPersonaInstruction, getPersonaTokenCount } from './components/personas.ts';
-import { getPurposeInstruction, getPurposeTokenCount } from './components/purposes.ts';
 
 export class PromptBuilder {
   private components: Array<{ name: string; component: PromptComponent }> = [];
@@ -137,36 +132,6 @@ export class PromptBuilder {
     this.components.push({
       name: 'glossary-language',
       component: getGlossaryLanguageInstruction(language),
-    });
-    return this;
-  }
-
-  /**
-   * Add persona-based tone and communication style
-   * @param persona - User persona (professional or student)
-   */
-  withPersona(persona: Persona): this {
-    this.components.push({
-      name: 'persona',
-      component: {
-        content: getPersonaInstruction(persona),
-        tokens: getPersonaTokenCount(),
-      },
-    });
-    return this;
-  }
-
-  /**
-   * Add purpose-based focus and approach
-   * @param purpose - User purpose (writing or learning)
-   */
-  withPurpose(purpose: Purpose): this {
-    this.components.push({
-      name: 'purpose',
-      component: {
-        content: getPurposeInstruction(purpose),
-        tokens: getPurposeTokenCount(),
-      },
     });
     return this;
   }

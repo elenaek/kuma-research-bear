@@ -16,6 +16,7 @@ import { ExplanationSection } from './components/ExplanationSection.tsx';
 import { SummarySection } from './components/SummarySection.tsx';
 import { OriginalPaperTab } from './components/OriginalPaperTab.tsx';
 import { CitationsSection } from './components/CitationsSection.tsx';
+import { SettingsTab } from './components/SettingsTab.tsx';
 import { OperationBanner } from './components/ui/OperationBanner.tsx';
 import { TabButton } from './components/ui/TabButton.tsx';
 import { TabDropdown } from './components/ui/TabDropdown.tsx';
@@ -34,7 +35,7 @@ import { logger } from '../utils/logger.ts';
 
 type ViewState = 'loading' | 'empty' | 'content' | 'stored-only';
 type TabType = 'summary' | 'explanation' | 'qa' | 'analysis' | 'glossary' | 'original';
-type TopLevelTab = 'papers' | 'citations';
+type TopLevelTab = 'papers' | 'citations' | 'settings';
 
 interface ExplanationData {
   paper: ResearchPaper;
@@ -1254,6 +1255,13 @@ Source: ${paper.url}
           {topLevelTab === 'citations' && (
             <div class="tab-content space-y-4">
               <CitationsSection />
+            </div>
+          )}
+
+          {/* Settings Tab Content */}
+          {topLevelTab === 'settings' && (
+            <div class="tab-content">
+              <SettingsTab />
             </div>
           )}
 

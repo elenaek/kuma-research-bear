@@ -21,8 +21,8 @@ interface IntegratedHeaderProps {
   currentPaperTitle?: string;
 
   // Top-level tab state
-  topLevelTab: 'papers' | 'citations';
-  onTopLevelTabChange: (tab: 'papers' | 'citations') => void;
+  topLevelTab: 'papers' | 'citations' | 'settings';
+  onTopLevelTabChange: (tab: 'papers' | 'citations' | 'settings') => void;
 
   // Status
   isCheckingStorage?: boolean;
@@ -162,6 +162,17 @@ export const IntegratedHeader = memo(function IntegratedHeader(props: Integrated
             style={topLevelTab === 'citations' ? 'margin-bottom: -1px;' : ''}
           >
             Citations
+          </button>
+          <button
+            onClick={() => onTopLevelTabChange('settings')}
+            class={`px-2 py-2 text-sm font-medium rounded-t-lg transition-all hover:cursor-pointer ${
+              topLevelTab === 'settings'
+                ? 'bg-white text-green-800 border border-gray-200 border-b-0 shadow-sm relative z-10'
+                : 'bg-gray-50 text-gray-600 border border-transparent hover:bg-gray-100 hover:text-gray-900 hover:shadow-sm'
+            }`}
+            style={topLevelTab === 'settings' ? 'margin-bottom: -1px;' : ''}
+          >
+            Settings
           </button>
         </div>
       </div>

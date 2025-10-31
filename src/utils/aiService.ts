@@ -22,7 +22,7 @@ import {
 } from '../types/index.ts';
 import { JSONSchema } from '../utils/typeToSchema.ts';
 import { getSchemaForLanguage } from '../schemas/analysisSchemas.multilang.ts';
-import { getOutputLanguage } from './settingsService.ts';
+import { getOutputLanguage, getPersona, getPurpose } from './settingsService.ts';
 import { getOptimalRAGChunkCount } from './adaptiveRAGService.ts';
 import { logger } from './logger.ts';
 import { buildSimplifyTextPrompt } from '../prompts/templates/simplification.ts';
@@ -245,16 +245,19 @@ class ChromeAIService {
 
       // Import schema for structured output
       const { imageExplanationSchema } = await import('../schemas/analysisSchemas.ts');
+      const persona = await getPersona();
+      const purpose = await getPurpose();
 
       // Create a session with image input support
       const session = await LanguageModel.create({
-        temperature: 0.7,
+        temperature: 0.0,
         topK: 3,
         expectedInputs: [{ type: 'image' }],
-        systemPrompt: buildImageExplanationPrompt(),
+        systemPrompt: buildImageExplanationPrompt(persona, purpose),
       });
 
       logger.debug('AI_SERVICE', '[ImageExplain] Session created, sending image...');
+
 
       // Use append() method to send multimodal content
       await session.append([
@@ -267,45 +270,6 @@ class ChromeAIService {
 
 Paper abstract: ${paperAbstract}
 
-Please analyze this image and provide:
-1. A concise title (3-7 words) describing what the image shows
-2. A detailed explanation covering:
-   - What the image depicts (chart, diagram, photo, etc.)
-   - Key findings or information shown
-   - How it relates to the paper's research
-   - Any important trends, patterns, or notable elements
-
-Keep the explanation concise (2-3 paragraphs) and accessible to readers who may not be experts in the field.
-
-FORMATTING INSTRUCTIONS:
-- Use markdown formatting (e.g., **bold**, *italic*, bullet points, numbered lists, etc.) to structure your explanation
-- For mathematical equations, formulas, or variables, use LaTeX notation:
-  * Inline math: $equation$ (e.g., $E = mc^2$)
-  * Display math: $$equation$$ (e.g., $$\\frac{1}{2}mv^2$$)
-- Use code blocks for algorithms or code snippets
-- Use bullet points or numbered lists for clarity
-
-Math formatting with LaTeX:
-- Use $expr$ for inline math, $$expr$$ for display equations
-- CRITICAL: In JSON strings, backslashes must be escaped by doubling them
-
-LaTeX Escaping Rules (CRITICAL - READ CAREFULLY):
-- Every LaTeX command needs TWO backslashes in your JSON output
-- Example: To render \\alpha, you must write: "The value is \\\\alpha"
-- Example: To render \\theta, you must write: "The formula uses \\\\theta"
-- Example: To render \\frac{a}{b}, you must write: "The fraction \\\\frac{a}{b}"
-
-IMPORTANT - Commands that look like escape sequences:
-- \\text{...} → Write as \\\\text{...} (NOT \\text which becomes tab + "ext")
-- \\theta → Write as \\\\theta (NOT \\theta which could break)
-- \\nabla → Write as \\\\nabla (NOT \\nabla which becomes newline + "abla")
-- \\nu → Write as \\\\nu (NOT \\nu which becomes newline + "u")
-- \\rho → Write as \\\\rho (NOT \\rho which becomes carriage return + "ho")
-- \\times, \\tan, \\tanh → Write as \\\\times, \\\\tan, \\\\tanh
-- \\ne, \\neq, \\not → Write as \\\\ne, \\\\neq, \\\\not
-
-More examples: \\\\alpha, \\\\beta, \\\\gamma, \\\\ell, \\\\sum, \\\\int, \\\\boldsymbol{x}, \\\\frac{a}{b}
-
 Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Spanish' : outputLanguage === 'ja' ? 'Japanese' : 'English'}.`,
             },
             {
@@ -317,7 +281,38 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
       ]);
 
       // Use structured output with responseConstraint
-      const response = await session.prompt('Please explain this image.', {
+      const response = await session.prompt(`
+${purpose === 'learning' ? `Explain this image in plain language.
+  Every sentence must be between 14-20 words.
+
+<Explanation Format>
+  ### What is shown (1-2 sentence overview of the image and its purpose.)
+
+  ### Key takeaways of image (In 3-5 bullet points, provide a guided explanation of the key aspects of the image.)
+
+  ### Why it matters (Describe in 1-2 sentences what is the significance of the image.)
+
+  ### Analogy (Generate an analogy that is 1-3 sentences long to help understand the core concepts illustrated in the image.)
+  </ Explanation Format>` 
+  : 
+  `Succinctly explain the image.
+
+  Every sentence must be between 14-20 words.
+
+  <Explanation Format>
+  ### What it is (1 sentence overview of the visual type and its purpose.) 
+
+  ### What is shown (in 3-5 bullet points, provide a guided explanation of the image.) 
+
+  ### Why it matters (Describe in 1-2 sentences what the significance of the image is.) 
+
+  ### For your paper (Describe in 1-3 bullet points how to integrate key concepts of this visual into an essay topic.) 
+
+  ### Examples (Provide 1-2 examples of integrating key concepts of this visual into an essay topic.)
+
+  ### Caveats (In 1-2 sentences, mention limitations, missing data, or possible bias of the image.)
+</Explanation Format>`
+}`, {
         responseConstraint: imageExplanationSchema,
       });
 
@@ -743,9 +738,11 @@ Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Sp
   ): Promise<ExplanationResult> {
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
+    const persona = await getPersona();
+    const purpose = await getPurpose();
     logger.debug('AI_SERVICE', '[ExplainAbstract] Output language:', outputLanguage);
 
-    const systemPrompt = buildExplainAbstractPrompt(outputLanguage as 'en' | 'es' | 'ja');
+    const systemPrompt = buildExplainAbstractPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose);
     const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
 
     // If hierarchical summary is provided, use it for richer context
@@ -887,7 +884,9 @@ ${abstract}`;
 
     // Fall back to Prompt API
     logger.debug('AI_SERVICE', '[Summary] Using Prompt API for summary generation');
-    const systemPrompt = buildSummaryPrompt();
+    const persona = await getPersona();
+    const purpose = await getPurpose();
+    const systemPrompt = buildSummaryPrompt(persona, purpose);
 
     // If hierarchical summary is provided, use it for comprehensive summary
     let input: string;
@@ -1431,8 +1430,9 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
     const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
-
-    const systemPrompt = buildMethodologyAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja');
+    const persona = await getPersona();
+    const purpose = await getPurpose();
+    const systemPrompt = buildMethodologyAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose);
 
     try {
       // Import RAG and quota services
@@ -1566,8 +1566,9 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
     const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
-
-    const systemPrompt = buildConfounderAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja');
+    const persona = await getPersona();
+    const purpose = await getPurpose();
+    const systemPrompt = buildConfounderAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose);
 
     try {
       // Import RAG and quota services
@@ -1696,8 +1697,9 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
     const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
-
-    const systemPrompt = buildImplicationAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja');
+    const persona = await getPersona();
+    const purpose = await getPurpose();
+    const systemPrompt = buildImplicationAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose);
 
     try {
       // Import RAG and quota services
@@ -1826,8 +1828,9 @@ Provide a comprehensive analysis of real-world applications, significance, and f
     // Get user's preferred output language
     const outputLanguage = await getOutputLanguage();
     const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
-
-    const systemPrompt = buildLimitationAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja');
+    const persona = await getPersona();
+    const purpose = await getPurpose();
+    const systemPrompt = buildLimitationAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose);
 
     try {
       // Import RAG and quota services
@@ -2035,8 +2038,9 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
         })
         .join('\n\n---\n\n');
     };
-
-    const systemPrompt = buildQAPrompt(outputLanguage as 'en' | 'es' | 'ja');
+    const persona = await getPersona();
+    const purpose = await getPurpose();
+    const systemPrompt = buildQAPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose);
 
     // Include language in context ID to ensure separate sessions per language
     const languageContextId = `${contextId}-${outputLanguage}`;
