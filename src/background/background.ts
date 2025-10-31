@@ -664,14 +664,63 @@ export async function updateContextMenuForPaper(paperUrl: string) {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab?.id) return;
 
-  // PDF plugin returns tab.id = -1, need to get the actual active tab
-  if (tab.id === -1) {
-    const tabs = await chrome.tabs.query({currentWindow: true, active: true});
-    if (!tabs[0]?.id) return;
-    tab = tabs[0];
-  }
-
   try {
+    // Handle "Open Sidepanel" FIRST to preserve user gesture
+    // Must be before any async operations (like tab.id = -1 fix)
+    if (info.menuItemId === CONTEXT_MENU_SIDEPANEL_ID) {
+      logger.debug('BACKGROUND_SCRIPT', '[ContextMenu] Open sidepanel triggered from context menu for tab', tab.id);
+
+      // For PDFs (tab.id === -1), use CALLBACK-based API to preserve user gesture
+      // Promises/async-await break the gesture chain (~1ms timeout)
+      if (tab.id === -1) {
+        // Use callback form (not await/Promise) to preserve user gesture
+        chrome.tabs.query({currentWindow: true, active: true}, (tabs) => {
+          if (!tabs[0]?.id) {
+            logger.error('BACKGROUND_SCRIPT', '[ContextMenu] Could not find active tab for PDF sidepanel');
+            return;
+          }
+
+          const actualTab = tabs[0];
+
+          // Open sidepanel with callback (preserves gesture)
+          chrome.sidePanel.open({ tabId: actualTab.id }, () => {
+            // After sidepanel opens, do navigation logic (can use Promises now)
+            isChatReady(actualTab.id).then((chatReady) => {
+              if (chatReady && actualTab.url) {
+                chrome.runtime.sendMessage({
+                  type: MessageType.NAVIGATE_TO_PAPER,
+                  payload: { url: actualTab.url },
+                });
+              }
+            }).catch((error) => {
+              logger.error('BACKGROUND_SCRIPT', '[ContextMenu] Error in navigation logic:', error);
+            });
+          });
+        });
+      } else {
+        // Normal tabs: await works fine here
+        await chrome.sidePanel.open({ tabId: tab.id });
+
+        // Check if we should navigate to paper
+        const chatReady = await isChatReady(tab.id);
+        if (chatReady && tab.url) {
+          await chrome.runtime.sendMessage({
+            type: MessageType.NAVIGATE_TO_PAPER,
+            payload: { url: tab.url },
+          });
+        }
+      }
+      return; // Early return to skip the rest
+    }
+
+    // PDF plugin returns tab.id = -1, need to get the actual active tab
+    // (Only needed for non-sidepanel menu items now)
+    if (tab.id === -1) {
+      const tabs = await chrome.tabs.query({currentWindow: true, active: true});
+      if (!tabs[0]?.id) return;
+      tab = tabs[0];
+    }
+
     // Handle "Chat with Kuma" menu items
     if (info.menuItemId === CONTEXT_MENU_ID || info.menuItemId === CONTEXT_MENU_PAGE_ID) {
       // Send message to content script to toggle chatbox
@@ -710,23 +759,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
           }).catch(() => {}); // Ignore errors for tabs without content script
         }
       }
-    }
-    // Handle "Open Sidepanel" / "Open Paper in Sidepanel" menu item
-    else if (info.menuItemId === CONTEXT_MENU_SIDEPANEL_ID) {
-      logger.debug('BACKGROUND_SCRIPT', '[ContextMenu] Open sidepanel triggered from context menu for tab', tab.id);
-
-      // Always open sidepanel FIRST (preserves user gesture)
-      await chrome.sidePanel.open({ tabId: tab.id });
-
-      // THEN check if we should navigate
-      const chatReady = await isChatReady(tab.id);
-      if (chatReady && tab.url) {
-        await chrome.runtime.sendMessage({
-          type: MessageType.NAVIGATE_TO_PAPER,
-          payload: { url: tab.url },
-        });
-      }
-      // Otherwise, sidepanel shows default view (0th index paper)
     }
   } catch (error) {
     logger.error('BACKGROUND_SCRIPT', '[ContextMenu] Error handling context menu click:', error);
