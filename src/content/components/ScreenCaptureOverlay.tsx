@@ -139,7 +139,7 @@ export const ScreenCaptureOverlay = ({
         width: '100vw',
         height: '100vh',
         zIndex: 2147483646, // Above PDF button, below chatbox
-        cursor: isDragging ? 'crosshair' : 'default',
+        cursor: 'crosshair',
       }}
     >
       {/* Instructions */}
@@ -225,7 +225,7 @@ export const ScreenCaptureOverlay = ({
                 boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
               }}
             >
-              Click to capture • Press ESC to cancel
+              Click selected region to capture and discuss with Kuma • Press ESC to cancel
             </div>
           )}
         </div>
