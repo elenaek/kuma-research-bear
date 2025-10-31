@@ -375,13 +375,32 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
       case MessageType.STORE_PAPER_IN_DB:
         let tabId = message.payload.tabId || sender.tab?.id;
 
-        // Fallback: Look up tabId from pending extractions (for offscreen-processed papers)
+        // Fallback 1: Look up tabId from pending extractions (for offscreen-processed papers)
         if (!tabId && message.payload.paper?.url) {
           const paperUrl = message.payload.paper.url;
           tabId = pendingExtractions.get(paperUrl);
           if (tabId) {
             logger.debug('BACKGROUND_SCRIPT', '[Background] Retrieved tabId', tabId, 'from pending extractions for:', paperUrl);
             pendingExtractions.delete(paperUrl); // Clean up mapping
+          }
+        }
+
+        // Fallback 2: Look up from tabPaperTracker using URL (for PDF papers)
+        if (!tabId && message.payload.paperUrl) {
+          const tabs = tabPaperTracker.getTabsForPaperUrl(message.payload.paperUrl);
+          if (tabs.length > 0) {
+            tabId = tabs[0]; // Use first matching tab
+            logger.debug('BACKGROUND_SCRIPT', '[Background] Retrieved tabId', tabId, 'from tabPaperTracker for:', message.payload.paperUrl);
+          }
+        }
+
+        // Fallback 3: Query all tabs for matching URL (last resort for PDFs)
+        if (!tabId && message.payload.paperUrl) {
+          const allTabs = await chrome.tabs.query({});
+          const matchingTab = allTabs.find(t => t.url === message.payload.paperUrl);
+          if (matchingTab?.id) {
+            tabId = matchingTab.id;
+            logger.debug('BACKGROUND_SCRIPT', '[Background] Retrieved tabId', tabId, 'from chrome.tabs.query for:', message.payload.paperUrl);
           }
         }
 

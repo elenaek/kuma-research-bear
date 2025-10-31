@@ -3,7 +3,7 @@ import * as ChromeService from '../../services/ChromeService.ts';
 import { extractFullText } from './textExtractionService.ts';
 import { detectResearchPaper } from '../../utils/paperDetection.ts';
 import { generatePaperId } from '../../utils/dbService.ts';
-import { extractResearchPaper } from '../../utils/contentExtractor.ts';
+import { extractResearchPaper, isPDFPage } from '../../utils/contentExtractor.ts';
 import { logger } from '../../utils/logger.ts';
 
 /**
@@ -129,9 +129,25 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
 
   try {
     // Step 1: Detect if this is a research paper
-    logger.debug('CONTENT_SCRIPT', '[PaperStorage] Detecting if page is a research paper...');
-    const detectionResult = await detectResearchPaper();
-    logger.debug('CONTENT_SCRIPT', '[PaperStorage] Detection result:', detectionResult);
+    // For PDFs, skip HTML-based detection (PDF viewer doesn't have HTML structure)
+    const isPDF = isPDFPage();
+    let detectionResult;
+
+    if (isPDF) {
+      // PDFs from academic sources are pre-validated
+      // Skip HTML structure checks which don't apply to PDF viewer
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] PDF detected, skipping HTML-based detection');
+      detectionResult = {
+        isResearchPaper: true,
+        confidence: 100,
+        reason: 'PDF from academic source (pre-validated)',
+      };
+    } else {
+      // HTML pages - use full detection
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] Detecting if page is a research paper...');
+      detectionResult = await detectResearchPaper();
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] Detection result:', detectionResult);
+    }
 
     // If not a research paper, return early (don't store)
     if (!detectionResult.isResearchPaper) {
@@ -166,35 +182,85 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
       };
     }
 
-    // NEW FLOW: Send HTML to background for offscreen extraction (fire-and-forget)
-    logger.debug('CONTENT_SCRIPT', '[PaperStorage] Research paper detected ✓ Sending HTML to background for extraction...');
-
-    // Serialize HTML
-    const paperHtml = document.documentElement.outerHTML;
-
     // Generate paper ID for returning to caller
     const paperId = generatePaperId(paper.url);
 
-    // Send to background script which will trigger offscreen extraction
-    chrome.runtime.sendMessage({
-      type: MessageType.EXTRACT_PAPER_HTML,
-      payload: {
-        paperHtml,
-        paperUrl: paper.url,
-        paper,
+    // isPDF is already defined earlier in the function
+    if (isPDF) {
+      // PDF FLOW: Extract PDF text and send directly to background for storage
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] PDF detected ✓ Extracting PDF text...');
+
+      try {
+        // Extract full PDF text using PDF.js
+        const fullText = await extractFullText();
+
+        if (!fullText || fullText.trim().length === 0) {
+          logger.error('CONTENT_SCRIPT', '[PaperStorage] ❌ PDF extraction returned empty text');
+          return {
+            stored: false,
+            chunkCount: 0,
+            alreadyStored: false,
+            storageError: 'PDF extraction failed: No text extracted from PDF',
+          };
+        }
+
+        logger.debug('CONTENT_SCRIPT', '[PaperStorage] ✓ PDF text extracted, sending to background for chunking...');
+
+        // Send PDF text directly to background for chunking and storage
+        chrome.runtime.sendMessage({
+          type: MessageType.STORE_PAPER_IN_DB,
+          payload: {
+            paper,
+            fullText,
+            paperUrl: paper.url,  // Include URL for tabId lookup
+          }
+        });
+
+        logger.debug('CONTENT_SCRIPT', '[PaperStorage] ✓ PDF sent to background for chunking');
+
+        return {
+          stored: true,
+          chunkCount: 0, // Will be populated when chunking completes
+          alreadyStored: false,
+          paperId,
+        };
+      } catch (pdfError) {
+        logger.error('CONTENT_SCRIPT', '[PaperStorage] ❌ PDF extraction failed:', pdfError);
+        return {
+          stored: false,
+          chunkCount: 0,
+          alreadyStored: false,
+          storageError: `PDF extraction failed: ${pdfError instanceof Error ? pdfError.message : String(pdfError)}`,
+        };
       }
-    });
+    } else {
+      // HTML FLOW: Send HTML to background for offscreen extraction (fire-and-forget)
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] HTML page detected ✓ Sending HTML to background for extraction...');
 
-    logger.debug('CONTENT_SCRIPT', '[PaperStorage] ✓ Extraction message sent to background (processing in offscreen)');
+      // Serialize HTML
+      const paperHtml = document.documentElement.outerHTML;
 
-    // Return immediately - extraction will complete asynchronously
-    // User can navigate away while extraction happens
-    return {
-      stored: true,
-      chunkCount: 0, // Will be populated when extraction completes
-      alreadyStored: false,
-      paperId,
-    };
+      // Send to background script which will trigger offscreen extraction
+      chrome.runtime.sendMessage({
+        type: MessageType.EXTRACT_PAPER_HTML,
+        payload: {
+          paperHtml,
+          paperUrl: paper.url,
+          paper,
+        }
+      });
+
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] ✓ Extraction message sent to background (processing in offscreen)');
+
+      // Return immediately - extraction will complete asynchronously
+      // User can navigate away while extraction happens
+      return {
+        stored: true,
+        chunkCount: 0, // Will be populated when extraction completes
+        alreadyStored: false,
+        paperId,
+      };
+    }
   } catch (error) {
     // Capture detailed error message for debugging
     logger.error('CONTENT_SCRIPT', '[PaperStorage] ❌ Failed to store paper:', {
@@ -218,8 +284,24 @@ export async function storePaper(paper: ResearchPaper): Promise<StorageResult> {
 export async function storePaperSimple(paper: ResearchPaper): Promise<boolean> {
   try {
     // Detect if this is a research paper
-    logger.debug('CONTENT_SCRIPT', '[PaperStorage] Detecting if page is a research paper...');
-    const detectionResult = await detectResearchPaper();
+    // For PDFs, skip HTML-based detection (PDF viewer doesn't have HTML structure)
+    const isPDF = isPDFPage();
+    let detectionResult;
+
+    if (isPDF) {
+      // PDFs from academic sources are pre-validated
+      // Skip HTML structure checks which don't apply to PDF viewer
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] PDF detected, skipping HTML-based detection');
+      detectionResult = {
+        isResearchPaper: true,
+        confidence: 100,
+        reason: 'PDF from academic source (pre-validated)',
+      };
+    } else {
+      // HTML pages - use full detection
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] Detecting if page is a research paper...');
+      detectionResult = await detectResearchPaper();
+    }
 
     // If not a research paper, return false (don't store)
     if (!detectionResult.isResearchPaper) {
@@ -235,24 +317,58 @@ export async function storePaperSimple(paper: ResearchPaper): Promise<boolean> {
       return true;
     }
 
-    // NEW FLOW: Send HTML to background for offscreen extraction (fire-and-forget)
-    logger.debug('CONTENT_SCRIPT', '[PaperStorage] Research paper detected ✓ Sending HTML to background for extraction...');
+    // isPDF is already defined earlier in the function
+    if (isPDF) {
+      // PDF FLOW: Extract PDF text and send directly to background for storage
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] PDF detected ✓ Extracting PDF text...');
 
-    // Serialize HTML
-    const paperHtml = document.documentElement.outerHTML;
+      try {
+        // Extract full PDF text using PDF.js
+        const fullText = await extractFullText();
 
-    // Send to background script which will trigger offscreen extraction
-    chrome.runtime.sendMessage({
-      type: MessageType.EXTRACT_PAPER_HTML,
-      payload: {
-        paperHtml,
-        paperUrl: paper.url,
-        paper,
+        if (!fullText || fullText.trim().length === 0) {
+          logger.error('CONTENT_SCRIPT', '[PaperStorage] ❌ PDF extraction returned empty text');
+          return false;
+        }
+
+        logger.debug('CONTENT_SCRIPT', '[PaperStorage] ✓ PDF text extracted, sending to background for chunking...');
+
+        // Send PDF text directly to background for chunking and storage
+        chrome.runtime.sendMessage({
+          type: MessageType.STORE_PAPER_IN_DB,
+          payload: {
+            paper,
+            fullText,
+            paperUrl: paper.url,  // Include URL for tabId lookup
+          }
+        });
+
+        logger.debug('CONTENT_SCRIPT', '[PaperStorage] ✓ PDF sent to background for chunking');
+        return true;
+      } catch (pdfError) {
+        logger.error('CONTENT_SCRIPT', '[PaperStorage] ❌ PDF extraction failed:', pdfError);
+        return false;
       }
-    });
+    } else {
+      // HTML FLOW: Send HTML to background for offscreen extraction (fire-and-forget)
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] HTML page detected ✓ Sending HTML to background for extraction...');
 
-    logger.debug('CONTENT_SCRIPT', '[PaperStorage] ✓ Extraction message sent to background (processing in offscreen)');
-    return true;
+      // Serialize HTML
+      const paperHtml = document.documentElement.outerHTML;
+
+      // Send to background script which will trigger offscreen extraction
+      chrome.runtime.sendMessage({
+        type: MessageType.EXTRACT_PAPER_HTML,
+        payload: {
+          paperHtml,
+          paperUrl: paper.url,
+          paper,
+        }
+      });
+
+      logger.debug('CONTENT_SCRIPT', '[PaperStorage] ✓ Extraction message sent to background (processing in offscreen)');
+      return true;
+    }
   } catch (error) {
     logger.warn('CONTENT_SCRIPT', '[PaperStorage] Failed to store paper:', error);
     return false;
