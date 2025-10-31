@@ -45,7 +45,7 @@
         "<all_urls>"
       ],
       "js": ["src/content/content.ts"],
-      "css": ["src/content/content.css", "src/styles/globals.css"],
+      "css": ["src/content/content.css"],
       "match_about_blank": true
     }
   ],
