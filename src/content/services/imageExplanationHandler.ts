@@ -219,6 +219,56 @@ class ImageExplanationHandler {
   }
 
   /**
+   * Handle screen capture from PDF
+   * Creates a synthetic image state for the captured screen area
+   * Public method called by pdfScreenCaptureService
+   */
+  async handleScreenCapture(imageUrl: string, blob: Blob): Promise<void> {
+    if (!this.currentPaper) {
+      logger.warn('CONTENT_SCRIPT', '[ImageExplain] No current paper, cannot process screen capture');
+      return;
+    }
+
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Handling screen capture:', imageUrl);
+
+    try {
+      // Create synthetic image state (no actual HTMLImageElement for screen captures)
+      const imageState: ImageState = {
+        element: null as any, // Placeholder - we have the blob directly
+        url: imageUrl,
+        title: null,
+        explanation: null,
+        isLoading: false,
+        buttonContainer: null, // No button for screen captures
+        buttonRoot: null,
+      };
+
+      // Store in imageStates map
+      this.imageStates.set(imageUrl, imageState);
+
+      // Open chatbox with the captured image
+      const title = 'PDF Image Capture';
+      await chatboxInjector.openImageTab(imageUrl, blob, null, title, true);
+
+      // Generate explanation
+      await this.generateExplanationFromBlob(imageUrl, blob);
+
+      // Update chatbox with explanation
+      if (imageState.explanation) {
+        await chatboxInjector.updateImageTabExplanation(
+          imageUrl,
+          imageState.explanation,
+          imageState.title || undefined
+        );
+      }
+
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Screen capture processed');
+    } catch (error) {
+      logger.error('CONTENT_SCRIPT', '[ImageExplain] Error processing screen capture:', error);
+    }
+  }
+
+  /**
    * Open image discussion (unified method for button and context menu)
    */
   private async openImageDiscussion(imageUrl: string) {
@@ -309,6 +359,56 @@ class ImageExplanationHandler {
       imageState.isLoading = false;
       // NOTE: No longer showing bubble here - using multi-tab chatbox instead
       this.renderButton(imageUrl, imageState.buttonRoot!);
+    }
+  }
+
+  /**
+   * Generate explanation from blob directly (for screen captures)
+   * Similar to generateExplanation but skips the element-to-blob conversion
+   */
+  private async generateExplanationFromBlob(imageUrl: string, blob: Blob): Promise<void> {
+    const imageState = this.imageStates.get(imageUrl);
+    if (!imageState || !this.currentPaper) {
+      return;
+    }
+
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Generating explanation from blob for:', imageUrl);
+
+    imageState.isLoading = true;
+
+    try {
+      // Generate explanation using AI (now returns {title, explanation})
+      const result = await aiService.explainImage(
+        blob,
+        this.currentPaper.title,
+        this.currentPaper.abstract
+      );
+
+      if (result) {
+        imageState.title = result.title;
+        imageState.explanation = result.explanation;
+
+        // Store in database
+        await ChromeService.storeImageExplanation(
+          this.currentPaper.id,
+          imageUrl,
+          result.title,
+          result.explanation
+        );
+
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Generated and stored explanation from blob');
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] Title:', result.title);
+      } else {
+        logger.warn('CONTENT_SCRIPT', '[ImageExplain] Failed to generate explanation from blob');
+        imageState.title = 'Error';
+        imageState.explanation = 'Sorry, I could not generate an explanation for this image. The multimodal API may not be available or there was an error processing the image.';
+      }
+    } catch (error) {
+      logger.error('CONTENT_SCRIPT', '[ImageExplain] Error generating explanation from blob:', error);
+      imageState.title = 'Error';
+      imageState.explanation = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    } finally {
+      imageState.isLoading = false;
     }
   }
 

@@ -151,6 +151,20 @@ async function setupTextSelection() {
 }
 
 /**
+ * Initialize PDF screen capture
+ * Sets up the capture button for PDF pages only
+ */
+async function setupPDFCapture() {
+  try {
+    const { pdfScreenCaptureService } = await import('./services/pdfScreenCaptureService.ts');
+    await pdfScreenCaptureService.initializePDFCapture();
+    logger.debug('CONTENT_SCRIPT', '[Content] ✓ PDF screen capture initialized');
+  } catch (error) {
+    logger.error('CONTENT_SCRIPT', '[Content] Error initializing PDF screen capture:', error);
+  }
+}
+
+/**
  * Wait for page to be fully loaded (including images)
  */
 async function waitForPageReady(): Promise<void> {
@@ -299,6 +313,9 @@ async function initializeImageButtonsForStoredPaper() {
 
   // Initialize text selection handler (depends on chatbox)
   await setupTextSelection();
+
+  // Initialize PDF screen capture (PDF pages only)
+  await setupPDFCapture();
 
   // BUG FIX: Initialize image buttons for already-chunked papers (e.g., after extension reload)
   // This waits for page load internally to ensure images are ready

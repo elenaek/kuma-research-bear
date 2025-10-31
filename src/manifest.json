@@ -70,6 +70,7 @@
         "src/content/styles/askKumaButton.css",
         "src/content/styles/selectionToolbar.css",
         "src/content/styles/imageExplainButton.css",
+        "src/content/styles/pdfCaptureButton.css",
         "lotties/*",
         "icons/*"
       ],

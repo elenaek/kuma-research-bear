@@ -124,6 +124,7 @@ export const ChatBox = ({
     if (pdfEmbed) return true;
     return false;
   });
+  const [pdfCaptureUrl, setPdfCaptureUrl] = useState<string | null>(null); // Object URL for PDF capture thumbnails
 
   const chatboxRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -334,6 +335,33 @@ export const ChatBox = ({
       return () => clearTimeout(timer);
     }
   }, [activeTabId, isMinimized]);
+
+  // Create object URL for PDF capture thumbnails
+  useEffect(() => {
+    // Get active tab
+    const activeTab = tabs.find(t => t.id === activeTabId);
+
+    // Clean up previous URL if it exists
+    if (pdfCaptureUrl) {
+      URL.revokeObjectURL(pdfCaptureUrl);
+      setPdfCaptureUrl(null);
+    }
+
+    // Only create object URL for PDF captures (synthetic URLs starting with "pdf-capture-")
+    if (activeTab?.type === 'image' &&
+        activeTab?.imageUrl?.startsWith('pdf-capture-') &&
+        activeTab?.imageBlob) {
+      const objectUrl = URL.createObjectURL(activeTab.imageBlob);
+      setPdfCaptureUrl(objectUrl);
+    }
+
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      if (pdfCaptureUrl) {
+        URL.revokeObjectURL(pdfCaptureUrl);
+      }
+    };
+  }, [activeTabId, tabs]);
 
   // Auto-focus input when opening or maximizing
   useEffect(() => {
@@ -915,9 +943,9 @@ export const ChatBox = ({
               ) : (
                 <>
                   {/* Show thumbnail for first message in image tabs */}
-                  {idx === 0 && msg.role === 'assistant' && activeTab?.type === 'image' && activeTab?.imageUrl && (
+                  {idx === 0 && msg.role === 'assistant' && activeTab?.type === 'image' && (pdfCaptureUrl || activeTab?.imageUrl) && (
                     <img
-                      src={activeTab.imageUrl}
+                      src={pdfCaptureUrl || activeTab.imageUrl}
                       alt="Explained image"
                       class="chatbox-image-thumbnail"
                       title="Click to scroll to this image in the page"

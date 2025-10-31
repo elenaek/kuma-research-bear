@@ -521,6 +521,31 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         })();
         return true; // Keep channel open for async response
 
+      // PDF Screen Capture
+      case MessageType.CAPTURE_PDF_SCREENSHOT:
+        (async () => {
+          try {
+            const tabId = sender.tab?.id;
+            const windowId = sender.tab?.windowId;
+
+            if (!tabId || !windowId) {
+              sendResponse({ success: false, error: 'No tab or window ID available' });
+              return;
+            }
+
+            // Capture visible tab as dataURL
+            const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
+              format: 'png',
+            });
+
+            sendResponse({ success: true, dataUrl });
+          } catch (error) {
+            logger.error('BACKGROUND_SCRIPT', '[PDFCapture] Error capturing screenshot:', error);
+            sendResponse({ success: false, error: String(error) });
+          }
+        })();
+        return true; // Keep channel open for async response
+
       default:
         sendResponse({ success: false, error: 'Unknown message type' });
     }
