@@ -9,13 +9,14 @@ import { logger } from './logger.ts';
  */
 
 export const DB_NAME = 'KumaResearchBearDB';
-export const DB_VERSION = 5;
+export const DB_VERSION = 7;
 export const PAPERS_STORE = 'papers';
 export const CHUNKS_STORE = 'chunks';
 export const IMAGE_EXPLANATIONS_STORE = 'imageExplanations';
 export const IMAGE_CHATS_STORE = 'imageChats';
 export const CITATIONS_STORE = 'citations';
 export const CITATIONS_SETTINGS_STORE = 'citationsSettings';
+export const SCREEN_CAPTURES_STORE = 'screenCaptures';
 
 /**
  * Image chat entry stored in IndexedDB
@@ -28,6 +29,26 @@ export interface ImageChatEntry {
   chatHistory: ChatMessage[];
   conversationState: ConversationState;
   lastUpdated: number;
+}
+
+/**
+ * Screen capture entry stored in IndexedDB
+ * Stores image blobs for screen captures
+ * Keyed by composite ID: `${paperId}-${imageUrl}`
+ */
+export interface ScreenCaptureEntry {
+  id: string;           // Composite: `${paperId}-${imageUrl}`
+  paperId: string;
+  imageUrl: string;     // The synthetic URL (screen-capture-xxx or pdf-capture-xxx)
+  blob: Blob;           // The actual image blob
+  timestamp: number;
+  // Optional overlay position for HTML pages (not PDFs) - enables scroll-to-image and compass features
+  overlayPosition?: {
+    pageX: number;
+    pageY: number;
+    width: number;
+    height: number;
+  };
 }
 
 /**
@@ -119,7 +140,16 @@ export function initDB(): Promise<IDBDatabase> {
         logger.debug('DATABASE', '✓ Created citations settings store (DB_VERSION 5)');
       }
 
-      logger.debug('DATABASE', '✓ IndexedDB initialized with stores:', PAPERS_STORE, CHUNKS_STORE, IMAGE_EXPLANATIONS_STORE, IMAGE_CHATS_STORE, CITATIONS_STORE, CITATIONS_SETTINGS_STORE);
+      // Create screen captures store (DB_VERSION 6)
+      if (!db.objectStoreNames.contains(SCREEN_CAPTURES_STORE)) {
+        const screenCapturesStore = db.createObjectStore(SCREEN_CAPTURES_STORE, { keyPath: 'id' });
+        screenCapturesStore.createIndex('paperId', 'paperId', { unique: false });
+        screenCapturesStore.createIndex('imageUrl', 'imageUrl', { unique: false });
+        screenCapturesStore.createIndex('timestamp', 'timestamp', { unique: false });
+        logger.debug('DATABASE', '✓ Created screen captures store (DB_VERSION 6)');
+      }
+
+      logger.debug('DATABASE', '✓ IndexedDB initialized with stores:', PAPERS_STORE, CHUNKS_STORE, IMAGE_EXPLANATIONS_STORE, IMAGE_CHATS_STORE, CITATIONS_STORE, CITATIONS_SETTINGS_STORE, SCREEN_CAPTURES_STORE);
     };
   });
 }
@@ -455,6 +485,10 @@ export async function deletePaper(paperId: string): Promise<boolean> {
     // Delete all image chats for this paper
     const deletedChats = await deleteImageChatsByPaper(paperId);
     logger.debug('DATABASE', `✓ Deleted ${deletedChats} image chats for paper`);
+
+    // Delete all screen captures for this paper
+    const deletedCaptures = await deleteScreenCapturesByPaper(paperId);
+    logger.debug('DATABASE', `✓ Deleted ${deletedCaptures} screen captures for paper`);
 
     // Delete paper
     const paperTransaction = db.transaction([PAPERS_STORE], 'readwrite');
@@ -1589,6 +1623,150 @@ export async function deleteImageChatsByPaper(paperId: string): Promise<number> 
   } catch (error) {
     db.close();
     logger.error('DATABASE', 'Error deleting image chats for paper:', error);
+    return 0;
+  }
+}
+
+/**
+ * Generate unique ID for a screen capture entry
+ * Composite ID: `${paperId}-${imageUrl}`
+ */
+function generateScreenCaptureId(paperId: string, imageUrl: string): string {
+  return `${paperId}-${imageUrl}`;
+}
+
+/**
+ * Store a screen capture blob
+ */
+export async function storeScreenCapture(
+  paperId: string,
+  imageUrl: string,
+  blob: Blob,
+  overlayPosition?: { pageX: number; pageY: number; width: number; height: number }
+): Promise<ScreenCaptureEntry> {
+  const db = await initDB();
+
+  try {
+    const id = generateScreenCaptureId(paperId, imageUrl);
+
+    const entry: ScreenCaptureEntry = {
+      id,
+      paperId,
+      imageUrl,
+      blob,
+      timestamp: Date.now(),
+      overlayPosition,
+    };
+
+    const transaction = db.transaction([SCREEN_CAPTURES_STORE], 'readwrite');
+    const store = transaction.objectStore(SCREEN_CAPTURES_STORE);
+
+    await new Promise<void>((resolve, reject) => {
+      const request = store.put(entry);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to store screen capture'));
+    });
+
+    logger.debug('DATABASE', '✓ Stored screen capture:', imageUrl);
+    db.close();
+    return entry;
+  } catch (error) {
+    db.close();
+    logger.error('DATABASE', 'Error storing screen capture:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get a screen capture blob by paper ID and image URL
+ */
+export async function getScreenCapture(
+  paperId: string,
+  imageUrl: string
+): Promise<ScreenCaptureEntry | null> {
+  const db = await initDB();
+
+  try {
+    const id = generateScreenCaptureId(paperId, imageUrl);
+    const transaction = db.transaction([SCREEN_CAPTURES_STORE], 'readonly');
+    const store = transaction.objectStore(SCREEN_CAPTURES_STORE);
+
+    const entry = await new Promise<ScreenCaptureEntry | null>((resolve) => {
+      const request = store.get(id);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => resolve(null);
+    });
+
+    db.close();
+    return entry;
+  } catch (error) {
+    db.close();
+    logger.error('DATABASE', 'Error getting screen capture:', error);
+    return null;
+  }
+}
+
+/**
+ * Delete a screen capture by paper ID and image URL
+ */
+export async function deleteScreenCapture(
+  paperId: string,
+  imageUrl: string
+): Promise<boolean> {
+  const db = await initDB();
+
+  try {
+    const id = generateScreenCaptureId(paperId, imageUrl);
+    const transaction = db.transaction([SCREEN_CAPTURES_STORE], 'readwrite');
+    const store = transaction.objectStore(SCREEN_CAPTURES_STORE);
+
+    await new Promise<void>((resolve, reject) => {
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(new Error('Failed to delete screen capture'));
+    });
+
+    logger.debug('DATABASE', '✓ Deleted screen capture:', imageUrl);
+    db.close();
+    return true;
+  } catch (error) {
+    db.close();
+    logger.error('DATABASE', 'Error deleting screen capture:', error);
+    return false;
+  }
+}
+
+/**
+ * Delete all screen captures for a paper
+ */
+export async function deleteScreenCapturesByPaper(paperId: string): Promise<number> {
+  const db = await initDB();
+
+  try {
+    const transaction = db.transaction([SCREEN_CAPTURES_STORE], 'readwrite');
+    const store = transaction.objectStore(SCREEN_CAPTURES_STORE);
+    const index = store.index('paperId');
+
+    const captures = await new Promise<ScreenCaptureEntry[]>((resolve, reject) => {
+      const request = index.getAll(paperId);
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(new Error('Failed to get screen captures for deletion'));
+    });
+
+    for (const capture of captures) {
+      await new Promise<void>((resolve, reject) => {
+        const request = store.delete(capture.id);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(new Error('Failed to delete screen capture'));
+      });
+    }
+
+    logger.debug('DATABASE', `✓ Deleted ${captures.length} screen captures for paper:`, paperId);
+    db.close();
+    return captures.length;
+  } catch (error) {
+    db.close();
+    logger.error('DATABASE', 'Error deleting screen captures for paper:', error);
     return 0;
   }
 }

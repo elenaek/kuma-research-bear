@@ -218,15 +218,22 @@ class ScreenCaptureService {
       // Create overlay element for HTML pages (not PDFs)
       // This allows scroll-to-image functionality
       let overlayElement: HTMLDivElement | undefined;
+      let overlayPosition: { pageX: number; pageY: number; width: number; height: number } | undefined;
       if (!isPDFPage()) {
         overlayElement = this.createCaptureOverlay(rect);
-        logger.debug('CONTENT_SCRIPT', '[ScreenCapture] Created overlay for HTML page');
+        overlayPosition = {
+          pageX: rect.pageX,
+          pageY: rect.pageY,
+          width: rect.width,
+          height: rect.height,
+        };
+        logger.debug('CONTENT_SCRIPT', '[ScreenCapture] Created overlay for HTML page at', overlayPosition);
       } else {
         logger.debug('CONTENT_SCRIPT', '[ScreenCapture] Skipping overlay for PDF page');
       }
 
       // Hand off to image explanation handler
-      await imageExplanationHandler.handleScreenCapture(imageUrl, croppedBlob, overlayElement);
+      await imageExplanationHandler.handleScreenCapture(imageUrl, croppedBlob, overlayElement, overlayPosition);
 
       logger.debug('CONTENT_SCRIPT', '[ScreenCapture] ✓ Screen capture complete');
     } catch (error) {

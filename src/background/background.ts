@@ -460,6 +460,19 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         sendResponse(await dbHandlers.handleGetImageExplanationsByPaper(message.payload));
         break;
 
+      // Screen Capture Operations
+      case MessageType.STORE_SCREEN_CAPTURE:
+        sendResponse(await dbHandlers.handleStoreScreenCapture(message.payload));
+        break;
+
+      case MessageType.GET_SCREEN_CAPTURE:
+        sendResponse(await dbHandlers.handleGetScreenCapture(message.payload));
+        break;
+
+      case MessageType.DELETE_SCREEN_CAPTURE:
+        sendResponse(await dbHandlers.handleDeleteScreenCapture(message.payload));
+        break;
+
       // Citation Operations
       case 'ADD_CITATION':
         sendResponse(await citationHandlers.handleAddCitation(message.payload));

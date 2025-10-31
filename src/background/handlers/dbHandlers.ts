@@ -381,6 +381,99 @@ export async function handleGetImageExplanationsByPaper(payload: any): Promise<a
 }
 
 /**
+ * Store a screen capture blob in IndexedDB
+ */
+export async function handleStoreScreenCapture(payload: any): Promise<any> {
+  try {
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Storing screen capture for:', payload.imageUrl);
+
+    // Reconstruct Blob from Base64 string (Chrome messaging uses JSON serialization)
+    const binaryString = atob(payload.blobDataBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const blob = new Blob([bytes], { type: payload.mimeType });
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Reconstructed blob from Base64:', blob.size, 'bytes, type:', blob.type);
+
+    const { storeScreenCapture } = await import('../../utils/dbService.ts');
+    const entry = await storeScreenCapture(
+      payload.paperId,
+      payload.imageUrl,
+      blob,
+      payload.overlayPosition
+    );
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] ✓ Screen capture stored');
+    return { success: true, entry };
+  } catch (dbError) {
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to store screen capture:', dbError);
+    return { success: false, error: String(dbError) };
+  }
+}
+
+/**
+ * Get a screen capture blob from IndexedDB
+ */
+export async function handleGetScreenCapture(payload: any): Promise<any> {
+  try {
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Getting screen capture for:', payload.imageUrl);
+    const { getScreenCapture } = await import('../../utils/dbService.ts');
+    const entry = await getScreenCapture(payload.paperId, payload.imageUrl);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Screen capture result:', entry ? 'Found' : 'Not found');
+
+    if (!entry) {
+      return { success: true, entry: null };
+    }
+
+    // Convert blob to base64 before sending back to content script (Chrome messaging uses JSON serialization)
+    const arrayBuffer = await entry.blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const mimeType = entry.blob.type;
+
+    // Convert Uint8Array to Base64 string (chunk to avoid call stack overflow)
+    const chunkSize = 0x8000; // 32KB chunks
+    let binaryString = '';
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+      binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    const blobDataBase64 = btoa(binaryString);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Converted blob to Base64:', blobDataBase64.length, 'chars');
+
+    return {
+      success: true,
+      entry: {
+        paperId: entry.paperId,
+        imageUrl: entry.imageUrl,
+        timestamp: entry.timestamp,
+        blobDataBase64,
+        mimeType,
+        overlayPosition: entry.overlayPosition,
+      }
+    };
+  } catch (dbError) {
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to get screen capture:', dbError);
+    return { success: false, error: String(dbError) };
+  }
+}
+
+/**
+ * Delete a screen capture blob from IndexedDB
+ */
+export async function handleDeleteScreenCapture(payload: any): Promise<any> {
+  try {
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Deleting screen capture for:', payload.imageUrl);
+    const { deleteScreenCapture } = await import('../../utils/dbService.ts');
+    const success = await deleteScreenCapture(payload.paperId, payload.imageUrl);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] ✓ Screen capture deleted');
+    return { success };
+  } catch (dbError) {
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to delete screen capture:', dbError);
+    return { success: false, error: String(dbError) };
+  }
+}
+
+/**
  * Extract paper from HTML in offscreen document
  * Receives HTML from content script and triggers offscreen extraction
  */

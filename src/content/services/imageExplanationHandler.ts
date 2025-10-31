@@ -36,6 +36,17 @@ class ImageExplanationHandler {
     return this.imageStates.get(imageUrl);
   }
 
+  /**
+   * Remove image state by URL (used when closing tabs)
+   */
+  removeImageState(imageUrl: string): void {
+    const imageState = this.imageStates.get(imageUrl);
+    if (imageState) {
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] Removing image state for:', imageUrl);
+      this.imageStates.delete(imageUrl);
+    }
+  }
+
   async initialize(currentPaper: any) {
     if (this.isInitialized) {
       logger.debug('CONTENT_SCRIPT', '[ImageExplain] Already initialized');
@@ -226,8 +237,14 @@ class ImageExplanationHandler {
    * @param imageUrl - Synthetic URL identifier for the capture
    * @param blob - Blob data of the captured image
    * @param overlayElement - Optional overlay element for HTML pages (enables scroll-to-image)
+   * @param overlayPosition - Optional overlay position for HTML pages (enables overlay recreation on restore)
    */
-  async handleScreenCapture(imageUrl: string, blob: Blob, overlayElement?: HTMLDivElement): Promise<void> {
+  async handleScreenCapture(
+    imageUrl: string,
+    blob: Blob,
+    overlayElement?: HTMLDivElement,
+    overlayPosition?: { pageX: number; pageY: number; width: number; height: number }
+  ): Promise<void> {
     if (!this.currentPaper) {
       logger.warn('CONTENT_SCRIPT', '[ImageExplain] No current paper, cannot process screen capture');
       return;
@@ -250,6 +267,15 @@ class ImageExplanationHandler {
 
       // Store in imageStates map
       this.imageStates.set(imageUrl, imageState);
+
+      // Store blob in IndexedDB for persistence
+      try {
+        await ChromeService.storeScreenCapture(this.currentPaper.id, imageUrl, blob, overlayPosition);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Screen capture blob stored in IndexedDB');
+      } catch (error) {
+        logger.error('CONTENT_SCRIPT', '[ImageExplain] Failed to store screen capture blob:', error);
+        // Continue anyway - blob is still in memory
+      }
 
       // Open chatbox with the captured image
       // Pass overlay element as imageButtonElement for scroll-to-image functionality

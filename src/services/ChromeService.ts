@@ -1131,3 +1131,141 @@ export async function getImageExplanationsByPaper(
     return { success: false, error: String(error), explanations: [] };
   }
 }
+
+/**
+ * Screen Capture Operations
+ */
+
+export interface StoreScreenCaptureResponse {
+  success: boolean;
+  error?: string;
+  entry?: import('../utils/dbService.ts').ScreenCaptureEntry;
+}
+
+export interface GetScreenCaptureResponse {
+  success: boolean;
+  error?: string;
+  entry?: import('../utils/dbService.ts').ScreenCaptureEntry | null;
+}
+
+/**
+ * Store a screen capture blob in IndexedDB
+ */
+export async function storeScreenCapture(
+  paperId: string,
+  imageUrl: string,
+  blob: Blob,
+  overlayPosition?: { pageX: number; pageY: number; width: number; height: number }
+): Promise<StoreScreenCaptureResponse> {
+  logger.debug('SERVICE', '[ChromeService] Storing screen capture:', imageUrl);
+
+  try {
+    // Convert Blob to Base64 for Chrome messaging (Chrome uses JSON serialization, not structured cloning)
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const mimeType = blob.type;
+
+    // Convert Uint8Array to Base64 string (chunk to avoid call stack overflow on large images)
+    const chunkSize = 0x8000; // 32KB chunks
+    let binaryString = '';
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+      binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    const blobDataBase64 = btoa(binaryString);
+
+    logger.debug('SERVICE', '[ChromeService] Converted blob to Base64:', blobDataBase64.length, 'chars, type:', mimeType);
+
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.STORE_SCREEN_CAPTURE,
+      payload: { paperId, imageUrl, blobDataBase64, mimeType, overlayPosition },
+    });
+
+    if (response.success) {
+      logger.debug('SERVICE', '[ChromeService] ✓ Screen capture stored successfully');
+      return response;
+    } else {
+      logger.error('SERVICE', '[ChromeService] Failed to store screen capture:', response.error);
+      return response;
+    }
+  } catch (error) {
+    logger.error('SERVICE', '[ChromeService] Error storing screen capture:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Get a screen capture blob from IndexedDB
+ */
+export async function getScreenCapture(
+  paperId: string,
+  imageUrl: string
+): Promise<GetScreenCaptureResponse> {
+  logger.debug('SERVICE', '[ChromeService] Getting screen capture:', imageUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.GET_SCREEN_CAPTURE,
+      payload: { paperId, imageUrl },
+    });
+
+    if (response.success && response.entry) {
+      // Reconstruct Blob from Base64 string (Chrome messaging uses JSON serialization)
+      const binaryString = atob(response.entry.blobDataBase64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: response.entry.mimeType });
+      logger.debug('SERVICE', '[ChromeService] ✓ Screen capture retrieved and reconstructed blob:', blob.size, 'bytes');
+
+      return {
+        success: true,
+        entry: {
+          paperId: response.entry.paperId,
+          imageUrl: response.entry.imageUrl,
+          timestamp: response.entry.timestamp,
+          blob,
+          overlayPosition: response.entry.overlayPosition,
+        }
+      };
+    } else if (response.success) {
+      logger.debug('SERVICE', '[ChromeService] Screen capture not found');
+      return response;
+    } else {
+      logger.error('SERVICE', '[ChromeService] Failed to get screen capture:', response.error);
+      return response;
+    }
+  } catch (error) {
+    logger.error('SERVICE', '[ChromeService] Error getting screen capture:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Delete a screen capture blob from IndexedDB
+ */
+export async function deleteScreenCapture(
+  paperId: string,
+  imageUrl: string
+): Promise<ChromeMessageResponse<boolean>> {
+  logger.debug('SERVICE', '[ChromeService] Deleting screen capture:', imageUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.DELETE_SCREEN_CAPTURE,
+      payload: { paperId, imageUrl },
+    });
+
+    if (response.success) {
+      logger.debug('SERVICE', '[ChromeService] ✓ Screen capture deleted successfully');
+      return response;
+    } else {
+      logger.error('SERVICE', '[ChromeService] Failed to delete screen capture:', response.error);
+      return response;
+    }
+  } catch (error) {
+    logger.error('SERVICE', '[ChromeService] Error deleting screen capture:', error);
+    return { success: false, error: String(error) };
+  }
+}

@@ -5,6 +5,7 @@ import * as ChromeService from '../../services/ChromeService.ts';
 import { imageExplanationHandler } from './imageExplanationHandler.ts';
 import { logger } from '../../utils/logger.ts';
 import { normalizeUrl } from '../../utils/urlUtils.ts';
+import { isPDFPage } from '../../utils/contentExtractor.ts';
 
 // Default position and size
 const DEFAULT_POSITION: ChatboxPosition = {
@@ -867,21 +868,72 @@ class ChatboxInjector {
         // Get image state from image explanation handler
         const imageState = imageExplanationHandler.getImageStateByUrl(savedTab.imageUrl);
 
-        if (!imageState || !imageState.buttonContainer) {
-          logger.warn('CONTENT_SCRIPT', '[Kuma Chat] Could not find image state for saved tab:', savedTab.title);
-          continue;
+        let blob: Blob;
+        let imageButtonElement: HTMLElement | null = null;
+
+        // Special handling for screen captures - fetch blob from IndexedDB
+        if (savedTab.imageUrl.startsWith('screen-capture-') || savedTab.imageUrl.startsWith('pdf-capture-')) {
+          if (!this.currentPaper) {
+            logger.warn('CONTENT_SCRIPT', '[Kuma Chat] No current paper for screen capture restoration');
+            continue;
+          }
+
+          try {
+            const response = await ChromeService.getScreenCapture(this.currentPaper.id, savedTab.imageUrl);
+            if (!response.success || !response.entry) {
+              logger.warn('CONTENT_SCRIPT', '[Kuma Chat] Screen capture blob not found in IndexedDB:', savedTab.title);
+              continue;
+            }
+            blob = response.entry.blob;
+
+            // Recreate overlay element if position data exists (HTML pages only, not PDFs)
+            if (response.entry.overlayPosition && !isPDFPage()) {
+              const overlay = document.createElement('div');
+              overlay.className = 'kuma-screen-capture-overlay';
+              overlay.style.cssText = `
+                position: absolute;
+                left: ${response.entry.overlayPosition.pageX}px;
+                top: ${response.entry.overlayPosition.pageY}px;
+                width: ${response.entry.overlayPosition.width}px;
+                height: ${response.entry.overlayPosition.height}px;
+                pointer-events: none;
+                z-index: 1;
+                opacity: 0;
+                transition: opacity 0.3s ease, background-color 0.3s ease;
+              `;
+              document.body.appendChild(overlay);
+              imageButtonElement = overlay;
+              logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Recreated overlay element at', response.entry.overlayPosition);
+            } else {
+              // Use imageState element as buttonElement (could be overlay or null)
+              imageButtonElement = imageState?.element || null;
+            }
+
+            logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Restored screen capture blob from IndexedDB');
+          } catch (error) {
+            logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to restore screen capture blob:', error);
+            continue;
+          }
+        } else {
+          // Regular image - require imageState with buttonContainer
+          if (!imageState || !imageState.buttonContainer) {
+            logger.warn('CONTENT_SCRIPT', '[Kuma Chat] Could not find image state for saved tab:', savedTab.title);
+            continue;
+          }
+
+          // Get the image element to fetch blob
+          const img = imageState.element;
+
+          if (!img) {
+            continue;
+          }
+
+          // Fetch image blob
+          const response = await fetch(savedTab.imageUrl);
+          blob = await response.blob();
+
+          imageButtonElement = imageState.buttonContainer;
         }
-
-        // Get the image element to fetch blob
-        const img = imageState.element;
-
-        if (!img) {
-          continue;
-        }
-
-        // Fetch image blob
-        const response = await fetch(savedTab.imageUrl);
-        const blob = await response.blob();
 
         // Recreate the tab
         const imageTab: TabState = {
@@ -899,7 +951,7 @@ class ChatboxInjector {
           },
           imageUrl: savedTab.imageUrl,
           imageBlob: blob,
-          imageButtonElement: imageState.buttonContainer,
+          imageButtonElement: imageButtonElement,
         };
 
         // Add to tabs
@@ -1410,6 +1462,9 @@ class ChatboxInjector {
         await this.saveImageChatHistory(imageTab.id, this.currentPaper.id, imageUrl);
       }
 
+      // Save settings to persist the updated title
+      await this.saveSettings();
+
       // Re-render to show the updated explanation and title
       this.render();
 
@@ -1440,6 +1495,30 @@ class ChatboxInjector {
     // Delete from IndexedDB if it's an image tab
     if (tab.type === 'image' && tab.imageUrl && this.currentPaper) {
       await ChromeService.clearImageChatHistory(this.currentPaper.id, tab.imageUrl);
+
+      // Delete screen capture blob from IndexedDB if it's a screen capture
+      if (tab.imageUrl.startsWith('screen-capture-') || tab.imageUrl.startsWith('pdf-capture-')) {
+        try {
+          await ChromeService.deleteScreenCapture(this.currentPaper.id, tab.imageUrl);
+          logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Deleted screen capture blob from IndexedDB');
+
+          // Remove overlay element from DOM if it exists
+          if (tab.imageButtonElement) {
+            const overlay = tab.imageButtonElement as HTMLDivElement;
+            if (overlay.className === 'kuma-screen-capture-overlay' && overlay.parentNode) {
+              overlay.parentNode.removeChild(overlay);
+              logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Removed screen capture overlay from DOM');
+            }
+          }
+
+          // Remove from imageStates
+          const { imageExplanationHandler } = await import('./imageExplanationHandler.ts');
+          imageExplanationHandler.removeImageState(tab.imageUrl);
+          logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Removed image state');
+        } catch (error) {
+          logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to clean up screen capture:', error);
+        }
+      }
     }
 
     // Remove from tabs
