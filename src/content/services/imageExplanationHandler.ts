@@ -219,11 +219,15 @@ class ImageExplanationHandler {
   }
 
   /**
-   * Handle screen capture from PDF
+   * Handle screen capture from PDF or HTML pages
    * Creates a synthetic image state for the captured screen area
-   * Public method called by pdfScreenCaptureService
+   * Public method called by screenCaptureService
+   *
+   * @param imageUrl - Synthetic URL identifier for the capture
+   * @param blob - Blob data of the captured image
+   * @param overlayElement - Optional overlay element for HTML pages (enables scroll-to-image)
    */
-  async handleScreenCapture(imageUrl: string, blob: Blob): Promise<void> {
+  async handleScreenCapture(imageUrl: string, blob: Blob, overlayElement?: HTMLDivElement): Promise<void> {
     if (!this.currentPaper) {
       logger.warn('CONTENT_SCRIPT', '[ImageExplain] No current paper, cannot process screen capture');
       return;
@@ -232,9 +236,10 @@ class ImageExplanationHandler {
     logger.debug('CONTENT_SCRIPT', '[ImageExplain] Handling screen capture:', imageUrl);
 
     try {
-      // Create synthetic image state (no actual HTMLImageElement for screen captures)
+      // Create synthetic image state
+      // For HTML pages with overlay, use overlay as element for scroll-to-image
       const imageState: ImageState = {
-        element: null as any, // Placeholder - we have the blob directly
+        element: (overlayElement || null) as any, // Use overlay element if provided
         url: imageUrl,
         title: null,
         explanation: null,
@@ -247,8 +252,9 @@ class ImageExplanationHandler {
       this.imageStates.set(imageUrl, imageState);
 
       // Open chatbox with the captured image
-      const title = 'PDF Image Capture';
-      await chatboxInjector.openImageTab(imageUrl, blob, null, title, true);
+      // Pass overlay element as imageButtonElement for scroll-to-image functionality
+      const title = 'Image Capture Explanation';
+      await chatboxInjector.openImageTab(imageUrl, blob, overlayElement || null, title, true);
 
       // Generate explanation
       await this.generateExplanationFromBlob(imageUrl, blob);
@@ -695,10 +701,20 @@ class ImageExplanationHandler {
   destroy() {
     logger.debug('CONTENT_SCRIPT', '[ImageExplain] Destroying image explanation handler...');
 
-    // Remove all button containers
+    // Remove all button containers and screen capture overlays
     for (const [url, state] of this.imageStates) {
+      // Remove button container
       if (state.buttonContainer && state.buttonContainer.parentNode) {
         state.buttonContainer.parentNode.removeChild(state.buttonContainer);
+      }
+
+      // Remove screen capture overlay elements (HTML page overlays)
+      if ((url.startsWith('screen-capture-') || url.startsWith('pdf-capture-')) && state.element) {
+        const overlay = state.element as HTMLDivElement;
+        if (overlay.parentNode && overlay.className === 'kuma-screen-capture-overlay') {
+          overlay.parentNode.removeChild(overlay);
+          logger.debug('CONTENT_SCRIPT', '[ImageExplain] Removed screen capture overlay for:', url);
+        }
       }
     }
 

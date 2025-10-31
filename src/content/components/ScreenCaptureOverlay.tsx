@@ -2,10 +2,12 @@ import { h } from 'preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
 
 export interface SelectionRect {
-  x: number;
-  y: number;
+  x: number;        // Viewport X coordinate
+  y: number;        // Viewport Y coordinate
   width: number;
   height: number;
+  pageX: number;    // Absolute page X coordinate (includes scroll offset)
+  pageY: number;    // Absolute page Y coordinate (includes scroll offset)
 }
 
 interface ScreenCaptureOverlayProps {
@@ -36,7 +38,12 @@ export const ScreenCaptureOverlay = ({
     const y = Math.min(start.y, current.y);
     const width = Math.abs(current.x - start.x);
     const height = Math.abs(current.y - start.y);
-    return { x, y, width, height };
+
+    // Calculate absolute page coordinates (viewport + scroll offset)
+    const pageX = x + window.scrollX;
+    const pageY = y + window.scrollY;
+
+    return { x, y, width, height, pageX, pageY };
   };
 
   // Handle mouse down - start selection

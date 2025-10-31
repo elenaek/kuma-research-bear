@@ -58,6 +58,19 @@ function setupMessageListener() {
   const messageRouter = createMessageRouter(getCurrentPaper);
   chrome.runtime.onMessage.addListener(messageRouter);
 
+  // Listen for screen capture trigger from context menu
+  chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+    if (message.type === 'START_SCREEN_CAPTURE') {
+      logger.debug('CONTENT_SCRIPT', '[Content] Screen capture triggered from context menu');
+      try {
+        const { screenCaptureService } = await import('./services/screenCaptureService.ts');
+        screenCaptureService.startCaptureMode();
+      } catch (error) {
+        logger.error('CONTENT_SCRIPT', '[Content] Error starting screen capture:', error);
+      }
+    }
+  });
+
   // Listen for paper deletion and chunking completion
   chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     // Handle paper deletion
@@ -156,8 +169,8 @@ async function setupTextSelection() {
  */
 async function setupPDFCapture() {
   try {
-    const { pdfScreenCaptureService } = await import('./services/pdfScreenCaptureService.ts');
-    await pdfScreenCaptureService.initializePDFCapture();
+    const { screenCaptureService } = await import('./services/screenCaptureService.ts');
+    await screenCaptureService.initializePDFCapture();
     logger.debug('CONTENT_SCRIPT', '[Content] ✓ PDF screen capture initialized');
   } catch (error) {
     logger.error('CONTENT_SCRIPT', '[Content] Error initializing PDF screen capture:', error);

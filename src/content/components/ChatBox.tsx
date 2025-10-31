@@ -124,7 +124,7 @@ export const ChatBox = ({
     if (pdfEmbed) return true;
     return false;
   });
-  const [pdfCaptureUrl, setPdfCaptureUrl] = useState<string | null>(null); // Object URL for PDF capture thumbnails
+  const [screenCaptureUrl, setScreenCaptureUrl] = useState<string | null>(null); // Object URL for screen capture thumbnails
 
   const chatboxRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -342,23 +342,24 @@ export const ChatBox = ({
     const activeTab = tabs.find(t => t.id === activeTabId);
 
     // Clean up previous URL if it exists
-    if (pdfCaptureUrl) {
-      URL.revokeObjectURL(pdfCaptureUrl);
-      setPdfCaptureUrl(null);
+    if (screenCaptureUrl) {
+      URL.revokeObjectURL(screenCaptureUrl);
+      setScreenCaptureUrl(null);
     }
 
-    // Only create object URL for PDF captures (synthetic URLs starting with "pdf-capture-")
+    // Only create object URL for screen captures (synthetic URLs starting with "pdf-capture-" or "screen-capture-")
     if (activeTab?.type === 'image' &&
-        activeTab?.imageUrl?.startsWith('pdf-capture-') &&
+        (activeTab?.imageUrl?.startsWith('pdf-capture-') ||
+         activeTab?.imageUrl?.startsWith('screen-capture-')) &&
         activeTab?.imageBlob) {
       const objectUrl = URL.createObjectURL(activeTab.imageBlob);
-      setPdfCaptureUrl(objectUrl);
+      setScreenCaptureUrl(objectUrl);
     }
 
     // Cleanup on unmount or when dependencies change
     return () => {
-      if (pdfCaptureUrl) {
-        URL.revokeObjectURL(pdfCaptureUrl);
+      if (screenCaptureUrl) {
+        URL.revokeObjectURL(screenCaptureUrl);
       }
     };
   }, [activeTabId, tabs]);
@@ -943,9 +944,9 @@ export const ChatBox = ({
               ) : (
                 <>
                   {/* Show thumbnail for first message in image tabs */}
-                  {idx === 0 && msg.role === 'assistant' && activeTab?.type === 'image' && (pdfCaptureUrl || activeTab?.imageUrl) && (
+                  {idx === 0 && msg.role === 'assistant' && activeTab?.type === 'image' && (screenCaptureUrl || activeTab?.imageUrl) && (
                     <img
-                      src={pdfCaptureUrl || activeTab.imageUrl}
+                      src={screenCaptureUrl || activeTab.imageUrl}
                       alt="Explained image"
                       class="chatbox-image-thumbnail"
                       title="Click to scroll to this image in the page"

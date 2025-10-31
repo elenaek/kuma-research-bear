@@ -1673,7 +1673,45 @@ class ChatboxInjector {
       return;
     }
 
-    // Get image state from image explanation handler
+    // For screen captures, use the overlay element directly from the tab
+    if (activeTab.imageUrl.startsWith('screen-capture-') || activeTab.imageUrl.startsWith('pdf-capture-')) {
+      if (!activeTab.imageButtonElement) {
+        logger.error('CONTENT_SCRIPT', '[Kuma Chat] No overlay element for screen capture');
+        return;
+      }
+
+      const overlay = activeTab.imageButtonElement as HTMLDivElement;
+
+      // Scroll to overlay
+      overlay.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'center'
+      });
+
+      // Highlight overlay (make it visible temporarily with blue highlight)
+      const originalOutline = overlay.style.outline;
+      const originalOutlineOffset = overlay.style.outlineOffset;
+      const originalOpacity = overlay.style.opacity;
+      const originalBgColor = overlay.style.backgroundColor;
+
+      overlay.style.outline = '3px solid #60a5fa';
+      overlay.style.outlineOffset = '2px';
+      overlay.style.opacity = '0.2';
+      overlay.style.backgroundColor = 'rgba(96, 165, 250, 0.1)';
+
+      setTimeout(() => {
+        overlay.style.outline = originalOutline;
+        overlay.style.outlineOffset = originalOutlineOffset;
+        overlay.style.opacity = originalOpacity;
+        overlay.style.backgroundColor = originalBgColor;
+      }, 2000);
+
+      logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Scrolled to screen capture overlay');
+      return;
+    }
+
+    // For regular images, get image state from image explanation handler
     const imageState = imageExplanationHandler.getImageStateByUrl(activeTab.imageUrl);
     if (!imageState || !imageState.element) {
       logger.error('CONTENT_SCRIPT', '[Kuma Chat] Image element not found for URL:', activeTab.imageUrl);

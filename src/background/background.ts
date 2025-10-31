@@ -83,6 +83,7 @@ const CONTEXT_MENU_ID = 'open-chat'; // Extension icon - chat menu
 const CONTEXT_MENU_PAGE_ID = 'chat-with-kuma-page'; // Page - chat menu
 const CONTEXT_MENU_DETECT_ID = 'detect-paper-page'; // Page - detect paper menu
 const CONTEXT_MENU_IMAGE_ID = 'discuss-image-with-kuma'; // Image - discuss image menu
+const CONTEXT_MENU_CAPTURE_SCREEN_ID = 'capture-screen-with-kuma'; // Page - screen capture menu
 const CONTEXT_MENU_TOGGLE_IMAGE_BUTTONS_ID = 'toggle-image-buttons'; // Page - toggle image buttons
 const CONTEXT_MENU_SIDEPANEL_ID = 'open-sidepanel-page'; // Page - open sidepanel menu
 
@@ -193,6 +194,14 @@ chrome.runtime.onInstalled.addListener(async () => {
     id: CONTEXT_MENU_IMAGE_ID,
     title: 'Discuss this image with Kuma',
     contexts: ['image'],
+    enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
+  });
+
+  // Capture & explain screen area
+  chrome.contextMenus.create({
+    id: CONTEXT_MENU_CAPTURE_SCREEN_ID,
+    title: 'Screenshot and Discuss with Kuma',
+    contexts: ['page', 'frame'],
     enabled: false, // Initially disabled, will be enabled when a chunked paper is detected
   });
 
@@ -647,6 +656,9 @@ export async function updateContextMenuState() {
     await chrome.contextMenus.update(CONTEXT_MENU_IMAGE_ID, {
       enabled: chatReady,
     });
+    await chrome.contextMenus.update(CONTEXT_MENU_CAPTURE_SCREEN_ID, {
+      enabled: chatReady,
+    });
 
 
     // Update image buttons toggle checkbox to match current setting
@@ -766,6 +778,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       await chrome.tabs.sendMessage(tab.id, {
         type: MessageType.CONTEXT_MENU_IMAGE_DISCUSS,
         payload: { imageUrl: info.srcUrl },
+      });
+    }
+    // Handle "Capture & Explain Image with Kuma" menu item
+    else if (info.menuItemId === CONTEXT_MENU_CAPTURE_SCREEN_ID) {
+      logger.debug('BACKGROUND_SCRIPT', '[ContextMenu] Screen capture triggered from context menu for tab', tab.id);
+      // Send message to content script to start screen capture
+      await chrome.tabs.sendMessage(tab.id, {
+        type: MessageType.START_SCREEN_CAPTURE,
       });
     }
     // Handle "Show Image Explanation Buttons" toggle
