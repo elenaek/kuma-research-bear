@@ -41,6 +41,14 @@ export default defineConfig({
           src: 'src/content/styles/imageExplainButton.css',
           dest: 'src/content/styles',
         },
+        {
+          src: 'src/content/styles/pdfCaptureButton.css',
+          dest: 'src/content/styles',
+        },
+        {
+          src: 'src/content/styles/selectionToolbar.css',
+          dest: 'src/content/styles',
+        },
       ],
     }),
   ],
