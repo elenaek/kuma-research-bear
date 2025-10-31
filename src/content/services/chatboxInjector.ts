@@ -4,6 +4,7 @@ import { ChatMessage, ChatboxSettings, ChatboxPosition, StoredPaper, ChatTab, Co
 import * as ChromeService from '../../services/ChromeService.ts';
 import { imageExplanationHandler } from './imageExplanationHandler.ts';
 import { logger } from '../../utils/logger.ts';
+import { normalizeUrl } from '../../utils/urlUtils.ts';
 
 // Default position and size
 const DEFAULT_POSITION: ChatboxPosition = {
@@ -20,6 +21,7 @@ const DEFAULT_SETTINGS: ChatboxSettings = {
   transparencyEnabled: true,
   activeTabs: [],
   activeTabId: 'paper', // Default to paper tab
+  visibilityByUrl: {}, // Per-URL visibility state
 };
 
 /**
@@ -775,6 +777,11 @@ class ChatboxInjector {
           ...stored.chatboxSettings,
         };
 
+        // Load per-URL visibility state
+        const currentUrl = normalizeUrl(window.location.href);
+        const visibilityMap = this.settings.visibilityByUrl || {};
+        this.settings.visible = visibilityMap[currentUrl] ?? false;
+
         // Ensure position is within viewport bounds
         this.settings.position.x = Math.max(0, Math.min(this.settings.position.x, window.innerWidth - this.settings.position.width));
         this.settings.position.y = Math.max(0, Math.min(this.settings.position.y, window.innerHeight - this.settings.position.height));
@@ -798,6 +805,23 @@ class ChatboxInjector {
 
       this.settings.activeTabs = serializableTabs as ChatTab[];
       this.settings.activeTabId = this.activeTabId;
+
+      // Save per-URL visibility state
+      const currentUrl = normalizeUrl(window.location.href);
+      if (!this.settings.visibilityByUrl) {
+        this.settings.visibilityByUrl = {};
+      }
+      this.settings.visibilityByUrl[currentUrl] = this.settings.visible;
+
+      // Cleanup: Keep only last 100 URLs to prevent unbounded storage growth
+      const MAX_URLS = 100;
+      const urlEntries = Object.entries(this.settings.visibilityByUrl);
+      if (urlEntries.length > MAX_URLS) {
+        // Keep only the most recent MAX_URLS entries (FIFO)
+        // Note: This simple implementation removes oldest entries when limit exceeded
+        const urlsToKeep = urlEntries.slice(-MAX_URLS);
+        this.settings.visibilityByUrl = Object.fromEntries(urlsToKeep);
+      }
 
       await chrome.storage.local.set({ chatboxSettings: this.settings });
       logger.debug('CONTENT_SCRIPT', '[Kuma Chat] Settings saved successfully');

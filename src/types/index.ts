@@ -528,6 +528,7 @@ export interface ChatboxSettings {
   transparencyEnabled: boolean;
   activeTabs?: ChatTab[]; // Active tabs in chatbox (multi-tab support)
   activeTabId?: string; // Currently active tab ID
+  visibilityByUrl?: Record<string, boolean>; // Per-URL visibility state
 }
 
 // Background operation state (per-tab tracking)
