@@ -369,7 +369,7 @@ Interact with papers conveniently
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         User Opens Paper                        │
+│                         User Clicks Detect Paper                │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
@@ -743,7 +743,13 @@ npm run lint
 
 ## 📄 License
 
-This project is licensed under the **MIT License** – see the [LICENSE](LICENSE) file for details.
+This project uses a **dual licensing** approach:
+
+### Source Code - MIT License
+The source code is licensed under the **MIT License** – see the [LICENSE](LICENSE) file for details. You are free to use, modify, and distribute the code.
+
+### Visual Assets - All Rights Reserved
+The **Kuma bear mascot**, Lottie animations, and all branding elements are **NOT** covered by the MIT License. These assets are proprietary and protected under copyright – see the [ASSETS_LICENSE](ASSETS_LICENSE) file for details. Written permission is required for any use of these visual assets.
 
 ---
 

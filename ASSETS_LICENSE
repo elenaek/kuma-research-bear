@@ -1,0 +1,47 @@
+ASSETS LICENSE
+
+Copyright (c) 2025 elenaek. All Rights Reserved.
+
+This license applies to all visual assets, branding elements, and design materials
+in this project, including but not limited to:
+
+- The Kuma bear mascot character design
+- Lottie animation files (*.json files in src/assets/)
+- Mascot illustrations and artwork
+- Brand identity elements
+- Logo designs
+- Custom icons and graphics associated with the Kuma brand
+
+IMPORTANT NOTICE:
+These assets are NOT covered by the MIT License that applies to the source code
+of this project. The MIT License in the LICENSE file applies ONLY to the software
+code, not to these visual assets.
+
+RESTRICTIONS:
+All rights to the visual assets listed above are reserved. You may NOT:
+- Use, copy, modify, or distribute the Kuma bear mascot or related artwork
+- Create derivative works based on the mascot design
+- Use the mascot or branding elements in your own projects
+- Republish or redistribute the Lottie animations or artwork
+- Use the assets for commercial purposes
+- Remove or alter any copyright notices
+
+PERMITTED USE:
+You may view these assets solely for the purpose of:
+- Evaluating this project
+- Reviewing the source code implementation
+- Educational purposes (non-commercial)
+
+REQUESTING PERMISSION:
+If you wish to use the Kuma bear mascot or any related visual assets, you must
+obtain explicit written permission from the copyright holder.
+
+For permission requests, please contact: [via GitHub repository issues]
+
+ATTRIBUTION:
+If you are granted permission to use any assets, proper attribution to elenaek
+is required in all materials where the assets appear.
+
+---
+
+This license is effective as of January 31, 2025.
