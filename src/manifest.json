@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Kuma the Research Bear",
-  "version": "1.0.0",
+  "version": "0.5.0",
   "description": "A bear that helps you understand research papers using Chrome's built-in AI",
   "permissions": [
     "activeTab",
