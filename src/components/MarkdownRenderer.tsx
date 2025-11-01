@@ -3,6 +3,7 @@ import { createPortal } from 'preact/compat';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { repairLatexCommands } from '../utils/latexRepair.ts';
+import { logger } from '../utils/logger.ts';
 
 // Cache for MathJax modules to avoid re-importing on every render
 let mathjaxModulesCache: {
@@ -228,14 +229,14 @@ async function renderLatexExpressions(
 
         processed = processed.replaceAll(placeholder, wrappedSvg);
       } catch (error) {
-        console.error('[LaTeX Render] MathJax rendering error for:', latex, error);
+        logger.error('MATHJAX_RENDER', 'MathJax rendering error for:', latex, error);
         // Keep placeholder if rendering fails
       }
     }
 
     return processed;
   } catch (error) {
-    console.error('Failed to load MathJax:', error);
+    logger.error('MATHJAX_RENDER', 'Failed to load MathJax:', error);
     return content; // Return original content if MathJax fails to load
   }
 }
@@ -356,7 +357,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
 
         setZoomedFormula({ svg: svgString, latex, isDisplay, triggerRect });
       } catch (error) {
-        console.error('[LaTeX Zoom Error]', error);
+        logger.error('MATHJAX_RENDER', 'LaTeX Zoom Error:', error);
       }
     };
 
@@ -380,7 +381,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
       await navigator.clipboard.writeText(text);
       return true;
     } catch (error) {
-      console.error('[Clipboard] Modern API failed:', error);
+      logger.error('GENERAL', 'Clipboard Modern API failed:', error);
 
       // Fallback to execCommand
       try {
@@ -394,7 +395,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
         document.body.removeChild(textarea);
         return success;
       } catch (fallbackError) {
-        console.error('[Clipboard] Fallback failed:', fallbackError);
+        logger.error('GENERAL', 'Clipboard Fallback failed:', fallbackError);
         return false;
       }
     }

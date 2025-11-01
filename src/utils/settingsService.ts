@@ -8,6 +8,7 @@
 import { SUPPORTED_LANGUAGES } from '../types/index.ts';
 import type { Persona, Purpose, PersonaPurposeConfig } from '../types/personaPurpose.ts';
 import { PERSONA_PURPOSE_CONFIGS } from '../types/personaPurpose.ts';
+import { logger } from './logger.ts';
 
 const SETTINGS_KEY = 'kuma_settings';
 
@@ -47,7 +48,7 @@ export async function getOutputLanguage(): Promise<string> {
     // No setting found, return browser language or default
     return "en";
   } catch (error) {
-    console.error('Error getting output language:', error);
+    logger.error('SETTINGS', 'Error getting output language:', error);
     return 'en';
   }
 }
@@ -61,7 +62,7 @@ export async function setOutputLanguage(languageCode: string): Promise<void> {
     // Validate language code
     const isValid = SUPPORTED_LANGUAGES.some(lang => lang.code === languageCode);
     if (!isValid) {
-      console.warn(`Invalid language code: ${languageCode}. Falling back to 'en'`);
+      logger.warn('SETTINGS', `Invalid language code: ${languageCode}. Falling back to 'en'`);
       languageCode = 'en';
     }
 
@@ -75,9 +76,9 @@ export async function setOutputLanguage(languageCode: string): Promise<void> {
     // Save to storage
     await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
 
-    console.log(`Output language set to: ${languageCode}`);
+    logger.debug('SETTINGS', `Output language set to: ${languageCode}`);
   } catch (error) {
-    console.error('Error setting output language:', error);
+    logger.error('SETTINGS', 'Error setting output language:', error);
     throw error;
   }
 }
@@ -94,7 +95,7 @@ export async function getShowImageButtons(): Promise<boolean> {
     // Default to true if not set
     return settings?.showImageButtons ?? true;
   } catch (error) {
-    console.error('Error getting show image buttons setting:', error);
+    logger.error('SETTINGS', 'Error getting show image buttons setting:', error);
     return true;
   }
 }
@@ -117,9 +118,9 @@ export async function setShowImageButtons(show: boolean): Promise<void> {
     // Save to storage
     await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
 
-    console.log(`Show image buttons set to: ${show}`);
+    logger.debug('SETTINGS', `Show image buttons set to: ${show}`);
   } catch (error) {
-    console.error('Error setting show image buttons:', error);
+    logger.error('SETTINGS', 'Error setting show image buttons:', error);
     throw error;
   }
 }
@@ -136,7 +137,7 @@ export async function getPersona(): Promise<Persona> {
     // Default to 'professional' if not set
     return settings?.persona ?? 'professional';
   } catch (error) {
-    console.error('Error getting persona:', error);
+    logger.error('SETTINGS', 'Error getting persona:', error);
     return 'professional';
   }
 }
@@ -161,9 +162,9 @@ export async function setPersona(persona: Persona): Promise<void> {
     // Save to storage
     await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
 
-    console.log(`Persona set to: ${persona}`);
+    logger.debug('SETTINGS', `Persona set to: ${persona}`);
   } catch (error) {
-    console.error('Error setting persona:', error);
+    logger.error('SETTINGS', 'Error setting persona:', error);
     throw error;
   }
 }
@@ -180,7 +181,7 @@ export async function getPurpose(): Promise<Purpose> {
     // Default to 'learning' if not set
     return settings?.purpose ?? 'learning';
   } catch (error) {
-    console.error('Error getting purpose:', error);
+    logger.error('SETTINGS', 'Error getting purpose:', error);
     return 'learning';
   }
 }
@@ -205,9 +206,9 @@ export async function setPurpose(purpose: Purpose): Promise<void> {
     // Save to storage
     await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
 
-    console.log(`Purpose set to: ${purpose}`);
+    logger.debug('SETTINGS', `Purpose set to: ${purpose}`);
   } catch (error) {
-    console.error('Error setting purpose:', error);
+    logger.error('SETTINGS', 'Error setting purpose:', error);
     throw error;
   }
 }
@@ -223,7 +224,7 @@ export async function getPersonaPurposeConfig(): Promise<PersonaPurposeConfig> {
 
     return PERSONA_PURPOSE_CONFIGS[persona][purpose];
   } catch (error) {
-    console.error('Error getting persona/purpose config:', error);
+    logger.error('SETTINGS', 'Error getting persona/purpose config:', error);
     // Return default config (professional + learning)
     return PERSONA_PURPOSE_CONFIGS.professional.learning;
   }
@@ -244,7 +245,7 @@ export async function getSettings(): Promise<Settings> {
       purpose: 'learning'
     };
   } catch (error) {
-    console.error('Error getting settings:', error);
+    logger.error('SETTINGS', 'Error getting settings:', error);
     return {
       outputLanguage: 'en',
       showImageButtons: true,

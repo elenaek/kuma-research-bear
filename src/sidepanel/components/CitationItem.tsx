@@ -52,7 +52,7 @@ export function CitationItem({ citation, format, onDelete }: CitationItemProps) 
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error('[Citation Item] Error copying:', error);
+      logger.error('UI_COMPONENTS', 'Error copying citation:', error);
     }
   };
 
@@ -94,7 +94,7 @@ export function CitationItem({ citation, format, onDelete }: CitationItemProps) 
         payload: { citationId: citation.id },
       }, (response) => {
         if (chrome.runtime.lastError) {
-          console.error('[Citation Item] Error deleting citation:', chrome.runtime.lastError);
+          logger.error('UI_COMPONENTS', 'Error deleting citation:', chrome.runtime.lastError);
           return;
         }
 
@@ -102,14 +102,14 @@ export function CitationItem({ citation, format, onDelete }: CitationItemProps) 
           logger.debug('UI', '[Citation Item] Citation deleted successfully');
           onDelete(citation.id);
         } else {
-          console.error('[Citation Item] Failed to delete citation');
+          logger.error('UI_COMPONENTS', 'Failed to delete citation');
         }
       });
 
       // Reset confirm state
       setConfirmDelete(false);
     } catch (error) {
-      console.error('[Citation Item] Error deleting:', error);
+      logger.error('UI_COMPONENTS', 'Error deleting citation:', error);
       setConfirmDelete(false);
     }
   };

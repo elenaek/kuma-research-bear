@@ -60,6 +60,11 @@ export interface LogConfig {
   CHROME_SERVICE: boolean;
   CONTENT_SCRIPT: boolean;
   BACKGROUND_SCRIPT: boolean;
+  SETTINGS: boolean;
+  NAVIGATION: boolean;
+
+  // UI Components
+  UI_COMPONENTS: boolean;
 
   // Performance and metrics
   PERFORMANCE: boolean;
@@ -82,7 +87,7 @@ export const LOG_CONFIG: LogConfig = {
   MATHJAX_RENDER: false,          // MathJax rendering process
 
   // AI and LLM
-  AI_SERVICE: true,               // AI service calls and responses
+  AI_SERVICE: false,               // AI service calls and responses
   PROMPT_ENGINEERING: false,      // Prompt construction and validation
 
   // Chat
@@ -101,7 +106,12 @@ export const LOG_CONFIG: LogConfig = {
   // Chrome Extension
   CHROME_SERVICE: false,          // Chrome API interactions
   CONTENT_SCRIPT: false,          // Content script lifecycle
-  BACKGROUND_SCRIPT: true,       // Background script events
+  BACKGROUND_SCRIPT: false,       // Background script events
+  SETTINGS: false,                // User settings and preferences
+  NAVIGATION: false,              // Page navigation and routing
+
+  // UI Components
+  UI_COMPONENTS: false,           // UI component interactions
 
   // Performance
   PERFORMANCE: false,             // Timing and performance metrics

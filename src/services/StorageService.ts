@@ -1,4 +1,5 @@
 import { MessageType } from '../types/index.ts';
+import { logger } from '../utils/logger.ts';
 
 /**
  * StorageService - Service for runtime message operations
@@ -39,7 +40,7 @@ export function createOperationStateListener(
       const state = message.payload?.state;
       if (!state) return;
 
-      console.log('[StorageService] Operation state changed:', state);
+      logger.debug('CHROME_SERVICE', 'Operation state changed:', state);
       onOperationStateChange(state);
     }
   };

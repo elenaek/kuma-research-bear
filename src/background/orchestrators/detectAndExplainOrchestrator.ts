@@ -75,7 +75,7 @@ export async function executeDetectAndExplainFlow(tabId: number): Promise<any> {
 
     return { success: true, paper: detectResponse.paper };
   } catch (flowError) {
-    console.error('[Orchestrator] Error in detect flow:', flowError);
+    logger.error('BACKGROUND_SCRIPT', 'Error in detect flow:', flowError);
     await updateOperationState(tabId, {
       isDetecting: false,
       isExplaining: false,

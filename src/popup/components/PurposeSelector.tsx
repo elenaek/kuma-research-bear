@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp, Check, PenTool, BookOpen } from 'lucide-preact';
 import type { Purpose } from '../../types/personaPurpose';
 import { getPurpose, setPurpose } from '../../utils/settingsService.ts';
+import { logger } from '../../utils/logger.ts';
 
 interface PurposeOption {
   value: Purpose;
@@ -74,9 +75,9 @@ export function PurposeSelector() {
     // Save to settings
     try {
       await setPurpose(purpose.value);
-      console.log('[PurposeSelector] Purpose changed to:', purpose.value);
+      logger.debug('SETTINGS', 'Purpose changed to:', purpose.value);
     } catch (error) {
-      console.error('[PurposeSelector] Error saving purpose setting:', error);
+      logger.error('SETTINGS', 'Error saving purpose setting:', error);
     }
   };
 

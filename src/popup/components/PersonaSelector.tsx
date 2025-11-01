@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp, Check, User, GraduationCap } from 'lucide-preact';
 import type { Persona } from '../../types/personaPurpose';
 import { getPersona, setPersona } from '../../utils/settingsService.ts';
+import { logger } from '../../utils/logger.ts';
 
 interface PersonaOption {
   value: Persona;
@@ -74,9 +75,9 @@ export function PersonaSelector() {
     // Save to settings
     try {
       await setPersona(persona.value);
-      console.log('[PersonaSelector] Persona changed to:', persona.value);
+      logger.debug('SETTINGS', 'Persona changed to:', persona.value);
     } catch (error) {
-      console.error('[PersonaSelector] Error saving persona setting:', error);
+      logger.error('SETTINGS', 'Error saving persona setting:', error);
     }
   };
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { MessageType } from '../../types/index.ts';
+import { logger } from '../../utils/logger.ts';
 
 interface OperationState {
   tabId?: number;
@@ -237,7 +238,7 @@ export function useOperationState(currentTabUrl?: string, currentTabId?: number)
         }
       }
     } catch (error) {
-      console.error('[useOperationState] Failed to check operation state:', error);
+      logger.error('CHROME_SERVICE', 'Failed to check operation state:', error);
     }
   }
 

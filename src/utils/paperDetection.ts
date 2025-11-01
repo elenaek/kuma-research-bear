@@ -6,6 +6,7 @@
 
 import { buildPaperDetectionPrompt } from '../prompts/templates/detection.ts';
 import { getOutputLanguage } from './settingsService.ts';
+import { logger } from './logger.ts';
 
 export interface PaperDetectionResult {
   isResearchPaper: boolean;
@@ -40,7 +41,7 @@ export async function detectResearchPaper(): Promise<PaperDetectionResult> {
 
   // Step 2: Determine if AI fallback is needed (medium confidence: 35-59)
   if (heuristicResult.confidence >= 35 && heuristicResult.confidence < 60) {
-    console.log('[PaperDetection] Medium confidence, using AI fallback...');
+    logger.debug('PDF_EXTRACTION', 'Medium confidence, using AI fallback...');
     try {
       const aiResult = await aiDetectionFallback();
       return {
@@ -49,7 +50,7 @@ export async function detectResearchPaper(): Promise<PaperDetectionResult> {
         reason: `Heuristics uncertain (${heuristicResult.confidence}%), AI confirmed: ${aiResult.reason}`,
       };
     } catch (error) {
-      console.error('[PaperDetection] AI fallback failed:', error);
+      logger.error('PDF_EXTRACTION', 'AI fallback failed:', error);
       // Fall through to heuristic result
     }
   }
@@ -230,7 +231,7 @@ ${sampleText}`;
 
     return { isResearchPaper, reason };
   } catch (error) {
-    console.error('[PaperDetection] AI fallback error:', error);
+    logger.error('PDF_EXTRACTION', 'AI fallback error:', error);
     throw error;
   }
 }

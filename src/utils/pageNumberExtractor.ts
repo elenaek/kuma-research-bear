@@ -8,6 +8,8 @@
  * - ArXiv HTML viewer
  */
 
+import { logger } from './logger.ts';
+
 /**
  * Extract page number from current page/PDF
  * Returns page number as string or number, or undefined if not available
@@ -49,7 +51,7 @@ function extractFromPDFJS(): number | undefined {
       const currentPage = pdfViewer.pdfViewer.currentPageNumber;
 
       if (typeof currentPage === 'number' && currentPage > 0) {
-        console.log('[Page Extractor] PDF.js page:', currentPage);
+        logger.debug('PDF_EXTRACTION', 'PDF.js page:', currentPage);
         return currentPage;
       }
     }
@@ -59,12 +61,12 @@ function extractFromPDFJS(): number | undefined {
     if (pageInput && pageInput.value) {
       const page = parseInt(pageInput.value, 10);
       if (!isNaN(page) && page > 0) {
-        console.log('[Page Extractor] PDF.js page from input:', page);
+        logger.debug('PDF_EXTRACTION', 'PDF.js page from input:', page);
         return page;
       }
     }
   } catch (error) {
-    console.log('[Page Extractor] PDF.js not found or error:', error);
+    logger.error('PDF_EXTRACTION', 'PDF.js not found or error:', error);
   }
 
   return undefined;
@@ -93,7 +95,7 @@ function extractFromNativePDFViewer(): number | undefined {
         let match = text.match(/Page\s+(\d+)\s+of\s+\d+/i);
         if (match) {
           const page = parseInt(match[1], 10);
-          console.log('[Page Extractor] Native PDF viewer page:', page);
+          logger.debug('PDF_EXTRACTION', 'Native PDF viewer page:', page);
           return page;
         }
 
@@ -101,7 +103,7 @@ function extractFromNativePDFViewer(): number | undefined {
         match = text.match(/(\d+)\s*\/\s*\d+/);
         if (match) {
           const page = parseInt(match[1], 10);
-          console.log('[Page Extractor] Native PDF viewer page (alt):', page);
+          logger.debug('PDF_EXTRACTION', 'Native PDF viewer page (alt):', page);
           return page;
         }
       }
@@ -111,11 +113,11 @@ function extractFromNativePDFViewer(): number | undefined {
     const hashMatch = window.location.hash.match(/#page=(\d+)/);
     if (hashMatch) {
       const page = parseInt(hashMatch[1], 10);
-      console.log('[Page Extractor] Page from URL hash:', page);
+      logger.debug('PDF_EXTRACTION', 'Page from URL hash:', page);
       return page;
     }
   } catch (error) {
-    console.log('[Page Extractor] Native PDF viewer error:', error);
+    logger.error('PDF_EXTRACTION', 'Native PDF viewer error:', error);
   }
 
   return undefined;
@@ -167,11 +169,11 @@ function extractFromArXivHTML(): number | undefined {
     });
 
     if (currentPage > 0) {
-      console.log('[Page Extractor] arXiv HTML page:', currentPage);
+      logger.debug('PDF_EXTRACTION', 'arXiv HTML page:', currentPage);
       return currentPage;
     }
   } catch (error) {
-    console.log('[Page Extractor] arXiv HTML error:', error);
+    logger.error('PDF_EXTRACTION', 'arXiv HTML error:', error);
   }
 
   return undefined;
@@ -217,7 +219,7 @@ export function getTotalPages(): number | undefined {
       return parseInt(match[1], 10);
     }
   } catch (error) {
-    console.log('[Page Extractor] Error getting total pages:', error);
+    logger.error('PDF_EXTRACTION', 'Error getting total pages:', error);
   }
 
   return undefined;

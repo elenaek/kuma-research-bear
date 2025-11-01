@@ -5,6 +5,7 @@
  */
 
 import { getOutputLanguage } from "./settingsService.ts";
+import { logger } from './logger.ts';
 
 /**
  * Singleton service for managing inputQuota detection and adaptive sizing
@@ -19,11 +20,11 @@ class InputQuotaService {
    */
   async initialize(): Promise<void> {
     try {
-      console.log('[InputQuota] Detecting inputQuota from LanguageModel session...');
+      logger.debug('PERFORMANCE', 'Detecting inputQuota from LanguageModel session...');
 
       // Check if LanguageModel is available
       if (typeof LanguageModel === 'undefined') {
-        console.warn('[InputQuota] LanguageModel API not available, using fallback');
+        logger.warn('PERFORMANCE', 'LanguageModel API not available, using fallback');
         this.inputQuota = this.FALLBACK_QUOTA;
         return;
       }
@@ -39,11 +40,11 @@ class InputQuotaService {
       // Clean up temporary session
       tempSession.destroy();
 
-      console.log(`[InputQuota] ✓ Detected inputQuota: ${this.inputQuota} tokens`);
+      logger.debug('PERFORMANCE', `✓ Detected inputQuota: ${this.inputQuota} tokens`);
     } catch (error) {
-      console.error('[InputQuota] Failed to detect inputQuota:', error);
+      logger.error('PERFORMANCE', 'Failed to detect inputQuota:', error);
       this.inputQuota = this.FALLBACK_QUOTA;
-      console.log(`[InputQuota] Using fallback: ${this.inputQuota} tokens`);
+      logger.debug('PERFORMANCE', `Using fallback: ${this.inputQuota} tokens`);
     }
   }
 
@@ -77,7 +78,7 @@ class InputQuotaService {
     const maxChunkTokens = Math.floor(availableForChunks / minChunksToFit);
     const maxChunkChars = maxChunkTokens * 4;
 
-    console.log(`[InputQuota] Max chunk size: ${maxChunkChars} chars (${maxChunkTokens} tokens) for quota ${quota}`);
+    logger.debug('PERFORMANCE', `Max chunk size: ${maxChunkChars} chars (${maxChunkTokens} tokens) for quota ${quota}`);
     return maxChunkChars;
   }
 
@@ -119,7 +120,7 @@ class InputQuotaService {
     // Clamp to reasonable bounds (min 2, max 8)
     const clampedCount = Math.max(2, Math.min(8, optimalCount));
 
-    console.log(`[InputQuota] Optimal RAG chunks for ${useCase}: ${clampedCount} (avgChunkSize: ${avgChunkChars} chars, quota: ${quota}, available: ${availableTokens})`);
+    logger.debug('PERFORMANCE', `Optimal RAG chunks for ${useCase}: ${clampedCount} (avgChunkSize: ${avgChunkChars} chars, quota: ${quota}, available: ${availableTokens})`);
 
     return clampedCount;
   }
@@ -172,7 +173,7 @@ class InputQuotaService {
     const safetyMargin = Math.ceil(totalAllSections * 0.2);
     const minimumQuota = totalAllSections + safetyMargin;
 
-    console.log(`[InputQuota] Minimum analysis quota: ${minimumQuota} tokens (summary: ${summaryTokens}, per-section: ${totalPerSection}, sections: ${numSections})`);
+    logger.debug('PERFORMANCE', `Minimum analysis quota: ${minimumQuota} tokens (summary: ${summaryTokens}, per-section: ${totalPerSection}, sections: ${numSections})`);
 
     return {
       minimumQuota,

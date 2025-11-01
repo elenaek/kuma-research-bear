@@ -122,7 +122,7 @@ export async function updateIconForTab(tabId: number, state: OperationState): Pr
         tabId: tabId,
       });
     } catch (fallbackError) {
-      console.error('[IconService] Failed to set default icon:', fallbackError);
+      logger.error('BACKGROUND_SCRIPT', 'Failed to set default icon:', fallbackError);
     }
   }
 }

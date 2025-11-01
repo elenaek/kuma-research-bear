@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp, Check, Globe } from 'lucide-preact';
 import { SUPPORTED_LANGUAGES, LanguageOption } from '../../types/index.ts';
 import { getOutputLanguage, setOutputLanguage } from '../../utils/settingsService.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Language Dropdown Component
@@ -52,9 +53,9 @@ export function LanguageDropdown() {
     // Save to settings
     try {
       await setOutputLanguage(lang.code);
-      console.log('[LanguageDropdown] Output language changed to:', lang.code);
+      logger.debug('SETTINGS', 'Output language changed to:', lang.code);
     } catch (error) {
-      console.error('[LanguageDropdown] Error saving language setting:', error);
+      logger.error('SETTINGS', 'Error saving language setting:', error);
     }
   };
 

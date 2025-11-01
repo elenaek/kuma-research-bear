@@ -5,6 +5,7 @@ import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
 import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.tsx';
 import { AlertCircle } from 'lucide-preact';
 import { isPDFPage } from '../../utils/contentExtractor.ts';
+import { logger } from '../../utils/logger.ts';
 
 interface ChatBoxProps {
   tabs: ChatTab[];
@@ -173,16 +174,16 @@ export const ChatBox = ({
     if (sourceInfo.cssSelector) {
       try {
         element = document.querySelector(sourceInfo.cssSelector);
-        console.log('[ScrollToSource] CSS selector found element:', !!element);
+        logger.debug('CHATBOX', 'CSS selector found element:', !!element);
       } catch (e) {
-        console.warn('[ScrollToSource] Invalid CSS selector:', sourceInfo.cssSelector, e);
+        logger.warn('CHATBOX', 'Invalid CSS selector:', sourceInfo.cssSelector, e);
       }
     }
 
     // Try 2: Element ID (direct lookup)
     if (!element && sourceInfo.elementId) {
       element = document.getElementById(sourceInfo.elementId);
-      console.log('[ScrollToSource] Element ID found element:', !!element);
+      logger.debug('CHATBOX', 'Element ID found element:', !!element);
     }
 
     // Try 3: XPath
@@ -196,17 +197,17 @@ export const ChatBox = ({
           null
         );
         element = xpathResult.singleNodeValue as Element | null;
-        console.log('[ScrollToSource] XPath found element:', !!element);
+        logger.debug('CHATBOX', 'XPath found element:', !!element);
       } catch (e) {
-        console.warn('[ScrollToSource] Invalid XPath:', sourceInfo.xPath, e);
+        logger.warn('CHATBOX', 'Invalid XPath:', sourceInfo.xPath, e);
       }
     }
 
     // Try 4: Text search fallback (search for section heading text)
     if (!element && sourceInfo.sectionHeading) {
-      console.log('[ScrollToSource] Falling back to text search for:', sourceInfo.sectionHeading);
+      logger.debug('CHATBOX', 'Falling back to text search for:', sourceInfo.sectionHeading);
       element = findElementByText(sourceInfo.sectionHeading);
-      console.log('[ScrollToSource] Text search found element:', !!element);
+      logger.debug('CHATBOX', 'Text search found element:', !!element);
     }
 
     // If we found an element, scroll to it and highlight
@@ -230,9 +231,9 @@ export const ChatBox = ({
         element!.style.outlineOffset = originalOutlineOffset;
       }, 2000);
 
-      console.log('[ScrollToSource] Successfully scrolled to and highlighted element');
+      logger.debug('CHATBOX', 'Successfully scrolled to and highlighted element');
     } else {
-      console.log('[ScrollToSource] Could not find element for source:', sourceInfo.text);
+      logger.debug('CHATBOX', 'Could not find element for source:', sourceInfo.text);
     }
   };
 
@@ -633,7 +634,7 @@ export const ChatBox = ({
 
   // Debug logging
   if (activeTab?.type === 'image') {
-    console.log('[ChatBox] Image tab detected:', {
+    logger.debug('CHATBOX', 'Image tab detected:', {
       imageUrl: activeTab.imageUrl,
       isPdfPage: isPDFPage(),
       isPdfCapture,

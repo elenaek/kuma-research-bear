@@ -18,6 +18,7 @@ import type { Persona, Purpose } from '../../types/personaPurpose.ts';
 import { PERSONA_PURPOSE_CONFIGS } from '../../types/personaPurpose.ts';
 import { getPersona, getPurpose, onPersonaChanged, onPurposeChanged } from '../../utils/settingsService.ts';
 import { MessageType } from '../../types/index.ts';
+import { logger } from '../../utils/logger.ts';
 
 /**
  * Settings Tab - Global extension settings
@@ -56,7 +57,7 @@ export function SettingsTab() {
     setShowImageButtonsState(newValue);
     try {
       await setShowImageButtons(newValue);
-      console.log('[SettingsTab] Image buttons visibility set to:', newValue);
+      logger.debug('SETTINGS', 'Image buttons visibility set to:', newValue);
 
       // Broadcast change to all tabs (matches popup implementation)
       const tabs = await chrome.tabs.query({});
@@ -69,7 +70,7 @@ export function SettingsTab() {
         }
       }
     } catch (error) {
-      console.error('[SettingsTab] Error saving image buttons setting:', error);
+      logger.error('SETTINGS', 'Error saving image buttons setting:', error);
       // Revert on error
       setShowImageButtonsState(!newValue);
     }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef } from 'preact/compat';
 import { DotLottie } from '@lottiefiles/dotlottie-web';
+import { logger } from '../../utils/logger.ts';
 
 interface LottiePlayerProps {
   path: string;
@@ -189,7 +190,7 @@ export const LottiePlayer = forwardRef<LottiePlayerHandle, LottiePlayerProps>(
           // On complete, loop second half
           const onComplete = () => {
             animation.removeEventListener('complete', onComplete);
-            console.log('[LottiePlayer] Setting segment:', midpoint, 'to', totalFrames);
+            logger.debug('UI_COMPONENTS', 'Setting segment:', midpoint, 'to', totalFrames);
             animation.setSegment(midpoint, totalFrames);
             animation.setLoop(true);
             animation.play();
@@ -216,7 +217,7 @@ export const LottiePlayer = forwardRef<LottiePlayerHandle, LottiePlayerProps>(
 
           if(loopPurpose === LoopPurpose.POPUP) {
           const midpoint = Math.floor(totalFrames / 2);
-            console.log('[LottiePlayer] Auto-starting loop from midpoint:', midpoint, 'to', totalFrames);
+            logger.debug('UI_COMPONENTS', 'Auto-starting loop from midpoint:', midpoint, 'to', totalFrames);
             animation.setSegment(midpoint, totalFrames);
             animation.setLoop(true);
             animation.play();
@@ -261,7 +262,7 @@ export const LottiePlayer = forwardRef<LottiePlayerHandle, LottiePlayerProps>(
 
           if(loopPurpose === LoopPurpose.POPUP) {
             const midpoint = Math.floor(totalFrames / 2);
-            console.log('[LottiePlayer] Auto-starting loop from midpoint:', midpoint, 'to', totalFrames);
+            logger.debug('UI_COMPONENTS', 'Auto-starting loop from midpoint:', midpoint, 'to', totalFrames);
             animation.setSegment(midpoint, totalFrames);
             animation.setLoop(true);
             animation.play();

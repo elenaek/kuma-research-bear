@@ -5,6 +5,8 @@
  * to ensure consistent URL handling across the extension.
  */
 
+import { logger } from './logger.ts';
+
 /**
  * Decode percent-encoded unreserved characters
  * Per RFC 3986, unreserved characters are: A-Z a-z 0-9 - . _ ~
@@ -101,7 +103,7 @@ export function normalizeUrl(url: string): string {
     return urlObj.href;
   } catch (error) {
     // If URL parsing fails, fall back to simple fragment removal
-    console.warn('[URL Utils] Failed to parse URL, using fallback normalization:', url, error);
+    logger.warn('GENERAL', 'Failed to parse URL, using fallback normalization:', url, error);
     const hashIndex = url.indexOf('#');
     return hashIndex !== -1 ? url.substring(0, hashIndex) : url;
   }

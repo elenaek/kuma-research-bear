@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'preact/hooks';
 import * as ChromeService from '../../services/ChromeService.ts';
 import { MessageType, ResearchPaper } from '../../types/index.ts';
 import { normalizeUrl } from '../../utils/urlUtils.ts';
+import { logger } from '../../utils/logger.ts';
 
 interface UsePaperStatusReturn {
   // State
@@ -65,7 +66,7 @@ export function usePaperStatus(currentTabUrl?: string): UsePaperStatusReturn {
       const isStored = await ChromeService.isPaperStoredInDB(paperUrl);
       setIsPaperStored(isStored);
     } catch (error) {
-      console.error('[usePaperStatus] Error checking paper storage:', error);
+      logger.error('CHROME_SERVICE', 'Error checking paper storage:', error);
       setIsPaperStored(false);
     }
   }
@@ -88,7 +89,7 @@ export function usePaperStatus(currentTabUrl?: string): UsePaperStatusReturn {
 
       return status;
     } catch (error) {
-      console.error('[usePaperStatus] Error checking stored paper:', error);
+      logger.error('CHROME_SERVICE', 'Error checking stored paper:', error);
       return {
         isStored: false,
         hasExplanation: false,

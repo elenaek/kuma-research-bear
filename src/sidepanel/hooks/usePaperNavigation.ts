@@ -144,7 +144,7 @@ export function usePaperNavigation(props: UsePaperNavigationProps = {}): UsePape
         alert('Failed to delete paper. Please try again.');
       }
     } catch (error) {
-      console.error('[usePaperNavigation] Error deleting paper:', error);
+      logger.error('NAVIGATION', 'Error deleting paper:', error);
       alert('Failed to delete paper. Please try again.');
     } finally {
       setIsDeleting(false);

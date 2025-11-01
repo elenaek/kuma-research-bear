@@ -24,7 +24,7 @@ export async function extractFullText(): Promise<string> {
       try {
         // Extract all text from the PDF (PDF.js is lazy-loaded here)
         const pdfContent = await extractPDFText(pdfUrl, (progress) => {
-          console.log(`[TextExtraction] PDF extraction progress: ${progress.percentComplete}% (${progress.currentPage}/${progress.totalPages})`);
+          logger.debug('PDF_EXTRACTION', `PDF extraction progress: ${progress.percentComplete}% (${progress.currentPage}/${progress.totalPages})`);
         });
 
         logger.debug('CONTENT_SCRIPT', '[TextExtraction] ✓ PDF text extracted:', {
