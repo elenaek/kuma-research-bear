@@ -477,6 +477,43 @@ Interact with papers conveniently
 
 - **Chrome 138+** with experimental AI features enabled
 
+### Hardware Requirements
+
+Before installing Kuma, ensure your system meets these requirements for Chrome's Built-in AI:
+
+#### **Operating System**
+- ✅ **Windows 10 or 11**
+- ✅ **macOS 13+ (Ventura and onwards)**
+- ✅ **Linux**
+- ✅ **ChromeOS** (Chromebook Plus devices)
+- ❌ **Not Supported:** Chrome for Android, iOS, non-Chromebook Plus ChromeOS devices
+
+#### **Storage**
+- **22 GB minimum** free space on the volume containing your Chrome profile
+- ⚠️ **Auto-cleanup:** If available space drops below 10 GB after model download, Gemini Nano will remove itself and redownload once space is available
+
+#### **Processing Power** (Choose ONE of the following)
+
+**Option 1 - GPU:**
+- **Strictly more than 4 GB VRAM**
+
+**Option 2 - CPU:**
+- **16 GB RAM or more** AND
+- **4 CPU cores or more**
+
+#### **Network**
+- **Unlimited/unmetered connection** required for initial model download (~1-2 GB)
+- Wi-Fi and ethernet typically work
+- ⚠️ Metered connections (cellular data) may cause issues
+
+#### **Language Support**
+- **Chrome 140+:** English, Spanish, Japanese for input and output
+- Earlier versions: English only
+
+> **Note:** If you don't meet the GPU/CPU requirements, you can use the `EnabledBypassPerfRef` flag (mentioned in Setup section) for testing, but performance will be significantly degraded.
+
+---
+
 ### Setup Chrome AI APIs
 
 1. **Enable AI flags** in `chrome://flags`:
