@@ -32,7 +32,7 @@ export enum LogLevel {
  * Default: LogLevel.WARN (only warnings and errors)
  * Set to LogLevel.DEBUG to see all logs
  */
-export const CURRENT_LOG_LEVEL = LogLevel.DEBUG;
+export const CURRENT_LOG_LEVEL = LogLevel.ERROR;
 
 export interface LogConfig {
   // LaTeX and MathJax rendering

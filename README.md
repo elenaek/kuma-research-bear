@@ -684,7 +684,7 @@ User Question
 
 ### Planned Enhancements
 
-- Major refactor of codebase
+- Major refactor of codebase (Gotta clean up typescript errors, lol)
 - Better metadata extraction
 - Improved PDF extraction/structure retaining
 - Improve LaTeX rendering/stability

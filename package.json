@@ -1,6 +1,6 @@
 {
   "name": "kuma-research-bear",
-  "version": "1.0.0",
+  "version": "0.5.0",
   "description": "Chrome extension that explains research papers using built-in AI",
   "type": "module",
   "scripts": {
@@ -17,8 +17,16 @@
     "ai",
     "explanation"
   ],
-  "author": "",
+  "author": "elenaek",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elenaek/kuma-research-bear.git"
+  },
+  "homepage": "https://github.com/elenaek/kuma-research-bear#readme",
+  "bugs": {
+    "url": "https://github.com/elenaek/kuma-research-bear/issues"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.14",
     "@types/chrome": "0.0.268",
