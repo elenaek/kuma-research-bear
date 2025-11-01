@@ -7,6 +7,7 @@
 > **Making research papers accessible to everyone, powered by Chrome's Built-in AI**
 
 [![Chrome Built-in AI Challenge 2025](https://img.shields.io/badge/Google%20Chrome-Built--in%20AI%20Challenge%202025-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white)](https://devpost.com/software/kuma-the-research-bear)
+[![Chrome Built-in AI Documentation](https://img.shields.io/badge/Google%20Chrome-Built--in%20AI%20Documentation%202025-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white)](https://developer.chrome.com/docs/ai/built-in)
 [![Chrome Version](https://img.shields.io/badge/Chrome-138%2B-4285F4?style=for-the-badge&logo=google-chrome)](https://www.google.com/chrome/)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
@@ -365,11 +366,11 @@ Interact with papers conveniently
 
 ---
 
-### System Workflow Diagrams
+### System Workflow Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         User Clicks Detect Paper                │
+│                   User Clicks Detect Paper                      │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              ▼
@@ -410,12 +411,12 @@ Interact with papers conveniently
 
 ---
 
-### Hybrid RAG Workflow
+### Hybrid RAG Workflow Diagram
 
 ```
-User Question
-     │
-     ▼
+         User Question
+            │
+            ▼
 ┌─────────────────────────────────────┐
 │   Detect Language (Language API)    │
 └────────────┬────────────────────────┘
