@@ -9,7 +9,7 @@ import { isPDFPage } from '../../utils/contentExtractor.ts';
 
 // Default position and size
 const DEFAULT_POSITION: ChatboxPosition = {
-  x: window.innerWidth - 420,
+  x: 20,
   y: window.innerHeight - 620,
   width: 400,
   height: 600,
