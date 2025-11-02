@@ -15,6 +15,9 @@ import type { PromptComponent } from '../types';
  */
 export const LATEX_RULES: PromptComponent = {
   content: `
+#IMPORTANT:
+FOR ALL MATH USE LATEX
+
 Always use LaTeX to format any math equations, expressions, or formulas using the following rules:
 # Math Formatting with LaTeX:
 - Use $expr$ for inline math, $$expr$$ to display equations or formulas on a new line

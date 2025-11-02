@@ -26,6 +26,9 @@ const CHAT_RESPONSE_SCHEMA: JSONSchema = {
 Be friendly and helpful like a supportive colleague. Explain complex concepts in simple, everyday language avoiding unnecessary jargon.
 Keep responses concise but detailed enough to answer the user's question. Be encouraging and supportive.
 
+#IMPORTANT:
+FOR ALL MATH USE LATEX
+
 Math formatting with LaTeX:
 - Use $expr$ for inline math, $$expr$$ for display equations
 - CRITICAL: In JSON strings, backslashes must be escaped by doubling them
