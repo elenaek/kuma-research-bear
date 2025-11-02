@@ -125,6 +125,450 @@ export function detectBioRxivPaper(): ResearchPaper | null {
   }
 }
 
+// Detector for IEEE Xplore papers
+export function detectIEEEPaper(): ResearchPaper | null {
+  const url = window.location.href;
+
+  if (!url.includes('ieee')) return null;
+
+  try {
+    const title = document.querySelector('.document-title')?.textContent?.trim() ||
+                  document.querySelector('h1.title')?.textContent?.trim() || '';
+
+    const authors = Array.from(document.querySelectorAll('.authors-info .author span, .author-name'))
+      .map(el => el.textContent?.trim() || '')
+      .filter(Boolean);
+
+    const abstract = document.querySelector('.abstract-text')?.textContent?.trim() ||
+                    document.querySelector('.article-abstract')?.textContent?.trim() || '';
+
+    // Extract DOI from meta tag or text
+    const doiMeta = document.querySelector('meta[name="citation_doi"]')?.getAttribute('content') || '';
+    const doi = doiMeta || '';
+
+    // Extract publication info
+    const journal = document.querySelector('.stats-document-abstract-publishedIn a')?.textContent?.trim() ||
+                   document.querySelector('meta[name="citation_journal_title"]')?.getAttribute('content') || '';
+
+    const publishDate = document.querySelector('meta[name="citation_publication_date"]')?.getAttribute('content') ||
+                       document.querySelector('.doc-abstract-pubdate')?.textContent?.trim() || '';
+
+    // Extract PDF URL
+    const pdfUrl = document.querySelector('a[href*="stamp/stamp.jsp"]')?.getAttribute('href') || '';
+
+    return {
+      title,
+      authors,
+      abstract,
+      url: normalizeUrl(url),
+      source: 'ieee',
+      metadata: {
+        doi,
+        journal,
+        publishDate,
+        pdfUrl: pdfUrl ? (pdfUrl.startsWith('http') ? pdfUrl : `https://ieeexplore.ieee.org${pdfUrl}`) : undefined,
+        publicationType: 'conference-paper', // Most IEEE papers are conference papers
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
+      },
+    };
+  } catch (error) {
+    logger.error('UTILS', 'Error detecting IEEE paper:', error);
+    return null;
+  }
+}
+
+// Detector for ACM Digital Library papers
+export function detectACMPaper(): ResearchPaper | null {
+  const url = window.location.href;
+
+  if (!url.includes('acm.org')) return null;
+
+  try {
+    const title = document.querySelector('.citation__title')?.textContent?.trim() ||
+                  document.querySelector('h1.title')?.textContent?.trim() || '';
+
+    const authors = Array.from(document.querySelectorAll('.author-name, .loa__author-name span'))
+      .map(el => el.textContent?.trim() || '')
+      .filter(Boolean);
+
+    const abstract = document.querySelector('.abstractSection p')?.textContent?.trim() ||
+                    document.querySelector('.article__abstract')?.textContent?.trim() || '';
+
+    // Extract DOI
+    const doiElement = document.querySelector('a[href*="doi.org"]');
+    const doiMatch = doiElement?.getAttribute('href')?.match(/10\.\d+\/[^\s]+/) ||
+                    url.match(/10\.\d+\/[^\s]+/);
+    const doi = doiMatch ? doiMatch[0] : '';
+
+    // Extract venue/conference
+    const venue = document.querySelector('.epub-section__title')?.textContent?.trim() ||
+                 document.querySelector('meta[name="citation_conference_title"]')?.getAttribute('content') || '';
+
+    const publishDate = document.querySelector('meta[name="citation_publication_date"]')?.getAttribute('content') ||
+                       document.querySelector('.CitationCoverDate')?.textContent?.trim() || '';
+
+    return {
+      title,
+      authors,
+      abstract,
+      url: normalizeUrl(url),
+      source: 'acm',
+      metadata: {
+        doi,
+        venue,
+        publishDate,
+        publicationType: venue ? 'conference-paper' : 'journal-article',
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
+      },
+    };
+  } catch (error) {
+    logger.error('UTILS', 'Error detecting ACM paper:', error);
+    return null;
+  }
+}
+
+// Detector for ScienceDirect papers
+export function detectScienceDirectPaper(): ResearchPaper | null {
+  const url = window.location.href;
+
+  if (!url.includes('sciencedirect')) return null;
+
+  try {
+    const title = document.querySelector('.title-text')?.textContent?.trim() ||
+                  document.querySelector('h1.article-title')?.textContent?.trim() || '';
+
+    const authors = Array.from(document.querySelectorAll('.author .given-name, .author .surname'))
+      .map(el => el.textContent?.trim() || '')
+      .filter(Boolean);
+
+    // Combine given names and surnames if they're separate
+    const authorElements = document.querySelectorAll('.author');
+    const authorsFull = Array.from(authorElements).map(authorEl => {
+      const given = authorEl.querySelector('.given-name')?.textContent?.trim() || '';
+      const surname = authorEl.querySelector('.surname')?.textContent?.trim() || '';
+      return `${given} ${surname}`.trim();
+    }).filter(Boolean);
+
+    const finalAuthors = authorsFull.length > 0 ? authorsFull : authors;
+
+    const abstract = document.querySelector('#abstracts .abstract')?.textContent?.trim() ||
+                    document.querySelector('.abstract.author')?.textContent?.trim() || '';
+
+    // Extract DOI
+    const doiElement = document.querySelector('a.doi');
+    const doi = doiElement?.getAttribute('href')?.replace('https://doi.org/', '') || '';
+
+    // Extract journal
+    const journal = document.querySelector('.publication-title')?.textContent?.trim() ||
+                   document.querySelector('meta[name="citation_journal_title"]')?.getAttribute('content') || '';
+
+    const publishDate = document.querySelector('.publication-date')?.textContent?.trim() ||
+                       document.querySelector('meta[name="citation_publication_date"]')?.getAttribute('content') || '';
+
+    return {
+      title,
+      authors: finalAuthors,
+      abstract,
+      url: normalizeUrl(url),
+      source: 'sciencedirect',
+      metadata: {
+        doi,
+        journal,
+        publishDate,
+        publicationType: 'journal-article',
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
+      },
+    };
+  } catch (error) {
+    logger.error('UTILS', 'Error detecting ScienceDirect paper:', error);
+    return null;
+  }
+}
+
+// Detector for Nature papers
+export function detectNaturePaper(): ResearchPaper | null {
+  const url = window.location.href;
+
+  if (!url.includes('nature.com')) return null;
+
+  try {
+    const title = document.querySelector('h1.c-article-title')?.textContent?.trim() ||
+                  document.querySelector('.article-title')?.textContent?.trim() || '';
+
+    const authors = Array.from(document.querySelectorAll('.c-article-author-list__item, .author-name'))
+      .map(el => el.textContent?.trim() || '')
+      .filter(Boolean);
+
+    const abstract = document.querySelector('#Abs1-content')?.textContent?.trim() ||
+                    document.querySelector('.c-article-section__content')?.textContent?.trim() || '';
+
+    // Extract DOI
+    const doiElement = document.querySelector('a[data-track-action="view doi"]');
+    const doi = doiElement?.getAttribute('href')?.replace('https://doi.org/', '') || '';
+
+    // Extract journal
+    const journal = document.querySelector('.c-article-identifiers__item')?.textContent?.trim() || 'Nature';
+
+    const publishDate = document.querySelector('time')?.getAttribute('datetime') ||
+                       document.querySelector('.c-article-identifiers__item time')?.textContent?.trim() || '';
+
+    return {
+      title,
+      authors,
+      abstract,
+      url: normalizeUrl(url),
+      source: 'nature',
+      metadata: {
+        doi,
+        journal,
+        publishDate,
+        publicationType: 'journal-article',
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
+      },
+    };
+  } catch (error) {
+    logger.error('UTILS', 'Error detecting Nature paper:', error);
+    return null;
+  }
+}
+
+// Detector for Science.org papers
+export function detectSciencePaper(): ResearchPaper | null {
+  const url = window.location.href;
+
+  if (!url.includes('science.org') && !url.includes('sciencemag.org')) return null;
+
+  try {
+    const title = document.querySelector('h1.article-title')?.textContent?.trim() ||
+                  document.querySelector('.highwire-cite-title')?.textContent?.trim() || '';
+
+    const authors = Array.from(document.querySelectorAll('.contributor-list .name, .highwire-cite-author'))
+      .map(el => el.textContent?.trim() || '')
+      .filter(Boolean);
+
+    const abstract = document.querySelector('.abstract')?.textContent?.trim() ||
+                    document.querySelector('.section.abstract p')?.textContent?.trim() || '';
+
+    // Extract DOI
+    const doiMeta = document.querySelector('meta[name="citation_doi"]')?.getAttribute('content') || '';
+    const doi = doiMeta || '';
+
+    const journal = document.querySelector('meta[name="citation_journal_title"]')?.getAttribute('content') || 'Science';
+
+    const publishDate = document.querySelector('meta[name="citation_publication_date"]')?.getAttribute('content') ||
+                       document.querySelector('.meta-date')?.textContent?.trim() || '';
+
+    return {
+      title,
+      authors,
+      abstract,
+      url: normalizeUrl(url),
+      source: 'science',
+      metadata: {
+        doi,
+        journal,
+        publishDate,
+        publicationType: 'journal-article',
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
+      },
+    };
+  } catch (error) {
+    logger.error('UTILS', 'Error detecting Science paper:', error);
+    return null;
+  }
+}
+
+// Detector for PNAS papers
+export function detectPNASPaper(): ResearchPaper | null {
+  const url = window.location.href;
+
+  if (!url.includes('pnas.org')) return null;
+
+  try {
+    const title = document.querySelector('h1.highwire-cite-title')?.textContent?.trim() ||
+                  document.querySelector('.article-title')?.textContent?.trim() || '';
+
+    const authors = Array.from(document.querySelectorAll('.contributor-list .name, .highwire-cite-author'))
+      .map(el => el.textContent?.trim() || '')
+      .filter(Boolean);
+
+    const abstract = document.querySelector('.abstract')?.textContent?.trim() ||
+                    document.querySelector('#abstract-1')?.textContent?.trim() || '';
+
+    // Extract DOI
+    const doiMeta = document.querySelector('meta[name="citation_doi"]')?.getAttribute('content') || '';
+    const doi = doiMeta || '';
+
+    const publishDate = document.querySelector('meta[name="citation_publication_date"]')?.getAttribute('content') ||
+                       document.querySelector('.pnas-date')?.textContent?.trim() || '';
+
+    return {
+      title,
+      authors,
+      abstract,
+      url: normalizeUrl(url),
+      source: 'pnas',
+      metadata: {
+        doi,
+        journal: 'Proceedings of the National Academy of Sciences',
+        publishDate,
+        publicationType: 'journal-article',
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
+      },
+    };
+  } catch (error) {
+    logger.error('UTILS', 'Error detecting PNAS paper:', error);
+    return null;
+  }
+}
+
+// Detector for SSRN papers
+export function detectSSRNPaper(): ResearchPaper | null {
+  const url = window.location.href;
+
+  if (!url.includes('ssrn.com')) return null;
+
+  try {
+    const title = document.querySelector('h1')?.textContent?.trim() || '';
+
+    const authors = Array.from(document.querySelectorAll('.author-link, .authors a'))
+      .map(el => el.textContent?.trim() || '')
+      .filter(Boolean);
+
+    const abstract = document.querySelector('.abstract-text')?.textContent?.trim() ||
+                    document.querySelector('#abstract')?.textContent?.trim() || '';
+
+    // Extract SSRN ID from URL
+    const ssrnIdMatch = url.match(/abstract[=\/](\d+)/);
+    const ssrnId = ssrnIdMatch ? ssrnIdMatch[1] : '';
+
+    // Extract publication date
+    const publishDate = document.querySelector('.publication-date')?.textContent?.trim() || '';
+
+    return {
+      title,
+      authors,
+      abstract,
+      url: normalizeUrl(url),
+      source: 'ssrn',
+      metadata: {
+        publishDate,
+        publicationType: 'preprint',
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
+      },
+    };
+  } catch (error) {
+    logger.error('UTILS', 'Error detecting SSRN paper:', error);
+    return null;
+  }
+}
+
+// Detector for Semantic Scholar papers
+export function detectSemanticScholarPaper(): ResearchPaper | null {
+  const url = window.location.href;
+
+  if (!url.includes('semanticscholar')) return null;
+
+  try {
+    const title = document.querySelector('h1[data-test-id="paper-detail-title"]')?.textContent?.trim() ||
+                  document.querySelector('.paper-detail-page__title')?.textContent?.trim() || '';
+
+    const authors = Array.from(document.querySelectorAll('.author-list__link, .author-name'))
+      .map(el => el.textContent?.trim() || '')
+      .filter(Boolean);
+
+    const abstract = document.querySelector('.paper-detail-page__abstract')?.textContent?.trim() ||
+                    document.querySelector('[data-test-id="text-truncator-text"]')?.textContent?.trim() || '';
+
+    // Extract DOI if available
+    const doiElement = document.querySelector('a[href*="doi.org"]');
+    const doiMatch = doiElement?.getAttribute('href')?.match(/10\.\d+\/[^\s]+/);
+    const doi = doiMatch ? doiMatch[0] : '';
+
+    // Extract venue
+    const venue = document.querySelector('.paper-meta-item__venue')?.textContent?.trim() || '';
+
+    // Extract publication year
+    const yearElement = document.querySelector('.paper-meta-item__year');
+    const publishDate = yearElement?.textContent?.trim() || '';
+
+    return {
+      title,
+      authors,
+      abstract,
+      url: normalizeUrl(url),
+      source: 'semanticscholar',
+      metadata: {
+        doi,
+        venue,
+        publishDate,
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
+      },
+    };
+  } catch (error) {
+    logger.error('UTILS', 'Error detecting Semantic Scholar paper:', error);
+    return null;
+  }
+}
+
+// Detector for Springer papers
+export function detectSpringerPaper(): ResearchPaper | null {
+  const url = window.location.href;
+
+  if (!url.includes('springer')) return null;
+
+  try {
+    const title = document.querySelector('h1.c-article-title')?.textContent?.trim() ||
+                  document.querySelector('.ArticleTitle')?.textContent?.trim() || '';
+
+    const authors = Array.from(document.querySelectorAll('.c-article-author-list__item, .AuthorName'))
+      .map(el => el.textContent?.trim() || '')
+      .filter(Boolean);
+
+    const abstract = document.querySelector('#Abs1-content')?.textContent?.trim() ||
+                    document.querySelector('.Abstract')?.textContent?.trim() || '';
+
+    // Extract DOI
+    const doiElement = document.querySelector('a[data-track-action="view doi"]');
+    const doiMeta = document.querySelector('meta[name="citation_doi"]')?.getAttribute('content') || '';
+    const doi = doiElement?.getAttribute('href')?.replace('https://doi.org/', '') || doiMeta || '';
+
+    // Extract journal
+    const journal = document.querySelector('.c-journal-title')?.textContent?.trim() ||
+                   document.querySelector('meta[name="citation_journal_title"]')?.getAttribute('content') || '';
+
+    const publishDate = document.querySelector('time')?.getAttribute('datetime') ||
+                       document.querySelector('meta[name="citation_publication_date"]')?.getAttribute('content') || '';
+
+    return {
+      title,
+      authors,
+      abstract,
+      url: normalizeUrl(url),
+      source: 'springer',
+      metadata: {
+        doi,
+        journal,
+        publishDate,
+        publicationType: journal ? 'journal-article' : 'unknown',
+        extractionMethod: 'site-specific',
+        extractionTimestamp: Date.now(),
+      },
+    };
+  } catch (error) {
+    logger.error('UTILS', 'Error detecting Springer paper:', error);
+    return null;
+  }
+}
+
 /**
  * Detector for PDF research papers
  * Extracts metadata from PDF and uses AI for title/abstract extraction
@@ -360,6 +804,15 @@ export async function detectPaper(): Promise<ResearchPaper | null> {
     detectArXivPaper,
     detectPubMedPaper,
     detectBioRxivPaper,
+    detectIEEEPaper,
+    detectACMPaper,
+    detectScienceDirectPaper,
+    detectNaturePaper,
+    detectSciencePaper,
+    detectPNASPaper,
+    detectSSRNPaper,
+    detectSemanticScholarPaper,
+    detectSpringerPaper,
   ];
 
   for (const detector of siteDetectors) {
@@ -432,6 +885,15 @@ export async function detectPaperWithAI(): Promise<ResearchPaper | null> {
     detectArXivPaper,
     detectPubMedPaper,
     detectBioRxivPaper,
+    detectIEEEPaper,
+    detectACMPaper,
+    detectScienceDirectPaper,
+    detectNaturePaper,
+    detectSciencePaper,
+    detectPNASPaper,
+    detectSSRNPaper,
+    detectSemanticScholarPaper,
+    detectSpringerPaper,
   ];
 
   for (const detector of siteDetectors) {
@@ -447,6 +909,142 @@ export async function detectPaperWithAI(): Promise<ResearchPaper | null> {
 }
 
 /**
+ * Hybrid paper detection with field-level tracking
+ * Combines results from multiple sources to maximize metadata completeness
+ * Uses the hybrid extraction coordinator to merge partial results
+ */
+export async function detectPaperHybrid(): Promise<ResearchPaper | null> {
+  logger.debug('UTILS', 'Starting hybrid paper detection...');
+
+  const {
+    mergeExtractionResults,
+    paperToPartialResult,
+    identifyMissingFields,
+    determinePaperSource
+  } = await import('./metadataCoordinator.ts');
+
+  const partialResults = [];
+
+  // Step 1: Try site-specific extractors (highest quality when available)
+  const siteDetectors = [
+    { fn: detectArXivPaper, source: 'dom-selector' as const, confidence: 0.95 },
+    { fn: detectPubMedPaper, source: 'dom-selector' as const, confidence: 0.95 },
+    { fn: detectBioRxivPaper, source: 'dom-selector' as const, confidence: 0.95 },
+    { fn: detectIEEEPaper, source: 'dom-selector' as const, confidence: 0.95 },
+    { fn: detectACMPaper, source: 'dom-selector' as const, confidence: 0.95 },
+    { fn: detectScienceDirectPaper, source: 'dom-selector' as const, confidence: 0.95 },
+    { fn: detectNaturePaper, source: 'dom-selector' as const, confidence: 0.95 },
+    { fn: detectSciencePaper, source: 'dom-selector' as const, confidence: 0.95 },
+    { fn: detectPNASPaper, source: 'dom-selector' as const, confidence: 0.95 },
+    { fn: detectSSRNPaper, source: 'dom-selector' as const, confidence: 0.95 },
+    { fn: detectSemanticScholarPaper, source: 'dom-selector' as const, confidence: 0.95 },
+    { fn: detectSpringerPaper, source: 'dom-selector' as const, confidence: 0.95 },
+  ];
+
+  for (const { fn, source, confidence } of siteDetectors) {
+    try {
+      const paper = fn();
+      if (paper) {
+        logger.debug('UTILS', `Site-specific extraction succeeded: ${paper.title}`);
+        partialResults.push(paperToPartialResult(paper, source, confidence));
+        // If we got a complete result from a trusted source, we might be done
+        if (isValidPaper(paper)) {
+          logger.debug('UTILS', 'Complete paper found from site-specific extractor');
+          break; // Found a complete result, no need to try other site-specific extractors
+        }
+      }
+    } catch (error) {
+      logger.debug('UTILS', `Site-specific extractor failed:`, error);
+    }
+  }
+
+  // Step 2: Try Schema.org structured data (if not already complete)
+  if (partialResults.length === 0 || partialResults.some(r => identifyMissingFields(r).length > 0)) {
+    try {
+      const schemaPaper = detectSchemaOrgPaper();
+      if (schemaPaper) {
+        logger.debug('UTILS', 'Schema.org extraction succeeded');
+        partialResults.push(paperToPartialResult(schemaPaper, 'schema.org', 0.90));
+      }
+    } catch (error) {
+      logger.debug('UTILS', 'Schema.org extraction failed:', error);
+    }
+  }
+
+  // Step 3: Check what's missing and use AI to fill gaps if needed
+  if (partialResults.length > 0) {
+    const missingFields = identifyMissingFields(partialResults[0]);
+
+    if (missingFields.length > 0) {
+      logger.debug('UTILS', `Missing fields: ${missingFields.join(', ')}, attempting AI extraction...`);
+
+      try {
+        // Check if this is a PDF
+        if (isPDFPage()) {
+          const pdfPaper = await detectPDFPaper();
+          if (pdfPaper) {
+            logger.debug('UTILS', 'PDF AI extraction succeeded');
+            partialResults.push(paperToPartialResult(pdfPaper, 'ai', 0.75));
+          }
+        } else {
+          // Extract page text and use AI
+          const extracted = extractPageText();
+          if (extracted.text.length >= 100) {
+            const aiPaper = await aiService.extractPaperMetadata(extracted.text);
+            if (aiPaper) {
+              logger.debug('UTILS', 'AI extraction succeeded');
+              partialResults.push(paperToPartialResult(aiPaper, 'ai', 0.75));
+            }
+          }
+        }
+      } catch (error) {
+        logger.debug('UTILS', 'AI extraction failed:', error);
+      }
+    }
+  } else {
+    // No partial results yet, try AI as primary method
+    logger.debug('UTILS', 'No structured data found, trying AI extraction...');
+
+    try {
+      if (isPDFPage()) {
+        const pdfPaper = await detectPDFPaper();
+        if (pdfPaper) {
+          partialResults.push(paperToPartialResult(pdfPaper, 'ai', 0.75));
+        }
+      } else {
+        const extracted = extractPageText();
+        if (extracted.text.length >= 100) {
+          const aiPaper = await aiService.extractPaperMetadata(extracted.text);
+          if (aiPaper) {
+            partialResults.push(paperToPartialResult(aiPaper, 'ai', 0.75));
+          }
+        }
+      }
+    } catch (error) {
+      logger.debug('UTILS', 'AI extraction failed:', error);
+    }
+  }
+
+  // Step 4: Merge all partial results
+  if (partialResults.length > 0) {
+    logger.debug('UTILS', `Merging ${partialResults.length} partial results...`);
+    const merged = mergeExtractionResults(partialResults);
+
+    if (merged) {
+      // Override source with domain-based detection
+      merged.source = determinePaperSource(merged.url);
+      logger.debug('UTILS', `✓ Hybrid detection succeeded: ${merged.title}`);
+      logger.debug('UTILS', `  Confidence: ${(merged.metadata?.confidence || 0) * 100}%`);
+      logger.debug('UTILS', `  Fields from ${Object.keys(merged.metadata?.fieldSources || {}).length} sources`);
+      return merged;
+    }
+  }
+
+  logger.debug('UTILS', '❌ Hybrid detection failed - no valid paper found');
+  return null;
+}
+
+/**
  * Synchronous version for backward compatibility
  * Only tries non-AI detectors
  */
@@ -455,6 +1053,15 @@ export function detectPaperSync(): ResearchPaper | null {
     detectArXivPaper,
     detectPubMedPaper,
     detectBioRxivPaper,
+    detectIEEEPaper,
+    detectACMPaper,
+    detectScienceDirectPaper,
+    detectNaturePaper,
+    detectSciencePaper,
+    detectPNASPaper,
+    detectSSRNPaper,
+    detectSemanticScholarPaper,
+    detectSpringerPaper,
     detectSchemaOrgPaper,
   ];
 

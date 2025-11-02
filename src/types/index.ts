@@ -99,10 +99,41 @@ export interface ResearchPaper {
   authors: string[];
   abstract: string;
   url: string;
-  source: 'arxiv' | 'pubmed' | 'biorxiv' | 'scholar' | 'ssrn' | 'ai-extracted' | 'other';
+  source: 'arxiv' | 'pubmed' | 'biorxiv' | 'ieee' | 'acm' | 'sciencedirect' |
+          'nature' | 'science' | 'pnas' | 'ssrn' | 'semanticscholar' | 'springer' |
+          'scholar' | 'ai-extracted' | 'other' | 'pdf';
   sections?: PaperSection[];
   metadata?: PaperMetadata;
 }
+
+// Extraction source types for field-level tracking
+export type ExtractionSource =
+  | 'dom-selector'     // Direct DOM extraction from known site structure
+  | 'schema.org'       // Schema.org structured data
+  | 'ai'               // AI-powered extraction
+  | 'pdf-properties'   // PDF document metadata
+  | 'heuristic'        // Pattern-based heuristic extraction
+  | 'manual';          // User-provided data
+
+// Field-level metadata tracking
+export interface FieldMetadata {
+  value: any;
+  source: ExtractionSource;
+  confidence: number; // 0-1 confidence score
+  extractedAt: number; // timestamp
+  validationPassed?: boolean; // Whether field passed validation
+  validationError?: string; // Validation error message if failed
+}
+
+// Publication type classification
+export type PublicationType =
+  | 'journal-article'
+  | 'conference-paper'
+  | 'preprint'
+  | 'thesis'
+  | 'book-chapter'
+  | 'technical-report'
+  | 'unknown';
 
 // Enhanced metadata for papers
 export interface PaperMetadata {
@@ -110,6 +141,7 @@ export interface PaperMetadata {
   publishDate?: string;
   journal?: string;
   venue?: string; // Conference or journal name
+  publicationType?: PublicationType;
 
   // Identifiers
   doi?: string;
@@ -124,15 +156,25 @@ export interface PaperMetadata {
   // Additional metadata
   keywords?: string[];
   citations?: number;
+  license?: string; // e.g., "CC-BY-4.0", "All Rights Reserved"
+  version?: string; // Version number for preprints (e.g., "v1", "v2")
 
   // Language metadata
   originalLanguage?: string; // Detected language of the paper (ISO 639-1 code)
   outputLanguage?: string; // User's chosen output language for generated content
 
   // AI extraction metadata
-  extractionMethod?: 'manual' | 'schema.org' | 'site-specific' | 'ai';
+  extractionMethod?: 'manual' | 'schema.org' | 'site-specific' | 'ai' | 'hybrid';
   extractionTimestamp?: number;
   confidence?: number; // 0-1 confidence score for AI extractions
+
+  // Field-level tracking (optional - only populated when using hybrid extraction)
+  fieldSources?: Record<string, FieldMetadata>;
+
+  // Extraction diagnostics
+  extractionAttempts?: number; // Number of extraction attempts
+  failedMethods?: string[]; // List of methods that were tried but failed
+  partialExtraction?: boolean; // True if some fields are missing
 
   // Chunk statistics (for adaptive RAG)
   averageChunkSize?: number; // Average chunk size in characters
@@ -496,7 +538,9 @@ export interface Citation {
   venue?: string;
   doi?: string;
   url: string;
-  source: 'arxiv' | 'pubmed' | 'biorxiv' | 'scholar' | 'ssrn' | 'ai-extracted' | 'other' | 'pdf';
+  source: 'arxiv' | 'pubmed' | 'biorxiv' | 'ieee' | 'acm' | 'sciencedirect' |
+          'nature' | 'science' | 'pnas' | 'ssrn' | 'semanticscholar' | 'springer' |
+          'scholar' | 'ai-extracted' | 'other' | 'pdf';
   selectedText: string; // The quoted text
   pageNumber?: string | number; // Page number or section name
   section?: string; // Section heading where quote appears
