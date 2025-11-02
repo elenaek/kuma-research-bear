@@ -386,6 +386,19 @@ export interface ContentChunk {
   cssSelector?: string; // CSS selector to locate the section heading element on the page
   elementId?: string; // Element ID if available for direct targeting
   xPath?: string; // XPath selector as fallback option
+
+  // Table-specific metadata (if chunk contains or is primarily a table)
+  isTable?: boolean; // True if chunk is primarily a table
+  tableMetadata?: {
+    caption?: string; // Table caption or title
+    headers: string[]; // Column headers
+    rowCount: number; // Number of rows
+    colCount: number; // Number of columns
+    columnTypes: ('text' | 'numeric' | 'mixed')[]; // Data type per column
+    isSplit?: boolean; // True if table was split across multiple chunks
+    splitIndex?: number; // Which part of split (0, 1, 2...)
+    totalSplits?: number; // Total number of splits
+  };
 }
 
 // Image explanation types

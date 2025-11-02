@@ -5,6 +5,12 @@
  */
 
 import { logger } from './logger.ts';
+import {
+  convertHTMLTableToMarkdown,
+  extractTableMetadata,
+  extractTableContext,
+  buildTableBlock,
+} from './tableExtractor.ts';
 
 export interface PaperSection {
   heading: string;          // Exact original heading text (e.g., "3.2 Multifrequency Angular Power Spectra")
@@ -435,6 +441,33 @@ function getTextContent(element: HTMLElement): string {
     const elements = clone.querySelectorAll(selector);
     elements.forEach(el => el.remove());
   });
+
+  // Convert tables to Markdown before text extraction
+  const tables = Array.from(clone.querySelectorAll('table'));
+  for (const table of tables) {
+    try {
+      // Convert table to Markdown
+      const markdownTable = convertHTMLTableToMarkdown(table as HTMLElement);
+      const metadata = extractTableMetadata(table as HTMLElement);
+      const context = extractTableContext(table as HTMLElement);
+
+      // Build complete table block (with caption, minimal context)
+      const tableBlock = buildTableBlock(markdownTable, metadata, context, false);
+
+      // Create text node with Markdown table
+      const textNode = document.createTextNode('\n\n' + tableBlock + '\n\n');
+
+      // Replace HTML table with Markdown text
+      if (table.parentNode) {
+        table.parentNode.replaceChild(textNode, table);
+      }
+
+      logger.debug('UTILS', `[TextExtractor] Converted table to Markdown (${metadata.rowCount}x${metadata.colCount})`);
+    } catch (error) {
+      logger.warn('UTILS', '[TextExtractor] Failed to convert table to Markdown:', error);
+      // Fall back to default text extraction for this table
+    }
+  }
 
   return clone.textContent?.trim() || '';
 }
