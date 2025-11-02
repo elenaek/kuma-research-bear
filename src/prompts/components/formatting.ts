@@ -61,8 +61,9 @@ export const MARKDOWN_FORMATTING_DETAILED: PromptComponent = {
 - Use *italic* for subtle emphasis
 - Use lists (- or 1.) for clarity
 - Use ## headers for sections
-- Use code blocks with \`\`\` for code examples`,
-  tokens: 50,
+- For any code block examples, include the code in a code block and include the language of the code in the code block. e.g. \`\`\`programming_language\n code \n\`\`\`
+- For any inline code, include the code in inline code syntax. e.g. \`code\``,
+  tokens: 100,
 };
 
 /**

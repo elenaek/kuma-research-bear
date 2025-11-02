@@ -211,6 +211,165 @@ function estimateTokenUsage(text: string): number {
 }
 
 /**
+ * Detect if an error is a QuotaExceededError from Chrome's LanguageModel API
+ */
+function isQuotaExceededError(error: Error | unknown): boolean {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const errorLower = errorMessage.toLowerCase();
+
+  return errorLower.includes('quotaexceedederror') ||
+         errorLower.includes('quota exceeded') ||
+         errorLower.includes('input is too large') ||
+         errorLower.includes('quota');
+}
+
+/**
+ * Prepare and validate context with progressive trimming strategies
+ * Attempts multiple strategies to fit context within quota:
+ * 1. Summarize conversation history
+ * 2. Trim chunks progressively
+ * 3. Use minimal chunks as fallback
+ *
+ * Returns validated context or error message if all strategies fail
+ */
+async function prepareContextWithValidation(
+  session: any,
+  contextChunks: any[],
+  message: string,
+  chatHistory: ChatMessage[],
+  conversationState: ConversationState,
+  systemPrompt: string,
+  contextId: string,
+  paperTitleOrId: string, // Paper title for regular chat, paper ID for image chat
+  sessionOptions?: { expectedInputs?: any[]; expectedOutputs?: any[] }, // Session configuration for recreating sessions
+  maxAttempts: number = 4
+): Promise<{
+  validatedContext: string;
+  finalChunkCount: number;
+  session: any;
+  errorMessage?: string;
+}> {
+  let finalContextChunks = contextChunks;
+  let hasSummarized = false;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Build context string from current chunks
+    const finalContextString = finalContextChunks
+      .map((chunk: any) => {
+        const hierarchy = chunk.parentSection
+          ? `${chunk.parentSection} > ${chunk.section}`
+          : chunk.section;
+
+        let citation = `[Section: ${hierarchy}`;
+        if (chunk.paragraphIndex !== undefined) {
+          citation += ` > P ${chunk.paragraphIndex + 1}`;
+          if (chunk.sentenceGroupIndex !== undefined) {
+            citation += ` > Sentences`;
+          }
+        }
+        citation += `]`;
+
+        return `${citation}\n${chunk.content}`;
+      })
+      .join('\n\n---\n\n');
+
+    const promptWithContext = `Context from the paper:
+${finalContextString}
+
+User question: ${message}`;
+
+    // Validate prompt size using Chrome AI's measureInputUsage()
+    const validation = await aiService.validatePromptSize(session, promptWithContext);
+
+    if (validation.fits) {
+      logger.debug('CHATBOX', `[prepareContextWithValidation] ✓ Validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
+      return {
+        validatedContext: promptWithContext,
+        finalChunkCount: finalContextChunks.length,
+        session
+      };
+    }
+
+    // Prompt too large - try strategies in order
+    logger.warn('CHATBOX', `[prepareContextWithValidation] Prompt too large (${validation.actualUsage} > ${validation.available}) on attempt ${attempt}/${maxAttempts}`);
+
+    // Strategy 1: Summarize conversation (attempt 1 only, if we have history and haven't summarized yet)
+    if (attempt === 1 && chatHistory.length > 3 && !hasSummarized) {
+      logger.debug('CHATBOX', '[prepareContextWithValidation] Attempting summarization to free up space for RAG context...');
+
+      // Perform summarization
+      const updatedConversationState = await performPreSummarization(
+        chatHistory,
+        conversationState,
+        paperTitleOrId,
+        paperTitleOrId // Using as both title and ID (works for both use cases)
+      );
+
+      // Destroy old session and create new one with summarized history
+      aiService.destroySessionForContext(contextId);
+
+      let systemPromptContent = systemPrompt;
+      if (updatedConversationState.summary) {
+        systemPromptContent += `\n\nPrevious conversation summary: ${updatedConversationState.summary}`;
+      }
+
+      const initialPrompts: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+        { role: 'system', content: systemPromptContent }
+      ];
+
+      // Add recent messages (up to last 6 messages)
+      const recentHistoryMessages = chatHistory.slice(-6);
+      for (const msg of recentHistoryMessages) {
+        initialPrompts.push({
+          role: msg.role,
+          content: msg.content
+        });
+      }
+
+      const outputLanguage = await getOutputLanguage();
+      session = await aiService.getOrCreateSession(contextId, {
+        initialPrompts,
+        expectedInputs: sessionOptions?.expectedInputs || [{ type: 'text', languages: ["en", "es", "ja"] }],
+        expectedOutputs: sessionOptions?.expectedOutputs || [{ type: 'text', languages: [outputLanguage || "en"] }]
+      });
+      hasSummarized = true;
+      logger.debug('CHATBOX', '[prepareContextWithValidation] ✓ Summarization complete, session recreated. Retrying validation...');
+      continue; // Retry validation with same chunks but new session
+    }
+
+    // Strategy 2: Trim chunks (attempts 2-3)
+    if (attempt < maxAttempts) {
+      logger.debug('CHATBOX', `[prepareContextWithValidation] Trimming chunks (attempt ${attempt})...`);
+      // Remove last 2 chunks and retry (but keep at least 1 chunk)
+      const newLength = Math.max(1, finalContextChunks.length - 2);
+      finalContextChunks = finalContextChunks.slice(0, newLength);
+    } else {
+      // Strategy 3: Final fallback - use minimal chunks (just 1-2 most relevant)
+      logger.error('CHATBOX', `[prepareContextWithValidation] Max retries reached, using minimal chunks`);
+      finalContextChunks = contextChunks.slice(0, Math.min(2, contextChunks.length));
+    }
+
+    if (finalContextChunks.length === 0) {
+      logger.error('CHATBOX', '[prepareContextWithValidation] No chunks remaining after trimming');
+      return {
+        validatedContext: '',
+        finalChunkCount: 0,
+        session,
+        errorMessage: 'Context too large even after aggressive trimming. Try a shorter question or use a model with larger context.'
+      };
+    }
+  }
+
+  // Should never reach here, but return error just in case
+  return {
+    validatedContext: '',
+    finalChunkCount: 0,
+    session,
+    errorMessage: 'Failed to validate context after all attempts'
+  };
+}
+
+/**
  * Perform pre-summarization check before creating a session
  * If the estimated token usage exceeds threshold, summarize chat history
  * Returns updated conversation state (or original if no summarization needed)
@@ -549,235 +708,192 @@ async function processAndStreamResponse(
       });
     }
 
-    // Validate prompt size before sending (with summarization-first retry logic)
-    let finalContextChunks = contextChunks;
-    let finalContextString = contextString;
-    let hasSummarized = false; // Track if we've already summarized in this validation
-    const MAX_RETRIES = 4; // Increased to 4: 1 validation + 1 summarization retry + 2 chunk trim retries
+    // Validate prompt size before sending (with progressive trimming strategies)
+    const validationResult = await prepareContextWithValidation(
+      session,
+      contextChunks,
+      message,
+      chatHistory,
+      conversationState,
+      systemPrompt,
+      contextId,
+      storedPaper.title
+    );
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      const promptWithContext = `Context from the paper:
-${finalContextString}
-
-User question: ${message}`;
-
-      // Validate prompt size using Chrome AI's measureInputUsage()
-      const validation = await aiService.validatePromptSize(session, promptWithContext);
-
-      if (validation.fits) {
-        logger.debug('CHATBOX', `[ChatHandlers] ✓ Prompt validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
-        break;
-      }
-
-      // Prompt too large - try strategies in order: summarize first, then trim chunks
-      logger.warn('CHATBOX', `[ChatHandlers] Prompt too large (${validation.actualUsage} > ${validation.available}) on attempt ${attempt}/${MAX_RETRIES}`);
-
-      // Strategy 1: Summarize conversation (attempt 1 only, if we have history and haven't summarized yet)
-      if (attempt === 1 && chatHistory.length > 3 && !hasSummarized) {
-        logger.debug('CHATBOX', '[ChatHandlers] Attempting summarization to free up space for RAG context...');
-
-        // Perform summarization
-        const updatedConversationState = await performPreSummarization(
-          chatHistory,
-          conversationState,
-          storedPaper.title,
-          storedPaper.id
-        );
-
-        // Update stored paper with new conversation state
-        await updatePaper(storedPaper.id, {
-          conversationState: updatedConversationState,
-        });
-
-        // Destroy old session and create new one with summarized history
-        aiService.destroySessionForContext(contextId);
-
-        let systemPromptContent = systemPrompt;
-        if (updatedConversationState.summary) {
-          systemPromptContent += `\n\nPrevious conversation summary: ${updatedConversationState.summary}`;
-        }
-
-        const initialPrompts: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-          { role: 'system', content: systemPromptContent }
-        ];
-
-        // Add recent messages (up to last 6 messages)
-        const recentHistoryMessages = chatHistory.slice(-6);
-        for (const msg of recentHistoryMessages) {
-          initialPrompts.push({
-            role: msg.role,
-            content: msg.content
-          });
-        }
-
-        const outputLanguage = await getOutputLanguage();
-        session = await aiService.getOrCreateSession(contextId, { initialPrompts, expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }], expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }] });
-        hasSummarized = true;
-        logger.debug('CHATBOX', '[ChatHandlers] ✓ Summarization complete, session recreated. Retrying validation...');
-        continue; // Retry validation with same chunks but new session
-      }
-
-      // Strategy 2: Trim chunks (attempts 2-3)
-      if (attempt < MAX_RETRIES) {
-        logger.debug('CHATBOX', `[ChatHandlers] Trimming chunks (attempt ${attempt})...`);
-        // Remove last 2 chunks and retry (but keep at least 1 chunk)
-        const newLength = Math.max(1, finalContextChunks.length - 2);
-        finalContextChunks = finalContextChunks.slice(0, newLength);
-      } else {
-        // Strategy 3: Final fallback - use minimal chunks (just 1-2 most relevant)
-        logger.error('CHATBOX', `[ChatHandlers] Max retries reached, using minimal chunks`);
-        finalContextChunks = contextChunks.slice(0, Math.min(2, contextChunks.length));
-      }
-
-      if (finalContextChunks.length === 0) {
-        logger.error('CHATBOX', '[ChatHandlers] No chunks remaining after trimming');
-        return {
-          success: false,
-          error: 'Context too large even after aggressive trimming. Try a shorter question or use a model with larger context.'
-        };
-      }
-
-      // Rebuild context string with fewer chunks
-      finalContextString = finalContextChunks
-        .map((chunk) => {
-          const hierarchy = chunk.parentSection
-            ? `${chunk.parentSection} > ${chunk.section}`
-            : chunk.section;
-
-          let citation = `[Section: ${hierarchy}`;
-          if (chunk.paragraphIndex !== undefined) {
-            citation += ` > P ${chunk.paragraphIndex + 1}`;
-            if (chunk.sentenceGroupIndex !== undefined) {
-              citation += ` > Sentences`;
-            }
-          }
-          citation += `]`;
-
-          return `${citation}\n${chunk.content}`;
-        })
-        .join('\n\n---\n\n');
+    // Check if validation failed
+    if (validationResult.errorMessage) {
+      logger.error('CHATBOX', '[ChatHandlers] Context validation failed:', validationResult.errorMessage);
+      await sendChatEnd(tabId, validationResult.errorMessage, []);
+      return;
     }
 
-    // Stream the response
-    // Include RAG context in the actual prompt (not in initialPrompts) to save quota
-    const promptWithContext = `Context from the paper:
-${finalContextString}
+    // Use validated context and updated session
+    session = validationResult.session;
+    let promptWithContext = validationResult.validatedContext;
 
-User question: ${message}`;
-
-    // Stream response with structured output constraint
-    // Pattern: {"answer": "text here...", "sources": ["src1", "src2"]}
-    let fullResponseJSON = '';
-    const stream = session.promptStreaming(promptWithContext, { responseConstraint: CHAT_RESPONSE_SCHEMA });
-
-    // Lookahead buffer to prevent showing closing JSON pattern
-    // Pattern is the literal JSON structure: ", "sources
-    const CLOSING_PATTERN = '", "sources';
-    const LOOKAHEAD_SIZE = CLOSING_PATTERN.length; // 11 characters
-    let lastSentLength = 0;
+    // Retry loop for handling QuotaExceededError during streaming
+    let retryCount = 0;
+    const MAX_QUOTA_RETRIES = 3;
+    let currentChunks = contextChunks;
     let answer = '';
     let extractedSources: string[] = [];
-    let shouldStopDisplaying = false; // Flag to stop sending to user but continue accumulating JSON
+    let sourceInfoArray: SourceInfo[] = [];
 
-    logger.debug('CHATBOX', '[ChatHandlers] 🔄 Starting structured streaming...');
+    while (retryCount <= MAX_QUOTA_RETRIES) {
+      try {
+        // Stream response with structured output constraint
+        // Pattern: {"answer": "text here...", "sources": ["src1", "src2"]}
+        let fullResponseJSON = '';
+        const stream = session.promptStreaming(promptWithContext, { responseConstraint: CHAT_RESPONSE_SCHEMA });
 
-    for await (const chunk of stream) {
-      fullResponseJSON += chunk;
+        // Lookahead buffer to prevent showing closing JSON pattern
+        // Pattern is the literal JSON structure: ", "sources
+        const CLOSING_PATTERN = '", "sources';
+        const LOOKAHEAD_SIZE = CLOSING_PATTERN.length; // 11 characters
+        let lastSentLength = 0;
+        let shouldStopDisplaying = false; // Flag to stop sending to user but continue accumulating JSON
 
-      // Find the answer field boundaries
-      if (!fullResponseJSON.includes('"answer"')) continue;
+        logger.debug('CHATBOX', '[ChatHandlers] 🔄 Starting structured streaming...');
 
-      const answerStart = fullResponseJSON.indexOf('"answer"');
-      const colonIndex = fullResponseJSON.indexOf(':', answerStart);
-      const openQuoteIndex = fullResponseJSON.indexOf('"', colonIndex + 1);
+        for await (const chunk of stream) {
+          fullResponseJSON += chunk;
 
-      if (openQuoteIndex === -1) continue;
+          // Find the answer field boundaries
+          if (!fullResponseJSON.includes('"answer"')) continue;
 
-      // Extract current answer content (everything after the opening quote)
-      const currentAnswer = fullResponseJSON.substring(openQuoteIndex + 1);
+          const answerStart = fullResponseJSON.indexOf('"answer"');
+          const colonIndex = fullResponseJSON.indexOf(':', answerStart);
+          const openQuoteIndex = fullResponseJSON.indexOf('"', colonIndex + 1);
 
-      // Check if closing pattern appears anywhere in accumulated answer
-      if (!shouldStopDisplaying && currentAnswer.includes(CLOSING_PATTERN)) {
-        // Found the pattern! Extract answer up to (but not including) the pattern
-        const patternIndex = currentAnswer.indexOf(CLOSING_PATTERN);
-        const rawAnswer = currentAnswer.substring(0, patternIndex);
+          if (openQuoteIndex === -1) continue;
 
-        // Protect LaTeX from JSON escape sequence corruption
-        const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
-        const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
-        answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
+          // Extract current answer content (everything after the opening quote)
+          const currentAnswer = fullResponseJSON.substring(openQuoteIndex + 1);
 
-        // Send any remaining content that wasn't sent yet
-        // Extract from unescaped content since lastSentLength tracks unescaped position
-        const finalDelta = answer.substring(lastSentLength);
-        if (finalDelta) {
-          await sendChatChunk(tabId, finalDelta);
+          // Check if closing pattern appears anywhere in accumulated answer
+          if (!shouldStopDisplaying && currentAnswer.includes(CLOSING_PATTERN)) {
+            // Found the pattern! Extract answer up to (but not including) the pattern
+            const patternIndex = currentAnswer.indexOf(CLOSING_PATTERN);
+            const rawAnswer = currentAnswer.substring(0, patternIndex);
+
+            // Protect LaTeX from JSON escape sequence corruption
+            const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
+            const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
+            answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
+
+            // Send any remaining content that wasn't sent yet
+            // Extract from unescaped content since lastSentLength tracks unescaped position
+            const finalDelta = answer.substring(lastSentLength);
+            if (finalDelta) {
+              await sendChatChunk(tabId, finalDelta);
+            }
+
+            shouldStopDisplaying = true; // Stop sending to user but continue loop to get full JSON
+          }
+
+          // Pattern not found yet - continue streaming with lookahead buffer delay
+          // Only stream if we have more than the buffer size (maintains 11-char delay)
+          if (!shouldStopDisplaying && currentAnswer.length > LOOKAHEAD_SIZE) {
+            let visibleContent = currentAnswer.substring(0, currentAnswer.length - LOOKAHEAD_SIZE);
+
+            // Hold back trailing backslash to prevent incomplete escape sequences
+            // If visibleContent ends with \, don't include it (wait for next char to see if it's \n, \t, etc.)
+            if (visibleContent.endsWith('\\')) {
+              visibleContent = visibleContent.slice(0, -1);
+            }
+
+            // Protect LaTeX from JSON escape sequence corruption
+            // Process FULL visible content, then extract delta
+            const { content: visibleWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(visibleContent);
+            const unescapedWithPlaceholders = unescapeJsonString(visibleWithPlaceholders);
+            const unescapedVisible = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
+
+            const newDelta = unescapedVisible.substring(lastSentLength);
+
+            if (newDelta) {
+              await sendChatChunk(tabId, newDelta);
+              lastSentLength = unescapedVisible.length; // Track position in unescaped content
+            }
+          }
+          // If less than 11 chars accumulated, keep buffering (don't send yet)
         }
 
-        shouldStopDisplaying = true; // Stop sending to user but continue loop to get full JSON
+        logger.debug('CHATBOX', '[ChatHandlers] ✓ Chat response streamed successfully');
+
+        // Parse final JSON to extract sources
+        try {
+          const parsed = JSON.parse(fullResponseJSON);
+          // Use parsed answer if we somehow missed it during streaming
+          if (!answer) {
+            const rawAnswer = parsed.answer || '';
+            // Apply same LaTeX protection as streaming (fallback path)
+            const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
+            const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
+            answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
+          }
+          extractedSources = parsed.sources || [];
+          logger.debug('CHATBOX', '[ChatHandlers] Parsed sources:', extractedSources);
+        } catch (error) {
+          logger.error('CHATBOX', '[ChatHandlers] Failed to parse final JSON:', error);
+          // Use streamed answer, empty sources
+          extractedSources = [];
+        }
+
+        // Map extracted sources to sourceInfo for scroll-to-source functionality
+        const sourceInfoArray: SourceInfo[] = extractedSources
+          .map(sourceText => {
+            // Normalize by stripping paragraph numbers: "Section: Methods > P 3" → "Section: Methods"
+            const normalized = sourceText.replace(/\s*>\s*P\s+\d+(\s*>\s*Sentences)?$/, '');
+            return sourceInfoMap.get(normalized);
+          })
+          .filter((info): info is SourceInfo => info !== undefined);
+
+        logger.debug('CHATBOX', '[ChatHandlers] Mapped sourceInfo:', sourceInfoArray.length, 'out of', extractedSources.length);
+
+        // Send end signal with final answer and sources
+        await sendChatEnd(tabId, answer.trim(), extractedSources, sourceInfoArray);
+
+        // Success - exit retry loop
+        break;
+
+      } catch (error) {
+        // Check if this is a QuotaExceededError and we have retries left
+        if (isQuotaExceededError(error) && retryCount < MAX_QUOTA_RETRIES) {
+          logger.warn('CHATBOX', `[ChatHandlers] QuotaExceededError caught during streaming (attempt ${retryCount + 1}/${MAX_QUOTA_RETRIES}), retrying with reduced context...`);
+
+          // Reduce chunks for retry
+          currentChunks = currentChunks.slice(0, Math.max(1, currentChunks.length - 2));
+
+          // Re-validate with reduced chunks
+          const retryResult = await prepareContextWithValidation(
+            session,
+            currentChunks,
+            message,
+            chatHistory,
+            conversationState,
+            systemPrompt,
+            contextId,
+            storedPaper.title
+          );
+
+          if (retryResult.errorMessage) {
+            // Cannot reduce further - send error and exit
+            logger.error('CHATBOX', '[ChatHandlers] Failed to reduce context further after QuotaExceededError');
+            await sendChatEnd(tabId, 'Unable to process your question due to context size limitations. Please try a shorter question.', []);
+            return;
+          }
+
+          // Update session and prompt for retry
+          session = retryResult.session;
+          promptWithContext = retryResult.validatedContext;
+          retryCount++;
+          continue; // Retry the streaming
+        }
+
+        // Not a quota error or out of retries - rethrow
+        throw error;
       }
-
-      // Pattern not found yet - continue streaming with lookahead buffer delay
-      // Only stream if we have more than the buffer size (maintains 11-char delay)
-      if (!shouldStopDisplaying && currentAnswer.length > LOOKAHEAD_SIZE) {
-        let visibleContent = currentAnswer.substring(0, currentAnswer.length - LOOKAHEAD_SIZE);
-
-        // Hold back trailing backslash to prevent incomplete escape sequences
-        // If visibleContent ends with \, don't include it (wait for next char to see if it's \n, \t, etc.)
-        if (visibleContent.endsWith('\\')) {
-          visibleContent = visibleContent.slice(0, -1);
-        }
-
-        // Protect LaTeX from JSON escape sequence corruption
-        // Process FULL visible content, then extract delta
-        const { content: visibleWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(visibleContent);
-        const unescapedWithPlaceholders = unescapeJsonString(visibleWithPlaceholders);
-        const unescapedVisible = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
-
-        const newDelta = unescapedVisible.substring(lastSentLength);
-
-        if (newDelta) {
-          await sendChatChunk(tabId, newDelta);
-          lastSentLength = unescapedVisible.length; // Track position in unescaped content
-        }
-      }
-      // If less than 11 chars accumulated, keep buffering (don't send yet)
     }
-
-    logger.debug('CHATBOX', '[ChatHandlers] ✓ Chat response streamed successfully');
-
-    // Parse final JSON to extract sources
-    try {
-      const parsed = JSON.parse(fullResponseJSON);
-      // Use parsed answer if we somehow missed it during streaming
-      if (!answer) {
-        const rawAnswer = parsed.answer || '';
-        // Apply same LaTeX protection as streaming (fallback path)
-        const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
-        const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
-        answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
-      }
-      extractedSources = parsed.sources || [];
-      logger.debug('CHATBOX', '[ChatHandlers] Parsed sources:', extractedSources);
-    } catch (error) {
-      logger.error('CHATBOX', '[ChatHandlers] Failed to parse final JSON:', error);
-      // Use streamed answer, empty sources
-      extractedSources = [];
-    }
-
-    // Map extracted sources to sourceInfo for scroll-to-source functionality
-    const sourceInfoArray: SourceInfo[] = extractedSources
-      .map(sourceText => {
-        // Normalize by stripping paragraph numbers: "Section: Methods > P 3" → "Section: Methods"
-        const normalized = sourceText.replace(/\s*>\s*P\s+\d+(\s*>\s*Sentences)?$/, '');
-        return sourceInfoMap.get(normalized);
-      })
-      .filter((info): info is SourceInfo => info !== undefined);
-
-    logger.debug('CHATBOX', '[ChatHandlers] Mapped sourceInfo:', sourceInfoArray.length, 'out of', extractedSources.length);
-
-    // Send end signal with final answer and sources
-    await sendChatEnd(tabId, answer.trim(), extractedSources, sourceInfoArray);
 
     // Post-stream processing: token tracking and summarization
     // Wrapped in try-catch to prevent failures from affecting the successful stream
@@ -1296,245 +1412,213 @@ async function processAndStreamImageChatResponse(
       });
     }
 
-    // Validate prompt size before sending (with summarization-first retry logic)
-    let finalContextChunks = contextChunks;
-    let finalContextString = contextString;
-    let hasSummarized = false; // Track if we've already summarized in this validation
-    const MAX_RETRIES = 4; // Increased to 4: 1 validation + 1 summarization retry + 2 chunk trim retries
-
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      const promptWithContext = `Context from the paper:
-${finalContextString}
-
-User question: ${message}`;
-
-      // Validate prompt size using Chrome AI's measureInputUsage()
-      // Note: For multimodal, we validate the text part (image tokens are fixed)
-      const validation = await aiService.validatePromptSize(session, promptWithContext);
-
-      if (validation.fits) {
-        logger.debug('CHATBOX', `[ImageChatHandlers] ✓ Prompt validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
-        break;
+    // Validate prompt size before sending (with progressive trimming strategies)
+    const outputLanguage = await getOutputLanguage();
+    const validationResult = await prepareContextWithValidation(
+      session,
+      contextChunks,
+      message,
+      imageChatHistory,
+      imageChatConversationState,
+      systemPrompt,
+      contextId,
+      paper.title,
+      {
+        expectedInputs: [{ type: 'image', languages: ['en', 'es', 'ja'] }],
+        expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
       }
+    );
 
-      // Prompt too large - try strategies in order: summarize first, then trim chunks
-      logger.warn('CHATBOX', `[ImageChatHandlers] Prompt too large (${validation.actualUsage} > ${validation.available}) on attempt ${attempt}/${MAX_RETRIES}`);
-
-      // Strategy 1: Summarize conversation (attempt 1 only, if we have history and haven't summarized yet)
-      if (attempt === 1 && imageChatHistory.length > 3 && !hasSummarized) {
-        logger.debug('CHATBOX', '[ImageChatHandlers] Attempting summarization to free up space for RAG context...');
-
-        // Perform summarization
-        const updatedConversationState = await performPreSummarization(
-          imageChatHistory,
-          imageChatConversationState,
-          `Image from ${storedPaper.title}`,
-          paperId
-        );
-
-        // Update stored image chat with new conversation state
-        await updateImageChat(paperId, imageUrl, {
-          conversationState: updatedConversationState,
-        });
-
-        // Destroy old session and create new one with summarized history
-        aiService.destroySessionForContext(contextId);
-
-        // Recreate multimodal session with summarized history
-        let systemPromptContent = systemPrompt;
-        if (updatedConversationState.summary) {
-          systemPromptContent += `\n\nPrevious conversation summary: ${updatedConversationState.summary}`;
-        }
-
-        const initialPrompts: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-          { role: 'system', content: systemPromptContent }
-        ];
-
-        // Add recent messages (up to last 6 messages)
-        const recentHistoryMessages = imageChatHistory.slice(-6);
-        for (const msg of recentHistoryMessages) {
-          initialPrompts.push({
-            role: msg.role,
-            content: msg.content
-          });
-        }
-
-        const outputLanguage = await getOutputLanguage();
-        session = await aiService.getOrCreateSession(contextId, { initialPrompts, expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }], expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }] });
-        hasSummarized = true;
-        logger.debug('CHATBOX', '[ImageChatHandlers] ✓ Summarization complete, session recreated. Retrying validation...');
-        continue; // Retry validation with same chunks but new session
-      }
-
-      // Strategy 2: Trim chunks (attempts 2-3)
-      if (attempt < MAX_RETRIES) {
-        logger.debug('CHATBOX', `[ImageChatHandlers] Trimming chunks (attempt ${attempt})...`);
-        // Remove last 2 chunks and retry (but keep at least 1 chunk)
-        const newLength = Math.max(1, finalContextChunks.length - 2);
-        finalContextChunks = finalContextChunks.slice(0, newLength);
-      } else {
-        // Strategy 3: Final fallback - use minimal chunks (just 1-2 most relevant)
-        logger.error('CHATBOX', `[ImageChatHandlers] Max retries reached, using minimal chunks`);
-        finalContextChunks = contextChunks.slice(0, Math.min(2, contextChunks.length));
-      }
-
-      if (finalContextChunks.length === 0) {
-        logger.error('CHATBOX', '[ImageChatHandlers] No chunks remaining after trimming');
-        await sendImageChatEnd(tabId, 'Context too large even after aggressive trimming. Try a shorter question or use a model with larger context.', []);
-        return;
-      }
-
-      // Rebuild context string with fewer chunks
-      finalContextString = finalContextChunks
-        .map((chunk) => {
-          const hierarchy = chunk.parentSection
-            ? `${chunk.parentSection} > ${chunk.section}`
-            : chunk.section;
-
-          let citation = `[Section: ${hierarchy}`;
-          if (chunk.paragraphIndex !== undefined) {
-            citation += ` > P ${chunk.paragraphIndex + 1}`;
-            if (chunk.sentenceGroupIndex !== undefined) {
-              citation += ` > Sentences`;
-            }
-          }
-          citation += `]`;
-
-          return `${citation}\n${chunk.content}`;
-        })
-        .join('\n\n---\n\n');
+    // Check if validation failed
+    if (validationResult.errorMessage) {
+      logger.error('CHATBOX', '[ImageChatHandlers] Context validation failed:', validationResult.errorMessage);
+      await sendImageChatEnd(tabId, validationResult.errorMessage, []);
+      return;
     }
 
-    // Prepare multimodal message with image and text
-    const promptWithContext = `Context from the paper:
-${finalContextString}
+    // Use validated context and updated session
+    session = validationResult.session;
+    let promptWithContext = validationResult.validatedContext;
 
-User question: ${message}`;
-
-    // Use append() for multimodal input (image + text)
-    await session.append([
-      {
-        role: 'user',
-        content: [
-          { type: 'image', value: imageBlob },
-          { type: 'text', value: promptWithContext }
-        ]
-      }
-    ]);
-
-    // Get streaming response with structured output constraint
-    // Pattern: {"answer": "text here...", "sources": ["src1", "src2"]}
-    let fullResponseJSON = '';
-    const stream = session.promptStreaming('', { responseConstraint: CHAT_RESPONSE_SCHEMA });  // Empty prompt since we already appended the message
-
-    // Lookahead buffer to prevent showing closing JSON pattern
-    // Pattern is the literal JSON structure: ", "sources
-    const CLOSING_PATTERN = '", "sources';
-    const LOOKAHEAD_SIZE = CLOSING_PATTERN.length; // 11 characters
-    let lastSentLength = 0;
+    // Retry loop for handling QuotaExceededError during streaming
+    let retryCount = 0;
+    const MAX_QUOTA_RETRIES = 3;
+    let currentChunks = contextChunks;
     let answer = '';
     let extractedSources: string[] = [];
-    let shouldStopDisplaying = false; // Flag to stop sending to user but continue accumulating JSON
+    let sourceInfoArray: SourceInfo[] = [];
 
-    logger.debug('CHATBOX', '[ImageChatHandlers] 🔄 Starting structured streaming...');
+    while (retryCount <= MAX_QUOTA_RETRIES) {
+      try {
+        // Use append() for multimodal input (image + text)
+        await session.append([
+          {
+            role: 'user',
+            content: [
+              { type: 'image', value: imageBlob },
+              { type: 'text', value: promptWithContext }
+            ]
+          }
+        ]);
 
-    for await (const chunk of stream) {
-      fullResponseJSON += chunk;
+        // Get streaming response with structured output constraint
+        // Pattern: {"answer": "text here...", "sources": ["src1", "src2"]}
+        let fullResponseJSON = '';
+        const stream = session.promptStreaming('', { responseConstraint: CHAT_RESPONSE_SCHEMA });  // Empty prompt since we already appended the message
 
-      // Find the answer field boundaries
-      if (!fullResponseJSON.includes('"answer"')) continue;
+        // Lookahead buffer to prevent showing closing JSON pattern
+        // Pattern is the literal JSON structure: ", "sources
+        const CLOSING_PATTERN = '", "sources';
+        const LOOKAHEAD_SIZE = CLOSING_PATTERN.length; // 11 characters
+        let lastSentLength = 0;
+        let shouldStopDisplaying = false; // Flag to stop sending to user but continue accumulating JSON
 
-      const answerStart = fullResponseJSON.indexOf('"answer"');
-      const colonIndex = fullResponseJSON.indexOf(':', answerStart);
-      const openQuoteIndex = fullResponseJSON.indexOf('"', colonIndex + 1);
+        logger.debug('CHATBOX', '[ImageChatHandlers] 🔄 Starting structured streaming...');
 
-      if (openQuoteIndex === -1) continue;
+        for await (const chunk of stream) {
+          fullResponseJSON += chunk;
 
-      // Extract current answer content (everything after the opening quote)
-      const currentAnswer = fullResponseJSON.substring(openQuoteIndex + 1);
+          // Find the answer field boundaries
+          if (!fullResponseJSON.includes('"answer"')) continue;
 
-      // Check if closing pattern appears anywhere in accumulated answer
-      if (!shouldStopDisplaying && currentAnswer.includes(CLOSING_PATTERN)) {
-        // Found the pattern! Extract answer up to (but not including) the pattern
-        const patternIndex = currentAnswer.indexOf(CLOSING_PATTERN);
-        const rawAnswer = currentAnswer.substring(0, patternIndex);
+          const answerStart = fullResponseJSON.indexOf('"answer"');
+          const colonIndex = fullResponseJSON.indexOf(':', answerStart);
+          const openQuoteIndex = fullResponseJSON.indexOf('"', colonIndex + 1);
 
-        // Protect LaTeX from JSON escape sequence corruption
-        const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
-        const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
-        answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
+          if (openQuoteIndex === -1) continue;
 
-        // Send any remaining content that wasn't sent yet
-        // Extract from unescaped content since lastSentLength tracks unescaped position
-        const finalDelta = answer.substring(lastSentLength);
-        if (finalDelta) {
-          await sendImageChatChunk(tabId, finalDelta);
+          // Extract current answer content (everything after the opening quote)
+          const currentAnswer = fullResponseJSON.substring(openQuoteIndex + 1);
+
+          // Check if closing pattern appears anywhere in accumulated answer
+          if (!shouldStopDisplaying && currentAnswer.includes(CLOSING_PATTERN)) {
+            // Found the pattern! Extract answer up to (but not including) the pattern
+            const patternIndex = currentAnswer.indexOf(CLOSING_PATTERN);
+            const rawAnswer = currentAnswer.substring(0, patternIndex);
+
+            // Protect LaTeX from JSON escape sequence corruption
+            const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
+            const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
+            answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
+
+            // Send any remaining content that wasn't sent yet
+            // Extract from unescaped content since lastSentLength tracks unescaped position
+            const finalDelta = answer.substring(lastSentLength);
+            if (finalDelta) {
+              await sendImageChatChunk(tabId, finalDelta);
+            }
+
+            shouldStopDisplaying = true; // Stop sending to user but continue loop to get full JSON
+          }
+
+          // Pattern not found yet - continue streaming with lookahead buffer delay
+          // Only stream if we have more than the buffer size (maintains 11-char delay)
+          if (!shouldStopDisplaying && currentAnswer.length > LOOKAHEAD_SIZE) {
+            let visibleContent = currentAnswer.substring(0, currentAnswer.length - LOOKAHEAD_SIZE);
+
+            // Hold back trailing backslash to prevent incomplete escape sequences
+            // If visibleContent ends with \, don't include it (wait for next char to see if it's \n, \t, etc.)
+            if (visibleContent.endsWith('\\')) {
+              visibleContent = visibleContent.slice(0, -1);
+            }
+
+            // Protect LaTeX from JSON escape sequence corruption
+            // Process FULL visible content, then extract delta
+            const { content: visibleWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(visibleContent);
+            const unescapedWithPlaceholders = unescapeJsonString(visibleWithPlaceholders);
+            const unescapedVisible = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
+
+            const newDelta = unescapedVisible.substring(lastSentLength);
+
+            if (newDelta) {
+              await sendImageChatChunk(tabId, newDelta);
+              lastSentLength = unescapedVisible.length; // Track position in unescaped content
+            }
+          }
+          // If less than 11 chars accumulated, keep buffering (don't send yet)
         }
 
-        shouldStopDisplaying = true; // Stop sending to user but continue loop to get full JSON
+        logger.debug('CHATBOX', '[ImageChatHandlers] ✓ Image chat response streamed successfully');
+
+        // Parse final JSON to extract sources
+        try {
+          const parsed = JSON.parse(fullResponseJSON);
+          // Use parsed answer if we somehow missed it during streaming
+          if (!answer) {
+            const rawAnswer = parsed.answer || '';
+            // Apply same LaTeX protection as streaming (fallback path)
+            const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
+            const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
+            answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
+          }
+          extractedSources = parsed.sources || [];
+          logger.debug('CHATBOX', '[ImageChatHandlers] Parsed sources:', extractedSources);
+        } catch (error) {
+          logger.error('CHATBOX', '[ImageChatHandlers] Failed to parse final JSON:', error);
+          // Use streamed answer, empty sources
+          extractedSources = [];
+        }
+
+        // Map extracted sources to sourceInfo for scroll-to-source functionality
+        const sourceInfoArray: SourceInfo[] = extractedSources
+          .map(sourceText => {
+            // Normalize by stripping paragraph numbers: "Section: Methods > P 3" → "Section: Methods"
+            const normalized = sourceText.replace(/\s*>\s*P\s+\d+(\s*>\s*Sentences)?$/, '');
+            return sourceInfoMap.get(normalized);
+          })
+          .filter((info): info is SourceInfo => info !== undefined);
+
+        logger.debug('CHATBOX', '[ImageChatHandlers] Mapped sourceInfo:', sourceInfoArray.length, 'out of', extractedSources.length);
+
+        // Send end signal with final answer and sources
+        await sendImageChatEnd(tabId, answer.trim(), extractedSources, sourceInfoArray);
+
+        // Success - exit retry loop
+        break;
+
+      } catch (error) {
+        // Check if this is a QuotaExceededError and we have retries left
+        if (isQuotaExceededError(error) && retryCount < MAX_QUOTA_RETRIES) {
+          logger.warn('CHATBOX', `[ImageChatHandlers] QuotaExceededError caught during streaming (attempt ${retryCount + 1}/${MAX_QUOTA_RETRIES}), retrying with reduced context...`);
+
+          // Reduce chunks for retry
+          currentChunks = currentChunks.slice(0, Math.max(1, currentChunks.length - 2));
+
+          // Re-validate with reduced chunks
+          const outputLanguage = await getOutputLanguage();
+          const retryResult = await prepareContextWithValidation(
+            session,
+            currentChunks,
+            message,
+            imageChatHistory,
+            imageChatConversationState,
+            systemPrompt,
+            contextId,
+            paper.title,
+            {
+              expectedInputs: [{ type: 'image', languages: ['en', 'es', 'ja'] }],
+              expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
+            }
+          );
+
+          if (retryResult.errorMessage) {
+            // Cannot reduce further - send error and exit
+            logger.error('CHATBOX', '[ImageChatHandlers] Failed to reduce context further after QuotaExceededError');
+            await sendImageChatEnd(tabId, 'Unable to process your question due to context size limitations. Please try a shorter question.', []);
+            return;
+          }
+
+          // Update session and prompt for retry
+          session = retryResult.session;
+          promptWithContext = retryResult.validatedContext;
+          retryCount++;
+          continue; // Retry the streaming
+        }
+
+        // Not a quota error or out of retries - rethrow
+        throw error;
       }
-
-      // Pattern not found yet - continue streaming with lookahead buffer delay
-      // Only stream if we have more than the buffer size (maintains 11-char delay)
-      if (!shouldStopDisplaying && currentAnswer.length > LOOKAHEAD_SIZE) {
-        let visibleContent = currentAnswer.substring(0, currentAnswer.length - LOOKAHEAD_SIZE);
-
-        // Hold back trailing backslash to prevent incomplete escape sequences
-        // If visibleContent ends with \, don't include it (wait for next char to see if it's \n, \t, etc.)
-        if (visibleContent.endsWith('\\')) {
-          visibleContent = visibleContent.slice(0, -1);
-        }
-
-        // Protect LaTeX from JSON escape sequence corruption
-        // Process FULL visible content, then extract delta
-        const { content: visibleWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(visibleContent);
-        const unescapedWithPlaceholders = unescapeJsonString(visibleWithPlaceholders);
-        const unescapedVisible = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
-
-        const newDelta = unescapedVisible.substring(lastSentLength);
-
-        if (newDelta) {
-          await sendImageChatChunk(tabId, newDelta);
-          lastSentLength = unescapedVisible.length; // Track position in unescaped content
-        }
-      }
-      // If less than 11 chars accumulated, keep buffering (don't send yet)
     }
-
-    logger.debug('CHATBOX', '[ImageChatHandlers] ✓ Image chat response streamed successfully');
-
-    // Parse final JSON to extract sources
-    try {
-      const parsed = JSON.parse(fullResponseJSON);
-      // Use parsed answer if we somehow missed it during streaming
-      if (!answer) {
-        const rawAnswer = parsed.answer || '';
-        // Apply same LaTeX protection as streaming (fallback path)
-        const { content: rawWithPlaceholders, latex: extractedLatex } = extractLatexFromRawJson(rawAnswer);
-        const unescapedWithPlaceholders = unescapeJsonString(rawWithPlaceholders);
-        answer = rehydrateLatex(unescapedWithPlaceholders, extractedLatex);
-      }
-      extractedSources = parsed.sources || [];
-      logger.debug('CHATBOX', '[ImageChatHandlers] Parsed sources:', extractedSources);
-    } catch (error) {
-      logger.error('CHATBOX', '[ImageChatHandlers] Failed to parse final JSON:', error);
-      // Use streamed answer, empty sources
-      extractedSources = [];
-    }
-
-    // Map extracted sources to sourceInfo for scroll-to-source functionality
-    const sourceInfoArray: SourceInfo[] = extractedSources
-      .map(sourceText => {
-        // Normalize by stripping paragraph numbers: "Section: Methods > P 3" → "Section: Methods"
-        const normalized = sourceText.replace(/\s*>\s*P\s+\d+(\s*>\s*Sentences)?$/, '');
-        return sourceInfoMap.get(normalized);
-      })
-      .filter((info): info is SourceInfo => info !== undefined);
-
-    logger.debug('CHATBOX', '[ImageChatHandlers] Mapped sourceInfo:', sourceInfoArray.length, 'out of', extractedSources.length);
-
-    // Send end signal with final answer and sources
-    await sendImageChatEnd(tabId, answer.trim(), extractedSources, sourceInfoArray);
 
     // Post-stream processing: save history and check for summarization
     try {
