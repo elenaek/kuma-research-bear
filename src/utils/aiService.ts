@@ -58,6 +58,10 @@ class ChromeAIService {
   // Token estimation constant: ~500 chars average / 4 chars per token = 125 tokens
   private readonly ESTIMATED_TOKENS_PER_CHUNK = 125;
 
+  // Validation safety threshold: match summarization threshold at 80% to prevent quota exceeded errors
+  // This ensures sufficient buffer for Chrome AI streaming overhead
+  private readonly VALIDATION_SAFETY_THRESHOLD = 0.80;
+
   /**
    * Check if Chrome Prompt API is available
    */
@@ -638,15 +642,17 @@ ${purpose === 'learning' ? `Explain this image in plain language.
       const currentUsage = session.inputUsage ?? 0;
       const available = quota - currentUsage;
 
-      const fits = actualUsage <= available;
+      // Apply safety threshold (80%) to prevent QuotaExceededError during streaming
+      const safeAvailable = Math.floor(available * this.VALIDATION_SAFETY_THRESHOLD);
+      const fits = actualUsage <= safeAvailable;
 
-      logger.debug('PROMPT_ENGINEERING', `[Prompt Validation] Actual usage: ${actualUsage}, Available: ${available}/${quota}, Fits: ${fits}`);
+      logger.debug('PROMPT_ENGINEERING', `[Prompt Validation] Actual usage: ${actualUsage}, Available: ${safeAvailable}/${quota} (${Math.round(this.VALIDATION_SAFETY_THRESHOLD * 100)}% threshold), Fits: ${fits}`);
 
       return {
         fits,
         actualUsage,
         quota,
-        available
+        available: safeAvailable
       };
     } catch (error) {
       logger.error('PROMPT_ENGINEERING', '[Prompt Validation] Error measuring input usage:', error);
@@ -657,11 +663,14 @@ ${purpose === 'learning' ? `Explain this image in plain language.
       const currentUsage = session.inputUsage ?? 0;
       const available = quota - currentUsage;
 
+      // Apply safety threshold (80%) to prevent QuotaExceededError during streaming
+      const safeAvailable = Math.floor(available * this.VALIDATION_SAFETY_THRESHOLD);
+
       return {
-        fits: estimatedUsage <= available,
+        fits: estimatedUsage <= safeAvailable,
         actualUsage: estimatedUsage,
         quota,
-        available,
+        available: safeAvailable,
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }

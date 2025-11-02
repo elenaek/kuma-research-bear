@@ -242,7 +242,7 @@ async function prepareContextWithValidation(
   contextId: string,
   paperTitleOrId: string, // Paper title for regular chat, paper ID for image chat
   sessionOptions?: { expectedInputs?: any[]; expectedOutputs?: any[] }, // Session configuration for recreating sessions
-  maxAttempts: number = 4
+  maxAttempts: number = 500
 ): Promise<{
   validatedContext: string;
   finalChunkCount: number;
@@ -394,9 +394,9 @@ async function performPreSummarization(
 
   // Get device-specific input quota and calculate 85% threshold
   const inputQuota = await inputQuotaService.getInputQuota();
-  const QUOTA_THRESHOLD = Math.floor(inputQuota * 0.85);
+  const QUOTA_THRESHOLD = Math.floor(inputQuota * 0.80);
 
-  logger.debug('CHATBOX', `[Pre-Summarization] Estimated tokens: ${estimatedTokens}, Threshold: ${QUOTA_THRESHOLD} (85% of ${inputQuota})`);
+  logger.debug('CHATBOX', `[Pre-Summarization] Estimated tokens: ${estimatedTokens}, Threshold: ${QUOTA_THRESHOLD} (80% of ${inputQuota})`);
 
   // If estimated usage is below threshold, no summarization needed
   if (estimatedTokens < QUOTA_THRESHOLD) {
