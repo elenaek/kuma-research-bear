@@ -6,6 +6,7 @@ interface UseOperationStateReturn {
   summaryGeneratingPapers: Set<string>;
   analyzingPapers: Set<string>;
   glossaryGeneratingPapers: Set<string>;
+  askingPapers: Set<string>;
 
   // Explaining operations
   addExplainingPaper: (paperUrl: string) => void;
@@ -27,22 +28,29 @@ interface UseOperationStateReturn {
   removeGlossaryGeneratingPaper: (paperUrl: string) => void;
   clearGlossaryGeneratingPaper: (paperUrl: string) => void;
 
+  // Q&A operations
+  addAskingPaper: (paperUrl: string) => void;
+  removeAskingPaper: (paperUrl: string) => void;
+  clearAskingPaper: (paperUrl: string) => void;
+
   // Utility
   isExplaining: (paperUrl: string) => boolean;
   isGeneratingSummary: (paperUrl: string) => boolean;
   isAnalyzing: (paperUrl: string) => boolean;
   isGeneratingGlossary: (paperUrl: string) => boolean;
+  isAsking: (paperUrl: string) => boolean;
 }
 
 /**
  * Custom hook to track operation states for multiple papers
- * Uses Sets to efficiently track which papers are currently being explained, summarized, analyzed, or having glossaries generated
+ * Uses Sets to efficiently track which papers are currently being explained, summarized, analyzed, having glossaries generated, or having Q&A questions asked
  */
 export function useOperationState(): UseOperationStateReturn {
   const [explainingPapers, setExplainingPapers] = useState<Set<string>>(new Set());
   const [summaryGeneratingPapers, setSummaryGeneratingPapers] = useState<Set<string>>(new Set());
   const [analyzingPapers, setAnalyzingPapers] = useState<Set<string>>(new Set());
   const [glossaryGeneratingPapers, setGlossaryGeneratingPapers] = useState<Set<string>>(new Set());
+  const [askingPapers, setAskingPapers] = useState<Set<string>>(new Set());
 
   // Explaining operations
   function addExplainingPaper(paperUrl: string) {
@@ -128,6 +136,27 @@ export function useOperationState(): UseOperationStateReturn {
     removeGlossaryGeneratingPaper(paperUrl);
   }
 
+  // Q&A operations
+  function addAskingPaper(paperUrl: string) {
+    setAskingPapers(prev => {
+      const next = new Set(prev);
+      next.add(paperUrl);
+      return next;
+    });
+  }
+
+  function removeAskingPaper(paperUrl: string) {
+    setAskingPapers(prev => {
+      const next = new Set(prev);
+      next.delete(paperUrl);
+      return next;
+    });
+  }
+
+  function clearAskingPaper(paperUrl: string) {
+    removeAskingPaper(paperUrl);
+  }
+
   // Utility functions
   function isExplaining(paperUrl: string): boolean {
     return explainingPapers.has(paperUrl);
@@ -145,11 +174,16 @@ export function useOperationState(): UseOperationStateReturn {
     return glossaryGeneratingPapers.has(paperUrl);
   }
 
+  function isAsking(paperUrl: string): boolean {
+    return askingPapers.has(paperUrl);
+  }
+
   return {
     explainingPapers,
     summaryGeneratingPapers,
     analyzingPapers,
     glossaryGeneratingPapers,
+    askingPapers,
     addExplainingPaper,
     removeExplainingPaper,
     clearExplainingPaper,
@@ -162,9 +196,13 @@ export function useOperationState(): UseOperationStateReturn {
     addGlossaryGeneratingPaper,
     removeGlossaryGeneratingPaper,
     clearGlossaryGeneratingPaper,
+    addAskingPaper,
+    removeAskingPaper,
+    clearAskingPaper,
     isExplaining,
     isGeneratingSummary,
     isAnalyzing,
     isGeneratingGlossary,
+    isAsking,
   };
 }

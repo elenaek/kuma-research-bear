@@ -72,9 +72,9 @@ export function Sidepanel() {
 
   // Q&A state
   const [question, setQuestion] = useState('');
-  const [isAsking, setIsAsking] = useState(false);
   const [qaHistory, setQaHistory] = useState<QuestionAnswer[]>([]);
   const [newlyAddedQAIndex, setNewlyAddedQAIndex] = useState<number | null>(null);
+  const [draftQuestions, setDraftQuestions] = useState<Map<string, string>>(new Map());
 
   // Delete all state
   const [isDeletingAll, setIsDeletingAll] = useState(false);
@@ -105,6 +105,7 @@ export function Sidepanel() {
         operationState.clearSummaryGeneratingPaper(deletedPaperUrl);
         operationState.clearAnalyzingPaper(deletedPaperUrl);
         operationState.clearGlossaryGeneratingPaper(deletedPaperUrl);
+        operationState.clearAskingPaper(deletedPaperUrl);
       }
     },
     onAllPapersDeleted: () => {
@@ -492,6 +493,10 @@ export function Sidepanel() {
 
     setStoredPaper(paper);
     setQaHistory(paper.qaHistory || []);
+
+    // Restore draft question if exists
+    const draftQuestion = draftQuestions.get(paper.url) || '';
+    setQuestion(draftQuestion);
 
     // Always show content state (all tabs) for stored papers
     // Individual section components handle showing "Generate" buttons when content doesn't exist
@@ -934,8 +939,23 @@ export function Sidepanel() {
       return;
     }
 
+    const paperUrl = data.paper.url;
+
+    // Guard: Don't retrigger if already asking a question for THIS paper
+    if (operationState.isAsking(paperUrl)) {
+      logger.debug('UI', '[Sidepanel] Q&A already in progress for this paper, skipping');
+      setOperationQueueMessage('Q&A already in progress for this paper');
+      setHasQueuedOperations(true);
+      setTimeout(() => {
+        setHasQueuedOperations(false);
+        setOperationQueueMessage('');
+      }, 3000);
+      return;
+    }
+
     try {
-      setIsAsking(true);
+      // Add to asking papers Set
+      operationState.addAskingPaper(paperUrl);
       logger.debug('UI', 'Asking question:', question);
 
       const sanitizedQuestion = question.trim();
@@ -946,7 +966,7 @@ export function Sidepanel() {
         sources: [],
         timestamp: Date.now(),
       };
-      
+
       const newHistory = [newQA, ...qaHistory];
       setQaHistory(newHistory);
       if(activeTab === 'qa') {
@@ -965,6 +985,13 @@ export function Sidepanel() {
         const answeredHistory = [response.answer, ...qaHistory];
         setQaHistory(answeredHistory);
         setQuestion(''); // Clear input
+
+        // Remove draft question from Map since it's been answered
+        setDraftQuestions(prev => {
+          const next = new Map(prev);
+          next.delete(data.paper.url);
+          return next;
+        });
 
         // If user is on Q&A tab when answer arrives, mark it as newly added
         if (activeTab === 'qa') {
@@ -993,7 +1020,8 @@ export function Sidepanel() {
       logger.error('UI', 'Error asking question:', error);
       alert('Failed to ask question. Please try again.');
     } finally {
-      setIsAsking(false);
+      // Remove from asking papers Set
+      operationState.removeAskingPaper(paperUrl);
     }
   }
 
@@ -1092,6 +1120,15 @@ Source: ${paper.url}
       await ChromeService.updatePaperQAHistory(storedPaper.id, qaHistory);
     }
 
+    // Save current paper's draft question before switching
+    if (storedPaper && question.trim()) {
+      setDraftQuestions(prev => {
+        const next = new Map(prev);
+        next.set(storedPaper.url, question);
+        return next;
+      });
+    }
+
     // Switch to new paper
     paperNavigation.setCurrentPaperIndex(index);
     const newPaper = papers[index];
@@ -1116,6 +1153,10 @@ Source: ${paper.url}
 
     // Load Q&A history for new paper
     setQaHistory(paperToUse.qaHistory || []);
+
+    // Restore draft question for new paper
+    const draftQuestion = draftQuestions.get(paperToUse.url) || '';
+    setQuestion(draftQuestion);
 
     // Load explanation and summary from IndexedDB (single source of truth)
     logger.debug('UI', '[Sidepanel] Loading paper data from IndexedDB');
@@ -1485,8 +1526,8 @@ Source: ${paper.url}
                     active={activeTab === 'qa'}
                     onClick={() => setActiveTab('qa')}
                     disabled={!storedPaper}
-                    loading={isAsking}
-                    title={!storedPaper ? 'Paper must be stored to ask questions' : isAsking ? 'Kuma is thinking about your question...' : 'Ask questions about this paper'}
+                    loading={storedPaper?.url ? operationState.isAsking(storedPaper.url) : false}
+                    title={!storedPaper ? 'Paper must be stored to ask questions' : (storedPaper?.url && operationState.isAsking(storedPaper.url)) ? 'Kuma is thinking about your question...' : 'Ask questions about this paper'}
                   >
                     Q&A
                   </TabButton>
@@ -1545,7 +1586,7 @@ Source: ${paper.url}
                     <QASection
                       question={question}
                       setQuestion={setQuestion}
-                      isAsking={isAsking}
+                      isAsking={storedPaper?.url ? operationState.isAsking(storedPaper.url) : false}
                       qaHistory={qaHistory}
                       storedPaper={storedPaper}
                       onAskQuestion={handleAskQuestion}
