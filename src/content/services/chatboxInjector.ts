@@ -800,7 +800,7 @@ class ChatboxInjector {
         padding: 2.5rem 1.5rem 1.5rem;
         box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
         z-index: 2147483647;
-        max-width: min(500px, 90vw);
+        max-width: 90vw;
         max-height: 85vh;
         animation: popIn 0.2s ease-out;
       }
@@ -896,6 +896,7 @@ class ChatboxInjector {
         font-size: 2em; /* 2x zoom */
         padding: 1rem;
         min-width: 100px;
+        margin: 1rem;
       }
 
       .math-popover-formula svg {
