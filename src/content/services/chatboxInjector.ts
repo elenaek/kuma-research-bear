@@ -988,6 +988,51 @@ class ChatboxInjector {
           gap: 0.25rem;
         }
       }
+
+      /* Draggable Header */
+      .math-popover-header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2.5rem;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+      }
+
+      /* Drag Handle Icon */
+      .math-popover-drag-handle {
+        position: absolute;
+        top: 0.5rem;
+        left: 0.5rem;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #6b7280;
+        cursor: grab;
+        transition: all 0.2s ease;
+        border-radius: 4px;
+        background: transparent;
+      }
+
+      .math-popover-drag-handle:hover {
+        background: rgba(0, 0, 0, 0.05);
+        color: #374151;
+      }
+
+      .math-popover.dragging .math-popover-drag-handle {
+        cursor: grabbing;
+        color: #374151;
+      }
+
+      /* Dragging State */
+      .math-popover.dragging {
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+        cursor: grabbing;
+      }
     `;
 
     // Inject into document.body
