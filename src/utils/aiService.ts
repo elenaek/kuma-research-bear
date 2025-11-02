@@ -1280,15 +1280,15 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
         expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
       }, (progress) => {
         // Broadcast GeminiNano download progress (0-1 range)
-        // Map to 0-80% of combined progress
-        const combinedProgress = progress * 80;
+        // Map to 0-100% of combined progress
+        const combinedProgress = progress * 100;
 
         chrome.runtime.sendMessage({
           type: 'MODEL_DOWNLOAD_PROGRESS',
           payload: {
             model: 'gemini',
             progress: progress * 100, // 0-100%
-            combinedProgress: combinedProgress, // 0-80%
+            combinedProgress: combinedProgress, // 0-100%
           },
         }).catch(() => {
           // No listeners, that's ok
@@ -1297,38 +1297,6 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
 
       if (created) {
         logger.debug('AI_SERVICE', '✓ GeminiNano initialized successfully!');
-
-        // Now download embedding model (sequential - after GeminiNano completes)
-        // We trigger this via the offscreen document since embeddings need DOM access
-        try {
-          logger.debug('AI_SERVICE', '[AI] Starting embedding model download...');
-
-          // Broadcast that embedding download is starting
-          chrome.runtime.sendMessage({
-            type: 'MODEL_DOWNLOAD_PROGRESS',
-            payload: {
-              model: 'embedding',
-              progress: 0,
-              combinedProgress: 80, // Starting at 80%
-            },
-          }).catch(() => {});
-
-          // Ensure offscreen document exists, then trigger embedding model download
-          // The offscreen document will handle the actual download and broadcast progress
-          const { setupOffscreenDocument } = await import('../background/services/offscreenService.ts');
-          await setupOffscreenDocument();
-
-          await chrome.runtime.sendMessage({
-            type: 'PRELOAD_EMBEDDINGS',
-          }).catch((error) => {
-            logger.warn('AI_SERVICE', '[AI] Could not trigger embedding preload:', error);
-          });
-
-          logger.debug('AI_SERVICE', '✓ Embedding model download triggered');
-        } catch (embeddingError) {
-          logger.warn('AI_SERVICE', '[AI] Embedding model download trigger failed (non-critical):', embeddingError);
-          // Don't fail initialization if embedding download fails
-        }
 
         return {
           success: true,

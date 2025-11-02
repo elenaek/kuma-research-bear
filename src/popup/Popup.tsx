@@ -409,17 +409,8 @@ export function Popup() {
     lottiePath = '/lotties/kuma-sleeping.lottie';
   } 
   else if (aiStatus.aiStatus === 'downloading') {
-    // Show different animations based on which model is downloading
-    if (aiStatus.currentDownloadingModel === 'gemini') {
-      // GeminiNano downloading (0-80%)
-      lottiePath = '/lotties/kuma-sleeping-shaking-zzz.lottie';
-    } else if (aiStatus.currentDownloadingModel === 'embedding') {
-      // Embedding downloading (80-100%)
-      lottiePath = '/lotties/kuma-sleeping-shaking-nozzz.lottie';
-    } else {
-      // Fallback during download (shouldn't happen but just in case)
-      lottiePath = '/lotties/kuma-sleeping-shaking-zzz.lottie';
-    }
+    // Show shaking animation during model download (Gemini Nano during initialization)
+    lottiePath = '/lotties/kuma-sleeping-shaking-zzz.lottie';
   }
   // Otherwise use default kuma-research-bear.lottie
 
