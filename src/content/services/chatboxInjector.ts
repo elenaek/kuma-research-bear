@@ -154,6 +154,9 @@ class ChatboxInjector {
       // Append to body
       document.body.appendChild(this.container);
 
+      // Inject popover styles into document.body (for LaTeX popover that uses createPortal)
+      this.injectPopoverStyles();
+
       this.isInitialized = true;
 
       // Initialize with default paper tab
@@ -767,6 +770,228 @@ class ChatboxInjector {
         }
       }
     `;
+  }
+
+  /**
+   * Inject popover styles into document.body for LaTeX popover
+   * The popover uses createPortal to render outside Shadow DOM, so it needs styles in document.body
+   */
+  private injectPopoverStyles(): void {
+    // Check if styles already exist
+    const existingStyle = document.querySelector('style[data-kuma-popover-styles]');
+    if (existingStyle) {
+      logger.debug('CONTENT_SCRIPT', '[Kuma Chat] Popover styles already injected');
+      return;
+    }
+
+    // Create style element for popover
+    const styleElement = document.createElement('style');
+    styleElement.setAttribute('data-kuma-popover-styles', 'true');
+
+    // LaTeX Popover styles (extracted from chatbox.css)
+    styleElement.textContent = `
+      /* LaTeX Popover Styles - Injected by Kuma Chat Extension */
+      .math-popover {
+        overflow: hidden;
+        position: fixed;
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 2.5rem 1.5rem 1.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+        z-index: 2147483647;
+        max-width: min(500px, 90vw);
+        max-height: 85vh;
+        animation: popIn 0.2s ease-out;
+      }
+
+      @keyframes popIn {
+        from {
+          opacity: 0;
+          transform: scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      /* Close Button */
+      .math-popover-close {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        width: 28px;
+        height: 28px;
+        border: none;
+        background: rgba(0, 0, 0, 0.05);
+        color: #374151;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        z-index: 1;
+      }
+
+      .math-popover-close:hover {
+        background: rgba(0, 0, 0, 0.1);
+        transform: scale(1.1);
+      }
+
+      .math-popover-close:active {
+        transform: scale(0.95);
+      }
+
+      /* LaTeX Copy Button */
+      .math-popover-copy {
+        position: absolute;
+        top: 0.5rem;
+        right: 2.75rem; /* Positioned to the left of close button */
+        padding: 0.45rem 0.85rem;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        background: white;
+        color: #374151;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        font-weight: 500;
+        display: block;
+        align-items: center;
+        gap: 0.4rem;
+        transition: all 0.2s ease;
+        z-index: 1;
+        line-height: 1.2;
+        white-space: nowrap;
+        min-width: fit-content;
+      }
+
+      .math-popover-copy:hover {
+        background: #f3f4f6;
+        border-color: #9ca3af;
+        transform: scale(1.05);
+      }
+
+      .math-popover-copy:active {
+        transform: scale(0.95);
+      }
+
+      .math-popover-copy.copied {
+        background: rgba(34, 197, 94, 0.1);
+        border-color: #22c55e;
+        color: #22c55e;
+      }
+
+      .math-popover-copy svg {
+        flex-shrink: 0;
+      }
+
+      /* Formula Display */
+      .math-popover-formula {
+        text-align: center;
+        font-size: 2em; /* 2x zoom */
+        padding: 1rem;
+        min-width: 100px;
+      }
+
+      .math-popover-formula svg {
+        max-width: 100%;
+        height: auto;
+        cursor: default; /* Remove pointer cursor in popover */
+      }
+
+      /* LaTeX Source Display */
+      .math-popover-latex {
+        margin-top: 1rem;
+        padding: 0.5rem 0.75rem;
+        background: #f9fafb;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.75rem;
+        color: #6b7280;
+        text-align: center;
+        word-wrap: break-word;
+        border: 1px solid #e5e7eb;
+        user-select: all; /* Allow easy copying */
+        max-height: 100px;
+        overflow-y: auto;
+      }
+
+      /* Arrow */
+      .math-popover-arrow {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background: white;
+        border: 1px solid #e5e7eb;
+        transform: rotate(45deg);
+      }
+
+      /* Arrow positions for each placement */
+      .math-popover-top .math-popover-arrow {
+        bottom: -6px;
+        left: 50%;
+        margin-left: -5px;
+        border-top: none;
+        border-left: none;
+      }
+
+      .math-popover-bottom .math-popover-arrow {
+        top: -6px;
+        left: 50%;
+        margin-left: -5px;
+        border-bottom: none;
+        border-right: none;
+      }
+
+      .math-popover-left .math-popover-arrow {
+        right: -6px;
+        top: 50%;
+        margin-top: -5px;
+        border-left: none;
+        border-bottom: none;
+      }
+
+      .math-popover-right .math-popover-arrow {
+        left: -6px;
+        top: 50%;
+        margin-top: -5px;
+        border-right: none;
+        border-top: none;
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 640px) {
+        .math-popover {
+          padding: 2rem 1rem 1rem;
+          border-radius: 6px;
+          max-width: 95vw;
+        }
+
+        .math-popover-formula {
+          font-size: 1.5em;
+          padding: 0.75rem;
+        }
+
+        .math-popover-latex {
+          font-size: 0.7rem;
+        }
+
+        .math-popover-copy {
+          font-size: 0.65rem;
+          padding: 0.3rem 0.5rem;
+          gap: 0.25rem;
+        }
+      }
+    `;
+
+    // Inject into document.body
+    document.body.appendChild(styleElement);
+    logger.debug('CONTENT_SCRIPT', '[Kuma Chat] Popover styles injected successfully');
   }
 
   private async loadSettings() {

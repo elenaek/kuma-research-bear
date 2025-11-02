@@ -101,23 +101,23 @@ function calculatePopoverPosition(
   const spacing = 12; // Gap between trigger and popover
   const viewport = {
     width: window.innerWidth,
-    height: window.innerHeight,
-    scrollX: window.scrollX,
-    scrollY: window.scrollY
+    height: window.innerHeight
   };
 
   // Try positions in order of preference: top, bottom, right, left
   // Choose first one that fits comfortably in viewport
+  // Note: Both chatbox and popover use position:fixed, so getBoundingClientRect()
+  // already gives us viewport-relative coordinates. No need to add scroll offsets.
 
   // Try top
   if (triggerRect.top - popoverHeight - spacing > 20) {
     return {
       placement: 'top',
-      top: triggerRect.top + viewport.scrollY - popoverHeight - spacing,
+      top: triggerRect.top - popoverHeight - spacing,
       left: Math.max(
         20,
         Math.min(
-          triggerRect.left + viewport.scrollX + (triggerRect.width - popoverWidth) / 2,
+          triggerRect.left + (triggerRect.width - popoverWidth) / 2,
           viewport.width - popoverWidth - 20
         )
       )
@@ -128,11 +128,11 @@ function calculatePopoverPosition(
   if (triggerRect.bottom + popoverHeight + spacing < viewport.height - 20) {
     return {
       placement: 'bottom',
-      top: triggerRect.bottom + viewport.scrollY + spacing,
+      top: triggerRect.bottom + spacing,
       left: Math.max(
         20,
         Math.min(
-          triggerRect.left + viewport.scrollX + (triggerRect.width - popoverWidth) / 2,
+          triggerRect.left + (triggerRect.width - popoverWidth) / 2,
           viewport.width - popoverWidth - 20
         )
       )
@@ -146,11 +146,11 @@ function calculatePopoverPosition(
       top: Math.max(
         20,
         Math.min(
-          triggerRect.top + viewport.scrollY + (triggerRect.height - popoverHeight) / 2,
+          triggerRect.top + (triggerRect.height - popoverHeight) / 2,
           viewport.height - popoverHeight - 20
         )
       ),
-      left: triggerRect.right + viewport.scrollX + spacing
+      left: triggerRect.right + spacing
     };
   }
 
@@ -160,11 +160,11 @@ function calculatePopoverPosition(
     top: Math.max(
       20,
       Math.min(
-        triggerRect.top + viewport.scrollY + (triggerRect.height - popoverHeight) / 2,
+        triggerRect.top + (triggerRect.height - popoverHeight) / 2,
         viewport.height - popoverHeight - 20
       )
     ),
-    left: triggerRect.left + viewport.scrollX - popoverWidth - spacing
+    left: triggerRect.left - popoverWidth - spacing
   };
 }
 
@@ -497,14 +497,14 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span>Copied!</span>
+                <div>Copied!</div>
               </>
             ) : (
               <>
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-                <span>Copy</span>
+                <div>Copy</div>
               </>
             )}
           </button>
