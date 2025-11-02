@@ -14,8 +14,10 @@ import type { PromptComponent } from '../types';
  * Centralizing it here ensures consistency and easier maintenance.
  */
 export const LATEX_RULES: PromptComponent = {
-  content: `Math formatting with LaTeX:
-- Use $expr$ for inline math, $$expr$$ for display equations
+  content: `
+Always use LaTeX to format any math equations, expressions, or formulas using the following rules:
+<Math Formatting with LaTeX>
+- Use $expr$ for inline math, $$expr$$ to display equations or formulas on a new line
 - CRITICAL: In JSON strings, backslashes must be escaped by doubling them
 
 LaTeX Escaping Rules (CRITICAL - READ CAREFULLY):
@@ -33,7 +35,8 @@ IMPORTANT - Commands that look like escape sequences:
 - \\times, \\tan, \\tanh → Write as \\\\times, \\\\tan, \\\\tanh
 - \\ne, \\neq, \\not → Write as \\\\ne, \\\\neq, \\\\not
 
-More examples: \\\\alpha, \\\\beta, \\\\gamma, \\\\ell, \\\\sum, \\\\int, \\\\boldsymbol{x}, \\\\frac{a}{b}`,
+More examples: \\\\alpha, \\\\beta, \\\\gamma, \\\\ell, \\\\sum, \\\\int, \\\\boldsymbol{x}, \\\\frac{a}{b}
+</Math Formatting with LaTeX>`,
   tokens: 250, // Approximate token count
 };
 
