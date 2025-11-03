@@ -47,13 +47,15 @@ export function buildExtractTermsPrompt(
  * @param termCount - Number of terms to extract
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param verbosity - The verbosity level (1-5)
  * @returns The chunk term extraction system prompt
  */
 export function buildExtractChunkTermsPrompt(
   paperTitle: string,
   termCount: number,
   persona?: Persona,
-  purpose?: Purpose
+  purpose?: Purpose,
+  verbosity?: number
 ): string {
   const builder = new PromptBuilder()
     .withCustomInstruction('role', 'You are a research paper analyzer extracting technical terms.');
@@ -63,6 +65,7 @@ export function buildExtractChunkTermsPrompt(
   if (purpose) builder.withPurpose(purpose);
 
   return builder
+    .withVerbosity(verbosity ?? 3)
     .withCustomInstruction('critical', `CRITICAL:
 - Extract ONLY the ${termCount} most important technical terms, acronyms, and domain-specific jargon
 - Preserve ALL acronyms exactly (e.g., "SES", "RCT", "fMRI")
@@ -85,12 +88,14 @@ Paper: ${paperTitle}`)
  * @param language - Target output language (en, es, ja)
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param verbosity - The verbosity level (1-5)
  * @returns The definition generation system prompt
  */
 export function buildDefinitionPrompt(
   language: PromptLanguage,
   persona?: Persona,
-  purpose?: Purpose
+  purpose?: Purpose,
+  verbosity?: number
 ): string {
   const builder = new PromptBuilder()
     .withCustomInstruction('role', 'You are a research paper terminology expert who provides clear, accurate definitions for technical terms and acronyms.');
@@ -100,6 +105,7 @@ export function buildDefinitionPrompt(
   if (purpose) builder.withPurpose(purpose);
 
   return builder
+    .withVerbosity(verbosity ?? 3)
     .withCustomInstruction('math', `When mathematical expressions, equations, or formulas are needed in definitions or contexts:
 - Use $expression$ for inline math (e.g., $E = mc^2$, $\\alpha$)
 - Use $$expression$$ for display equations on separate lines
@@ -120,13 +126,15 @@ export function buildDefinitionPrompt(
  * @param targetCount - Number of unique terms to select
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param verbosity - The verbosity level (1-5)
  * @returns The term deduplication system prompt
  */
 export function buildDeduplicateTermsPrompt(
   language: PromptLanguage,
   targetCount: number,
   persona?: Persona,
-  purpose?: Purpose
+  purpose?: Purpose,
+  verbosity?: number
 ): string {
   const builder = new PromptBuilder()
     .withCustomInstruction('role', 'You are a research paper glossary expert who deduplicates and selects technical terms.')
@@ -137,6 +145,7 @@ export function buildDeduplicateTermsPrompt(
   if (purpose) builder.withPurpose(purpose);
 
   return builder
+    .withVerbosity(verbosity ?? 3)
     .withLanguage(language, 'standard')
     .buildString();
 }

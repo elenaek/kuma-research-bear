@@ -17,6 +17,7 @@ export interface Settings {
   showImageButtons?: boolean; // Show/hide image explanation buttons
   persona?: Persona; // User persona (default: 'professional')
   purpose?: Purpose; // User purpose (default: 'learning')
+  verbosity?: number; // Response verbosity level 1-5 (default: 3, balanced)
 }
 
 /**
@@ -214,6 +215,54 @@ export async function setPurpose(purpose: Purpose): Promise<void> {
 }
 
 /**
+ * Gets the current verbosity setting
+ * Returns 3 (balanced) as default if not set
+ */
+export async function getVerbosity(): Promise<number> {
+  try {
+    const result = await chrome.storage.sync.get(SETTINGS_KEY);
+    const settings = result[SETTINGS_KEY] as Settings | undefined;
+
+    // Default to 3 (balanced) if not set
+    return settings?.verbosity ?? 3;
+  } catch (error) {
+    logger.error('SETTINGS', 'Error getting verbosity:', error);
+    return 3;
+  }
+}
+
+/**
+ * Sets the verbosity preference
+ * @param verbosity Verbosity level (1-5, where 1 is concise and 5 is detailed)
+ */
+export async function setVerbosity(verbosity: number): Promise<void> {
+  try {
+    // Validate verbosity range
+    const clampedVerbosity = Math.min(5, Math.max(1, Math.round(verbosity)));
+
+    // Get existing settings or create new
+    const result = await chrome.storage.sync.get(SETTINGS_KEY);
+    const settings: Settings = (result[SETTINGS_KEY] as Settings) || {
+      outputLanguage: getBrowserLanguage(),
+      persona: 'professional',
+      purpose: 'learning',
+      verbosity: 3
+    };
+
+    // Update verbosity
+    settings.verbosity = clampedVerbosity;
+
+    // Save to storage
+    await chrome.storage.sync.set({ [SETTINGS_KEY]: settings });
+
+    logger.debug('SETTINGS', `Verbosity set to: ${clampedVerbosity}`);
+  } catch (error) {
+    logger.error('SETTINGS', 'Error setting verbosity:', error);
+    throw error;
+  }
+}
+
+/**
  * Gets the persona/purpose configuration for current settings
  * Returns temperature, topK, and prompt modifiers
  */
@@ -242,7 +291,8 @@ export async function getSettings(): Promise<Settings> {
       outputLanguage: getBrowserLanguage(),
       showImageButtons: true,
       persona: 'professional',
-      purpose: 'learning'
+      purpose: 'learning',
+      verbosity: 3
     };
   } catch (error) {
     logger.error('SETTINGS', 'Error getting settings:', error);
@@ -250,7 +300,8 @@ export async function getSettings(): Promise<Settings> {
       outputLanguage: 'en',
       showImageButtons: true,
       persona: 'professional',
-      purpose: 'learning'
+      purpose: 'learning',
+      verbosity: 3
     };
   }
 }
@@ -340,6 +391,29 @@ export function onPersonaPurposeChanged(
         const purpose = newSettings.purpose ?? 'learning';
         const config = PERSONA_PURPOSE_CONFIGS[persona][purpose];
         callback(persona, purpose, config);
+      }
+    }
+  };
+
+  chrome.storage.onChanged.addListener(listener);
+
+  // Return cleanup function
+  return () => {
+    chrome.storage.onChanged.removeListener(listener);
+  };
+}
+
+/**
+ * Listen for changes to verbosity setting
+ * @param callback Function to call when verbosity changes
+ * @returns Cleanup function to remove listener
+ */
+export function onVerbosityChanged(callback: (newVerbosity: number) => void): () => void {
+  const listener = (changes: { [key: string]: chrome.storage.StorageChange }, areaName: string) => {
+    if (areaName === 'sync' && changes[SETTINGS_KEY]) {
+      const newSettings = changes[SETTINGS_KEY].newValue as Settings | undefined;
+      if (newSettings?.verbosity !== undefined) {
+        callback(newSettings.verbosity);
       }
     }
   };

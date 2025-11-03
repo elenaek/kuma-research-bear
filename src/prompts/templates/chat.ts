@@ -15,11 +15,13 @@ import type { PromptLanguage } from '../types.ts';
  * about research papers with proper citation and JSON formatting.
  *
  * @param paperTitle - The title of the paper being discussed
- * @param persona - The persona of the user 
- * @param purpose - The purpose of the user 
+ * @param persona - The persona of the user
+ * @param purpose - The purpose of the user
+ * @param language - The output language
+ * @param verbosity - The verbosity level (1-5)
  * @returns The chat system prompt
  */
-export function buildChatPrompt(paperTitle: string, persona?: Persona, purpose?: Purpose, language?: PromptLanguage): string {
+export function buildChatPrompt(paperTitle: string, persona?: Persona, purpose?: Purpose, language?: PromptLanguage, verbosity?: number): string {
   const builder = new PromptBuilder()
     .withRole('kumaAssistant')
     .withTask('Answer questions about the research paper based on the provided context');
@@ -29,6 +31,7 @@ export function buildChatPrompt(paperTitle: string, persona?: Persona, purpose?:
   if (purpose) builder.withPurpose(purpose);
 
   return builder
+    .withVerbosity(verbosity ?? 3)
     .withCustomInstruction('honesty', 'If the context doesn\'t contain enough information, say so honestly')
     .withLatexSupport()
     .withLanguage(language || 'en', 'standard')
@@ -52,9 +55,11 @@ Only include sources you actually referenced. If you didn't use specific sources
  * @param paperTitle - The title of the paper containing the image
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param language - The output language
+ * @param verbosity - The verbosity level (1-5)
  * @returns The image chat system prompt
  */
-export function buildImageChatPrompt(paperTitle: string, persona?: Persona, purpose?: Purpose, language?: PromptLanguage): string {
+export function buildImageChatPrompt(paperTitle: string, persona?: Persona, purpose?: Purpose, language?: PromptLanguage, verbosity?: number): string {
   const builder = new PromptBuilder()
     .withCustomInstruction('role', 'You are Kuma, a friendly research bear assistant helping users understand images from research papers.')
     .withTask('Answer questions about the image and how it relates to the paper');
@@ -64,6 +69,7 @@ export function buildImageChatPrompt(paperTitle: string, persona?: Persona, purp
   if (purpose) builder.withPurpose(purpose);
 
   return builder
+    .withVerbosity(verbosity ?? 3)
     .withCustomInstruction('honesty', 'If the context doesn\'t contain enough information, say so honestly')
     .withLatexSupport()
     .withLanguage(language || 'en', 'standard')

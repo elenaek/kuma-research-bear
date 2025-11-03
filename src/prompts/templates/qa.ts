@@ -17,12 +17,14 @@ import type { Persona, Purpose } from '../../types/personaPurpose.ts';
  * @param language - Target output language (en, es, ja)
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param verbosity - The verbosity level (1-5)
  * @returns The Q&A system prompt
  */
 export function buildQAPrompt(
   language: PromptLanguage,
   persona?: Persona,
-  purpose?: Purpose
+  purpose?: Purpose,
+  verbosity?: number
 ): string {
   const builder = new PromptBuilder()
     .withRole('kumaAssistant')
@@ -37,6 +39,7 @@ export function buildQAPrompt(
     .withMarkdownFormatting()
     .withLatexSupport()
     .withLanguage(language, 'entire')
+    .withVerbosity(verbosity ?? 3)
     .buildString();
 }
 

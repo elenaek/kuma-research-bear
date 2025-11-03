@@ -6,7 +6,8 @@ import { inputQuotaService } from '../../utils/inputQuotaService.ts';
 import { JSONSchema } from '../../utils/typeToSchema.ts';
 import { logger } from '../../utils/logger.ts';
 import { buildChatPrompt, buildImageChatPrompt } from '../../prompts/templates/chat.ts';
-import { getOutputLanguage, getPersona, getPurpose } from '../../utils/settingsService.ts';
+import { getOutputLanguage, getPersona, getPurpose, getVerbosity } from '../../utils/settingsService.ts';
+import type { PromptLanguage } from '../../prompts/types.ts';
 
 /**
  * Chat Message Handlers
@@ -601,7 +602,9 @@ async function processAndStreamResponse(
     // RAG context will be included in the actual user prompt instead
     const persona = await getPersona();
     const purpose = await getPurpose();
-    const systemPrompt = buildChatPrompt(storedPaper.title, persona, purpose);
+    const verbosity = await getVerbosity();
+    const language = (await getOutputLanguage()) as PromptLanguage;
+    const systemPrompt = buildChatPrompt(storedPaper.title, persona, purpose, language, verbosity);
 
     // Check if we need to create a new session with conversation history
     let session = aiService['sessions'].get(contextId);
@@ -1305,7 +1308,11 @@ async function processAndStreamImageChatResponse(
     };
 
     // System prompt for image chat (multimodal)
-    const systemPrompt = buildImageChatPrompt(paper.title);
+    const persona = await getPersona();
+    const purpose = await getPurpose();
+    const verbosity = await getVerbosity();
+    const language = (await getOutputLanguage()) as PromptLanguage;
+    const systemPrompt = buildImageChatPrompt(paper.title, persona, purpose, language, verbosity);
 
     // Check if we need to create a new session with conversation history
     let session = aiService['sessions'].get(contextId);

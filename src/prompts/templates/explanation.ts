@@ -16,9 +16,10 @@ import type { PromptLanguage } from '../types.ts';
  *
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param verbosity - The verbosity level (1-5)
  * @returns The term explanation system prompt
  */
-export function buildExplainTermPrompt(persona?: Persona, purpose?: Purpose): string {
+export function buildExplainTermPrompt(persona?: Persona, purpose?: Purpose, verbosity?: number): string {
   const builder = new PromptBuilder()
     .withRole('explainer', 'termExplainer');
 
@@ -27,6 +28,7 @@ export function buildExplainTermPrompt(persona?: Persona, purpose?: Purpose): st
   if (purpose) builder.withPurpose(purpose);
 
   return builder
+    .withVerbosity(verbosity ?? 3)
     .buildString();
 }
 
@@ -40,12 +42,14 @@ export function buildExplainTermPrompt(persona?: Persona, purpose?: Purpose): st
  * @param language - Target output language (en, es, ja)
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param verbosity - The verbosity level (1-5)
  * @returns The abstract explanation system prompt
  */
 export function buildExplainAbstractPrompt(
   language: PromptLanguage,
   persona?: Persona,
-  purpose?: Purpose
+  purpose?: Purpose,
+  verbosity?: number
 ): string {
   const builder = new PromptBuilder()
     .withRole('explainer')
@@ -60,6 +64,7 @@ export function buildExplainAbstractPrompt(
     .withMarkdownFormatting(true)
     .withLatexSupport()
     .withLanguage(language, 'entire')
+    .withVerbosity(verbosity ?? 3)
     .buildString();
 }
 
@@ -72,9 +77,10 @@ export function buildExplainAbstractPrompt(
  *
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param verbosity - The verbosity level (1-5)
  * @returns The image explanation system prompt
  */
-export function buildImageExplanationPrompt(persona?: Persona, purpose?: Purpose): string {
+export function buildImageExplanationPrompt(persona?: Persona, purpose?: Purpose, verbosity?: number): string {
   const builder = new PromptBuilder()
     .withRole('expertResearchAssistant')
     .withTask('Provide clear, concise explanations of images in the context of the paper.');
@@ -84,6 +90,7 @@ export function buildImageExplanationPrompt(persona?: Persona, purpose?: Purpose
   if (purpose) builder.withPurpose(purpose);
 
   return builder
+    .withVerbosity(verbosity ?? 3)
     .withLatexSupport()
     .withMarkdownFormatting()
     .buildString();

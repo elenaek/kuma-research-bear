@@ -22,7 +22,7 @@ import {
 } from '../types/index.ts';
 import { JSONSchema } from '../utils/typeToSchema.ts';
 import { getSchemaForLanguage } from '../schemas/analysisSchemas.multilang.ts';
-import { getOutputLanguage, getPersona, getPurpose } from './settingsService.ts';
+import { getOutputLanguage, getPersona, getPurpose, getVerbosity } from './settingsService.ts';
 import { getOptimalRAGChunkCount } from './adaptiveRAGService.ts';
 import { logger } from './logger.ts';
 import { buildSimplifyTextPrompt } from '../prompts/templates/simplification.ts';
@@ -34,6 +34,7 @@ import { buildQAPrompt } from '../prompts/templates/qa.ts';
 import { buildJSONRepairPrompt, buildJSONRepairInput } from '../prompts/templates/utility.ts';
 import { buildExtractTermsPrompt, buildExtractChunkTermsPrompt, buildDefinitionPrompt, buildDeduplicateTermsPrompt } from '../prompts/templates/glossary.ts';
 import { getLanguageName } from '../prompts/components/language.ts';
+import { getVerbosity } from '../utils/settingsService.ts';
 
 /**
  * Utility: Sleep for a specified duration
@@ -434,11 +435,25 @@ ${purpose === 'learning' ? `Explain this image in plain language.
       const outputLanguage = await getOutputLanguage();
       logger.debug('AI_SERVICE', '[Summarizer] Using output language:', outputLanguage);
 
+      const verbosityToSummarizer = (verbosity: number) => {
+        switch (verbosity) {
+          case 1:
+          case 2:
+            return 'short';
+          case 3:
+          case 4:
+            return 'medium';
+          case 5:
+            return 'long';
+          default:
+        }
+      }
+
       // Create tldr summarizer for quick summary
       const tldrSummarizer = await this.createSummarizer({
         type: 'tldr',
         format: 'markdown',
-        length: 'long',
+        length: verbosityToSummarizer(await getVerbosity()),
         sharedContext: `Research paper: ${title}`,
         expectedInputLanguages: ['en'],
         outputLanguage: outputLanguage
@@ -453,7 +468,7 @@ ${purpose === 'learning' ? `Explain this image in plain language.
       const keyPointsSummarizer = await this.createSummarizer({
         type: 'key-points',
         format: 'markdown',
-        length: 'long',
+        length: verbosityToSummarizer(await getVerbosity()),
         sharedContext: `Research paper: ${title}`,
         expectedInputLanguages: ['en'],
         outputLanguage: outputLanguage
@@ -1433,7 +1448,8 @@ Return ONLY the JSON object, no other text. If you cannot determine a field, use
     const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
     const persona = await getPersona();
     const purpose = await getPurpose();
-    const systemPrompt = buildMethodologyAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose);
+    const verbosity = await getVerbosity();
+    const systemPrompt = buildMethodologyAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose, verbosity);
 
     try {
       // Import RAG and quota services
@@ -1569,7 +1585,8 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
     const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
     const persona = await getPersona();
     const purpose = await getPurpose();
-    const systemPrompt = buildConfounderAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose);
+    const verbosity = await getVerbosity();
+    const systemPrompt = buildConfounderAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose, verbosity);
 
     try {
       // Import RAG and quota services
@@ -1700,7 +1717,8 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
     const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
     const persona = await getPersona();
     const purpose = await getPurpose();
-    const systemPrompt = buildImplicationAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose);
+    const verbosity = await getVerbosity();
+    const systemPrompt = buildImplicationAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose, verbosity);
 
     try {
       // Import RAG and quota services
@@ -1831,7 +1849,8 @@ Provide a comprehensive analysis of real-world applications, significance, and f
     const languageName = getLanguageName(outputLanguage as 'en' | 'es' | 'ja');
     const persona = await getPersona();
     const purpose = await getPurpose();
-    const systemPrompt = buildLimitationAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose);
+    const verbosity = await getVerbosity();
+    const systemPrompt = buildLimitationAnalysisPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose, verbosity);
 
     try {
       // Import RAG and quota services
@@ -2041,7 +2060,8 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
     };
     const persona = await getPersona();
     const purpose = await getPurpose();
-    const systemPrompt = buildQAPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose);
+    const verbosity = await getVerbosity();
+    const systemPrompt = buildQAPrompt(outputLanguage as 'en' | 'es' | 'ja', persona, purpose, verbosity);
 
     // Include language in context ID to ensure separate sessions per language
     const languageContextId = `${contextId}-${outputLanguage}`;

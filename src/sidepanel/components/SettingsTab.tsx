@@ -13,6 +13,7 @@ import { Settings } from 'lucide-preact';
 import { PersonaSelector } from '../../popup/components/PersonaSelector.tsx';
 import { PurposeSelector } from '../../popup/components/PurposeSelector.tsx';
 import { LanguageDropdown } from '../../popup/components/LanguageDropdown.tsx';
+import { VerbositySlider } from '../../popup/components/VerbositySlider.tsx';
 import { getShowImageButtons, setShowImageButtons } from '../../utils/settingsService.ts';
 import type { Persona, Purpose } from '../../types/personaPurpose.ts';
 import { PERSONA_PURPOSE_CONFIGS } from '../../types/personaPurpose.ts';
@@ -115,6 +116,11 @@ export function SettingsTab() {
             <span class="text-xs text-gray-500 block mt-0.5">You want to...</span>
           </label>
           <PurposeSelector />
+        </div>
+
+        {/* Verbosity Slider */}
+        <div class="settings-row mb-4">
+          <VerbositySlider />
         </div>
 
         {/* Configuration Info Card */}

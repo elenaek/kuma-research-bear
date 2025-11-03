@@ -17,12 +17,14 @@ import type { Persona, Purpose } from '../../types/personaPurpose.ts';
  * @param language - Target output language (en, es, ja)
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param verbosity - The verbosity level (1-5)
  * @returns The methodology analysis system prompt
  */
 export function buildMethodologyAnalysisPrompt(
   language: PromptLanguage,
   persona?: Persona,
-  purpose?: Purpose
+  purpose?: Purpose,
+  verbosity?: number
 ): string {
   const builder = new PromptBuilder()
     .withRole('analyzer', 'methodology');
@@ -32,6 +34,7 @@ export function buildMethodologyAnalysisPrompt(
   if (purpose) builder.withPurpose(purpose);
 
   return builder
+    .withVerbosity(verbosity ?? 3)
     .withLatexSupport()
     .withMarkdownFormatting()
     .withLanguage(language, 'analysis')
@@ -48,12 +51,14 @@ export function buildMethodologyAnalysisPrompt(
  * @param language - Target output language (en, es, ja)
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param verbosity - The verbosity level (1-5)
  * @returns The confounder analysis system prompt
  */
 export function buildConfounderAnalysisPrompt(
   language: PromptLanguage,
   persona?: Persona,
-  purpose?: Purpose
+  purpose?: Purpose,
+  verbosity?: number
 ): string {
   const builder = new PromptBuilder()
     .withRole('analyzer', 'confounders');
@@ -63,6 +68,7 @@ export function buildConfounderAnalysisPrompt(
   if (purpose) builder.withPurpose(purpose);
 
   return builder
+    .withVerbosity(verbosity ?? 3)
     .withLatexSupport()
     .withMarkdownFormatting()
     .withLanguage(language, 'analysis')
@@ -79,12 +85,14 @@ export function buildConfounderAnalysisPrompt(
  * @param language - Target output language (en, es, ja)
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param verbosity - The verbosity level (1-5)
  * @returns The implication analysis system prompt
  */
 export function buildImplicationAnalysisPrompt(
   language: PromptLanguage,
   persona?: Persona,
-  purpose?: Purpose
+  purpose?: Purpose,
+  verbosity?: number
 ): string {
   const builder = new PromptBuilder()
     .withRole('analyzer', 'implications');
@@ -94,6 +102,7 @@ export function buildImplicationAnalysisPrompt(
   if (purpose) builder.withPurpose(purpose);
 
   return builder
+    .withVerbosity(verbosity ?? 3)
     .withLatexSupport()
     .withMarkdownFormatting()
     .withLanguage(language, 'analysis')
@@ -110,12 +119,14 @@ export function buildImplicationAnalysisPrompt(
  * @param language - Target output language (en, es, ja)
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param verbosity - The verbosity level (1-5)
  * @returns The limitation analysis system prompt
  */
 export function buildLimitationAnalysisPrompt(
   language: PromptLanguage,
   persona?: Persona,
-  purpose?: Purpose
+  purpose?: Purpose,
+  verbosity?: number
 ): string {
   const builder = new PromptBuilder()
     .withRole('analyzer', 'limitations');
@@ -125,6 +136,7 @@ export function buildLimitationAnalysisPrompt(
   if (purpose) builder.withPurpose(purpose);
 
   return builder
+    .withVerbosity(verbosity ?? 3)
     .withLatexSupport()
     .withMarkdownFormatting()
     .withLanguage(language, 'analysis')

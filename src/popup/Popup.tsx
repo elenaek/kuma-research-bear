@@ -13,6 +13,7 @@ import { LoopPurpose, LottiePlayer, LottiePlayerHandle } from '../shared/compone
 import { LanguageDropdown } from './components/LanguageDropdown.tsx';
 import { PersonaSelector } from './components/PersonaSelector.tsx';
 import { PurposeSelector } from './components/PurposeSelector.tsx';
+import { VerbositySlider } from './components/VerbositySlider.tsx';
 import { ImageButtonsToggle } from './components/ImageButtonsToggle.tsx';
 import { normalizeUrl } from '../utils/urlUtils.ts';
 import { MessageType } from '../types/index.ts';
@@ -577,6 +578,9 @@ export function Popup() {
                 <label class="text-sm font-light text-gray-700">and you want to...</label>
                 <PurposeSelector />
               </div>
+
+              {/* Verbosity Slider */}
+              <VerbositySlider />
 
               {/* Image Buttons Toggle */}
               <ImageButtonsToggle

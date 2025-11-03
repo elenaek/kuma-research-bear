@@ -8,6 +8,7 @@
  *   .withTask('Explain complex academic papers')
  *   .withPersona('professional')
  *   .withPurpose('learning')
+ *   .withVerbosity(3)
  *   .withLatexSupport()
  *   .withLanguage('en')
  *   .build();
@@ -26,6 +27,7 @@ import {
 import { getLanguageInstruction, getGlossaryLanguageInstruction } from './components/language.ts';
 import { getPersonaInstruction, getPersonaTokenCount } from './components/personas.ts';
 import { getPurposeInstruction, getPurposeTokenCount } from './components/purposes.ts';
+import { getVerbosityInstruction, getVerbosityTokenCount } from './components/verbosity.ts';
 
 export class PromptBuilder {
   private components: Array<{ name: string; component: PromptComponent }> = [];
@@ -166,6 +168,21 @@ export class PromptBuilder {
       component: {
         content: getPurposeInstruction(purpose),
         tokens: getPurposeTokenCount(),
+      },
+    });
+    return this;
+  }
+
+  /**
+   * Add verbosity level for response length control
+   * @param level - Verbosity level (1-5, where 1 is concise and 5 is detailed)
+   */
+  withVerbosity(level: number = 3): this {
+    this.components.push({
+      name: 'verbosity',
+      component: {
+        content: getVerbosityInstruction(level),
+        tokens: getVerbosityTokenCount(),
       },
     });
     return this;
