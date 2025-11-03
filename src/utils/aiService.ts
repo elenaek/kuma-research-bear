@@ -45,6 +45,20 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Configuration for prompt timeout and retry behavior
+ */
+export interface PromptTimeoutConfig {
+  /** Timeout duration in milliseconds (default: 60000ms = 60s) */
+  timeoutMs?: number;
+  /** Maximum number of retry attempts (default: 2) */
+  maxRetries?: number;
+  /** Delay between retries in milliseconds (default: 1000ms = 1s) */
+  retryDelayMs?: number;
+  /** Whether to destroy and recreate session on timeout (default: true) */
+  recreateSessionOnTimeout?: boolean;
+}
+
+/**
  * Chrome AI Service for interacting with Chrome's built-in AI APIs
  * Uses the stable Prompt API (Chrome 138+)
  * Supports concurrent sessions for multiple tabs/contexts
@@ -714,6 +728,7 @@ ${getLanguageInstruction(outputLanguage as PromptLanguage, 'entire').content}
 
   /**
    * Prompt the AI model with context support
+   * Now includes automatic timeout protection with configurable retry logic
    */
   async prompt(
     input: string,
@@ -723,54 +738,113 @@ ${getLanguageInstruction(outputLanguage as PromptLanguage, 'entire').content}
     expectedInputs?: Array<{ type: string; languages: string[] }>,
     expectedOutputs?: Array<{ type: string; languages: string[] }>,
     temperature: number = 0.0,
-    topK: number = 1
+    topK: number = 1,
+    timeoutConfig?: PromptTimeoutConfig
   ): Promise<string> {
-    try {
-      logger.debug('PROMPT_ENGINEERING', '[Prompt] contextId:', contextId);
-      logger.debug('PROMPT_ENGINEERING', '[Prompt] expectedOutputs:', JSON.stringify(expectedOutputs));
+    // Merge timeout config with defaults
+    const config: Required<PromptTimeoutConfig> = {
+      timeoutMs: timeoutConfig?.timeoutMs ?? 60000,
+      maxRetries: timeoutConfig?.maxRetries ?? 2,
+      retryDelayMs: timeoutConfig?.retryDelayMs ?? 1000,
+      recreateSessionOnTimeout: timeoutConfig?.recreateSessionOnTimeout ?? true
+    };
 
-      // Get or create session for this context
-      const session = await this.getOrCreateSession(contextId, { systemPrompt, expectedInputs, expectedOutputs, temperature, topK });
+    logger.debug('PROMPT_ENGINEERING', '[Prompt] contextId:', contextId);
+    logger.debug('PROMPT_ENGINEERING', '[Prompt] expectedOutputs:', JSON.stringify(expectedOutputs));
+    logger.debug('PROMPT_ENGINEERING', `[Prompt] Timeout config:`, config);
 
-      // Create abort controller for this request
-      const abortController = new AbortController();
+    let lastError: any;
 
-      // Cancel any existing request for this context
-      const existingController = this.activeRequests.get(contextId);
-      if (existingController) {
-        logger.debug('AI_SERVICE', `[AI] Cancelling existing request for context: ${contextId}`);
-        existingController.abort();
-      }
-
-      this.activeRequests.set(contextId, abortController);
-
+    // Retry loop
+    for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
       try {
-        // Make the prompt call with abort signal
-        const response = await session.prompt(input, {
-          responseConstraint,
-          signal: abortController.signal
-        });
+        logger.debug('AI_SERVICE', `[Prompt] Attempt ${attempt}/${config.maxRetries} for context: ${contextId}`);
 
-        // Clear the request tracking on success
-        this.activeRequests.delete(contextId);
+        // Get or create session for this context
+        const session = await this.getOrCreateSession(contextId, { systemPrompt, expectedInputs, expectedOutputs, temperature, topK });
 
-        return response;
-      } catch (error: any) {
-        // Clear the request tracking
-        this.activeRequests.delete(contextId);
+        // Create abort controller for this request
+        const abortController = new AbortController();
 
-        // Check if it was an abort
-        if (error.name === 'AbortError') {
-          logger.debug('AI_SERVICE', `[AI] Request aborted for context: ${contextId}`);
-          throw new Error('AI request was cancelled');
+        // Cancel any existing request for this context
+        const existingController = this.activeRequests.get(contextId);
+        if (existingController) {
+          logger.debug('AI_SERVICE', `[AI] Cancelling existing request for context: ${contextId}`);
+          existingController.abort();
         }
 
-        throw error;
+        this.activeRequests.set(contextId, abortController);
+
+        try {
+          // Create timeout promise
+          const timeoutPromise = new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error('PROMPT_TIMEOUT')), config.timeoutMs)
+          );
+
+          // Create the actual prompt call
+          const promptPromise = session.prompt(input, {
+            responseConstraint,
+            signal: abortController.signal
+          });
+
+          // Race the promises
+          const response = await Promise.race([promptPromise, timeoutPromise]);
+
+          // Clear the request tracking on success
+          this.activeRequests.delete(contextId);
+
+          logger.debug('AI_SERVICE', `[Prompt] ✓ Success on attempt ${attempt}/${config.maxRetries}`);
+          return response;
+
+        } catch (error: any) {
+          // Clear the request tracking
+          this.activeRequests.delete(contextId);
+
+          // Check if it was an abort
+          if (error.name === 'AbortError') {
+            logger.debug('AI_SERVICE', `[AI] Request aborted for context: ${contextId}`);
+            throw new Error('AI request was cancelled');
+          }
+
+          // Check if it was a timeout
+          const isTimeout = error.message === 'PROMPT_TIMEOUT';
+
+          if (isTimeout && attempt < config.maxRetries) {
+            logger.warn('AI_SERVICE', `[Prompt] Timeout after ${config.timeoutMs}ms (attempt ${attempt}/${config.maxRetries})`);
+
+            // Optionally destroy and recreate session
+            if (config.recreateSessionOnTimeout) {
+              logger.debug('AI_SERVICE', `[Prompt] Recreating session for context: ${contextId}`);
+              this.destroySessionForContext(contextId);
+              await this.getOrCreateSession(contextId, { systemPrompt, expectedInputs, expectedOutputs, temperature, topK });
+            }
+
+            // Wait before retry
+            logger.debug('AI_SERVICE', `[Prompt] Waiting ${config.retryDelayMs}ms before retry...`);
+            await new Promise(resolve => setTimeout(resolve, config.retryDelayMs));
+
+            // Continue to next attempt
+            lastError = error;
+            continue;
+          }
+
+          // Not a timeout or no retries left - throw immediately
+          throw error;
+        }
+      } catch (error) {
+        lastError = error;
+
+        // If this is the last attempt or not a timeout error, throw
+        if (attempt === config.maxRetries || (error instanceof Error && error.message !== 'PROMPT_TIMEOUT')) {
+          logger.error('AI_SERVICE', `[AI] Error prompting AI for context ${contextId}:`, error);
+          throw error;
+        }
       }
-    } catch (error) {
-      logger.error('AI_SERVICE', `[AI] Error prompting AI for context ${contextId}:`, error);
-      throw error;
     }
+
+    // All retries exhausted (should not reach here, but just in case)
+    logger.error('AI_SERVICE', `[Prompt] Failed after ${config.maxRetries} attempts for context ${contextId}`);
+    throw lastError;
   }
 
   /**
@@ -2873,13 +2947,8 @@ For mathematical expressions in definitions, contexts, or analogies:
           // Track session usage before call
           const usageBeforeCall = session?.inputUsage || 0;
 
-          // Create 60-second timeout promise for glossarization
-          const timeoutPromise = new Promise<string>((_, reject) =>
-            setTimeout(() => reject(new Error('GLOSSARIZATION_TIMEOUT')), 60000)
-          );
-
-          // Race the prompt call against the timeout
-          const promptPromise = this.prompt(
+          // Call prompt with 60s timeout (now built-in)
+          const response = await this.prompt(
             validatedPrompt,
             systemPrompt,
             schema,
@@ -2887,11 +2956,9 @@ For mathematical expressions in definitions, contexts, or analogies:
             [{ type: "text", languages: ["en"] }],
             [{ type: "text", languages: [outputLanguage] }],
             0,  // temperature
-            1   // topK
+            1,  // topK
+            { timeoutMs: 60000, maxRetries: 2, retryDelayMs: 1000, recreateSessionOnTimeout: true }
           );
-
-          // Use the validated prompt with 60s timeout protection
-          const response = await Promise.race([promptPromise, timeoutPromise]);
 
           // Track actual token usage after successful call
           const updatedSession = await this.getSessionForContext(languageContextId);
@@ -2916,38 +2983,8 @@ For mathematical expressions in definitions, contexts, or analogies:
           const errorMessage = error instanceof Error ? error.message : String(error);
           const errorLower = errorMessage.toLowerCase();
 
-          // Check if this was a timeout error
-          const isTimeoutError = errorMessage === 'GLOSSARIZATION_TIMEOUT' || errorLower.includes('timeout');
-
-          // If timeout occurred, destroy and recreate session before retrying
-          if (isTimeoutError && attempt < maxRetries) {
-            logger.warn('AI_SERVICE', `[DefinitionBatch] Timeout after 60s (attempt ${attempt}/${maxRetries}). Recreating session...`);
-
-            // Destroy the potentially stuck session
-            this.destroySessionForContext(languageContextId);
-
-            // Create a fresh session
-            await this.getOrCreateSession(languageContextId, {
-              expectedInputs: [{ type: "text", languages: ["en"] }],
-              expectedOutputs: [{ type: "text", languages: [outputLanguage] }]
-            });
-
-            // Get the new session reference
-            session = await this.getSessionForContext(languageContextId);
-
-            if (!session) {
-              logger.error('AI_SERVICE', '[DefinitionBatch] Failed to recreate session after timeout');
-              break;
-            }
-
-            logger.debug('AI_SERVICE', `[DefinitionBatch] Session recreated successfully. Retrying...`);
-
-            // Small delay before retry
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            continue; // Retry immediately with new session
-          }
-
-          // Only retry on transient errors (not quota - validation already handled that)
+          // Timeout errors are now handled by the prompt() method automatically
+          // Only retry on transient errors here (not quota - validation already handled that)
           const isTransientError = errorLower.includes('unknownerror') ||
                                    errorLower.includes('generic failures') ||
                                    errorLower.includes('resource');
