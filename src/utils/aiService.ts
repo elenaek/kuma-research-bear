@@ -922,12 +922,7 @@ Use markdown formatting for better readability:
 - Use *italic* for emphasis
 - Keep paragraphs concise
 - Cover the key findings, methodology, and conclusions from the full paper
-
-For mathematical expressions, equations, or formulas:
-- Use $expression$ for inline math (e.g., $E = mc^2$, $p < 0.05$)
-- Use $$expression$$ for display equations on separate lines
-- You can also use \\(expression\\) for inline, \\[expression\\] for display
-- Use proper LaTeX syntax (e.g., \\frac{numerator}{denominator}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)`;
+`;
     } else {
       logger.debug('AI_SERVICE', '[Explain] Using abstract only (standard approach)');
       input = `IMPORTANT: You must respond entirely in ${languageName}. Do not use any other language.
@@ -938,12 +933,6 @@ Use markdown formatting for better readability:
 - Use bullet points or numbered lists where appropriate
 - Use *italic* for emphasis
 - Keep paragraphs concise
-
-For mathematical expressions, equations, or formulas:
-- Use $expression$ for inline math (e.g., $E = mc^2$, $p < 0.05$)
-- Use $$expression$$ for display equations on separate lines
-- You can also use \\(expression\\) for inline, \\[expression\\] for display
-- Use proper LaTeX syntax (e.g., \\frac{numerator}{denominator}, \\sum_{i=1}^{n}, Greek letters like \\alpha, \\beta)
 
 <OUTPUT FORMAT BEGIN>
 ### What is the main problem or research question being addressed?
@@ -1666,6 +1655,15 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
         strengths: ['Analysis failed'],
         concerns: ['Could not complete analysis'],
       };
+    } finally {
+      // Cleanup session even on failure (in case retry loop created a session)
+      try {
+        const outputLanguage = await getOutputLanguage();
+        const languageContextId = `${contextId}-${outputLanguage}`;
+        this.destroySessionForContext(languageContextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', '[Methodology Analysis] Failed to cleanup session in finally block:', cleanupError);
+      }
     }
   }
 
@@ -1800,6 +1798,15 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
         biases: [{ name: 'Could not analyze', explanation: 'An error occurred while analyzing biases' }],
         controlMeasures: [{ name: 'Unable to determine', explanation: 'Could not determine control measures due to an error' }],
       };
+    } finally {
+      // Cleanup session even on failure (in case retry loop created a session)
+      try {
+        const outputLanguage = await getOutputLanguage();
+        const languageContextId = `${contextId}-${outputLanguage}`;
+        this.destroySessionForContext(languageContextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', '[Confounder Analysis] Failed to cleanup session in finally block:', cleanupError);
+      }
     }
   }
 
@@ -1934,6 +1941,15 @@ Provide a comprehensive analysis of real-world applications, significance, and f
         significance: 'Could not analyze',
         futureResearch: ['Unable to determine'],
       };
+    } finally {
+      // Cleanup session even on failure (in case retry loop created a session)
+      try {
+        const outputLanguage = await getOutputLanguage();
+        const languageContextId = `${contextId}-${outputLanguage}`;
+        this.destroySessionForContext(languageContextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', '[Implications Analysis] Failed to cleanup session in finally block:', cleanupError);
+      }
     }
   }
 
@@ -2067,6 +2083,15 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
         studyLimitations: ['Analysis failed'],
         generalizability: 'Could not analyze',
       };
+    } finally {
+      // Cleanup session even on failure (in case retry loop created a session)
+      try {
+        const outputLanguage = await getOutputLanguage();
+        const languageContextId = `${contextId}-${outputLanguage}`;
+        this.destroySessionForContext(languageContextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', '[Limitations Analysis] Failed to cleanup session in finally block:', cleanupError);
+      }
     }
   }
 
@@ -2280,6 +2305,13 @@ Use markdown formatting for better readability:
         sources: [],
         timestamp: Date.now(),
       };
+    } finally {
+      // Cleanup session after successful Q&A operation
+      try {
+        this.destroySessionForContext(languageContextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', `Failed to cleanup Q&A session: ${languageContextId}`, cleanupError);
+      }
     }
   }
 
@@ -2356,6 +2388,13 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
     } catch (error) {
       logger.error('AI_SERVICE', '[TermExtraction] Failed to extract terms:', error);
       return [];
+    } finally {
+      // Cleanup session after term extraction operation
+      try {
+        this.destroySessionForContext(contextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', `Failed to cleanup term extraction session: ${contextId}`, cleanupError);
+      }
     }
   }
 
@@ -2374,45 +2413,54 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
     contextId: string = 'extract-chunk-terms',
     termCount: number = 10
   ): Promise<string[]> {
-    logger.debug('AI_SERVICE', '[ChunkTermExtraction] Extracting', termCount, 'terms from chunk of', chunkContent.length, 'chars');
+    try {
+      logger.debug('AI_SERVICE', '[ChunkTermExtraction] Extracting', termCount, 'terms from chunk of', chunkContent.length, 'chars');
 
-    // Use the same schema as hierarchical summarization for consistency
-    const outputLanguage = await getOutputLanguage();
-    const chunkSchema = getSchemaForLanguage('chunk-summary', outputLanguage as 'en' | 'es' | 'ja');
+      // Use the same schema as hierarchical summarization for consistency
+      const outputLanguage = await getOutputLanguage();
+      const chunkSchema = getSchemaForLanguage('chunk-summary', outputLanguage as 'en' | 'es' | 'ja');
 
-    const systemPrompt = buildExtractChunkTermsPrompt(paperTitle, termCount);
+      const systemPrompt = buildExtractChunkTermsPrompt(paperTitle, termCount);
 
-    const input = `Extract the ${termCount} most important technical terms and acronyms from this section. Also provide a brief summary:\n\n${chunkContent}`;
+      const input = `Extract the ${termCount} most important technical terms and acronyms from this section. Also provide a brief summary:\n\n${chunkContent}`;
 
-    const maxRetries = 3;
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        const response = await this.prompt(input, systemPrompt, chunkSchema, contextId, undefined, undefined, 0, 1);
-        const parsed = JSON.parse(response);
+      const maxRetries = 3;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const response = await this.prompt(input, systemPrompt, chunkSchema, contextId, undefined, undefined, 0, 1);
+          const parsed = JSON.parse(response);
 
-        logger.debug('AI_SERVICE', '[ChunkTermExtraction] ✓ Extracted', parsed.terms.length, 'terms');
-        logger.debug('AI_SERVICE', '[ChunkTermExtraction] Sample terms:', parsed.terms.slice(0, 5).join(', '));
+          logger.debug('AI_SERVICE', '[ChunkTermExtraction] ✓ Extracted', parsed.terms.length, 'terms');
+          logger.debug('AI_SERVICE', '[ChunkTermExtraction] Sample terms:', parsed.terms.slice(0, 5).join(', '));
 
-        return parsed.terms || [];
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const isRetryableError = errorMessage.includes('UnknownError') ||
-                                 errorMessage.includes('generic failures') ||
-                                 errorMessage.includes('timeout') ||
-                                 errorMessage.includes('resource');
+          return parsed.terms || [];
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          const isRetryableError = errorMessage.includes('UnknownError') ||
+                                   errorMessage.includes('generic failures') ||
+                                   errorMessage.includes('timeout') ||
+                                   errorMessage.includes('resource');
 
-        if (attempt < maxRetries && isRetryableError) {
-          const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
-          logger.warn('AI_SERVICE', `[ChunkTermExtraction] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
-          await new Promise(resolve => setTimeout(resolve, delay));
-        } else {
-          logger.error('AI_SERVICE', `[ChunkTermExtraction] Failed after ${attempt} attempts:`, error);
-          return []; // Return empty array on failure
+          if (attempt < maxRetries && isRetryableError) {
+            const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+            logger.warn('AI_SERVICE', `[ChunkTermExtraction] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else {
+            logger.error('AI_SERVICE', `[ChunkTermExtraction] Failed after ${attempt} attempts:`, error);
+            return []; // Return empty array on failure
+          }
         }
       }
-    }
 
-    return []; // Fallback
+      return []; // Fallback
+    } finally {
+      // Cleanup session after chunk term extraction operation
+      try {
+        this.destroySessionForContext(contextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', `Failed to cleanup chunk term extraction session: ${contextId}`, cleanupError);
+      }
+    }
   }
 
   /**
@@ -2611,6 +2659,15 @@ For mathematical expressions in definitions, contexts, or analogies:
     } catch (error) {
       logger.error('AI_SERVICE', '[Definition] Error generating definition for keyword:', keyword, error);
       return null;
+    } finally {
+      // Cleanup session after definition generation operation
+      try {
+        const outputLanguage = await getOutputLanguage();
+        const languageContextId = `${contextId}-${keyword}-${outputLanguage}`;
+        this.destroySessionForContext(languageContextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', `Failed to cleanup definition session for ${keyword}`, cleanupError);
+      }
     }
   }
 
@@ -3024,6 +3081,15 @@ For mathematical expressions in definitions, contexts, or analogies:
       logger.error('AI_SERVICE', `[DefinitionBatch] Paper ID:`, paperId);
       // Return array of nulls if batch fails
       return keywords.map(() => null);
+    } finally {
+      // Cleanup session after batch definition generation operation
+      try {
+        const outputLanguage = await getOutputLanguage();
+        const languageContextId = `${contextId}-${outputLanguage}`;
+        this.destroySessionForContext(languageContextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', `Failed to cleanup batch definition session`, cleanupError);
+      }
     }
   }
 
@@ -3112,6 +3178,13 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
       const uniqueTerms = Array.from(new Set(terms.map(t => t.toLowerCase())))
         .slice(0, targetCount);
       return uniqueTerms;
+    } finally {
+      // Cleanup session after term deduplication operation
+      try {
+        this.destroySessionForContext(contextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', `Failed to cleanup term deduplication session: ${contextId}`, cleanupError);
+      }
     }
   }
 
@@ -3165,6 +3238,14 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, contextId, undefined, undefined, 0.0, 1);
       const parsed = JSON.parse(response);
       logger.debug('AI_SERVICE', '[Hierarchical Summary] Single summary created:', parsed.summary.length, 'chars,', parsed.terms.length, 'terms');
+
+      // Cleanup session after single-chunk summarization
+      try {
+        this.destroySessionForContext(contextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', `Failed to cleanup single-chunk summary session: ${contextId}`, cleanupError);
+      }
+
       return { summary: parsed.summary, chunkTerms: [parsed.terms] };
     }
 
@@ -3273,11 +3354,28 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
     const metaInput = `Create a comprehensive summary of this research paper from these section summaries. Capture all key findings, methodology, results, and conclusions:\n\n${combinedSummaries.slice(0, 20000)}`;
 
     try {
-      const finalSummary = await this.prompt(metaInput, metaSystemPrompt, undefined, `${contextId}-meta`, undefined, undefined, 0.0, 1);
+      const metaContextId = `${contextId}-meta`;
+      const finalSummary = await this.prompt(metaInput, metaSystemPrompt, undefined, metaContextId, undefined, undefined, 0.0, 1);
       logger.debug('AI_SERVICE', '[Hierarchical Summary] ✓ Meta-summary created:', finalSummary.length, 'chars');
+
+      // Cleanup meta session after successful summarization
+      try {
+        this.destroySessionForContext(metaContextId);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', `Failed to cleanup meta-summary session: ${metaContextId}`, cleanupError);
+      }
+
       return { summary: finalSummary, chunkTerms };
     } catch (error) {
       logger.error('AI_SERVICE', '[Hierarchical Summary] Meta-summary failed, returning truncated combined summaries:', error);
+
+      // Cleanup meta session even on failure
+      try {
+        this.destroySessionForContext(`${contextId}-meta`);
+      } catch (cleanupError) {
+        logger.warn('AI_SERVICE', `Failed to cleanup meta-summary session on error`, cleanupError);
+      }
+
       // Fallback to truncated combined summaries
       return { summary: combinedSummaries.slice(0, 8000) + '...', chunkTerms };
     }
