@@ -86,6 +86,12 @@ export enum MessageType {
   STORE_SCREEN_CAPTURE = 'STORE_SCREEN_CAPTURE',
   GET_SCREEN_CAPTURE = 'GET_SCREEN_CAPTURE',
   DELETE_SCREEN_CAPTURE = 'DELETE_SCREEN_CAPTURE',
+
+  // Image explanation cleanup
+  DELETE_IMAGE_EXPLANATION = 'DELETE_IMAGE_EXPLANATION',
+
+  // AI session management
+  DESTROY_AI_SESSION = 'DESTROY_AI_SESSION',
 }
 
 export interface Message {

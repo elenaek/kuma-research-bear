@@ -1295,3 +1295,22 @@ export async function handleAskQuestion(payload: any, tabId?: number): Promise<a
     aiService.destroySessionForContext(qaContextId);
   }
 }
+
+/**
+ * Destroy an AI session by context ID
+ * Used for cleanup when closing image chat tabs
+ */
+export async function handleDestroyAISession(payload: any): Promise<any> {
+  try {
+    const { contextId } = payload;
+    logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] Destroying AI session:', contextId);
+
+    aiService.destroySessionForContext(contextId);
+
+    logger.debug('BACKGROUND_SCRIPT', '[AIHandlers] ✓ AI session destroyed successfully');
+    return { success: true };
+  } catch (error) {
+    logger.error('BACKGROUND_SCRIPT', '[AIHandlers] Failed to destroy AI session:', error);
+    return { success: false, error: String(error) };
+  }
+}

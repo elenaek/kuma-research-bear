@@ -47,6 +47,27 @@ class ImageExplanationHandler {
     }
   }
 
+  /**
+   * Clear explanation state for an image and re-render button
+   * Used when closing image tabs to reset button to unexplained state
+   */
+  clearExplanationState(imageUrl: string): void {
+    const imageState = this.imageStates.get(imageUrl);
+    if (imageState) {
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] Clearing explanation state for:', imageUrl);
+
+      // Clear explanation and title
+      imageState.explanation = null;
+      imageState.title = null;
+
+      // Re-render button to show unexplained state (Q&A Lottie)
+      if (imageState.buttonRoot) {
+        this.renderButton(imageUrl, imageState.buttonRoot);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Button re-rendered to unexplained state');
+      }
+    }
+  }
+
   async initialize(currentPaper: any) {
     if (this.isInitialized) {
       logger.debug('CONTENT_SCRIPT', '[ImageExplain] Already initialized');

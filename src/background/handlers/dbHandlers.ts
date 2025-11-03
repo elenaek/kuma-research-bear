@@ -474,6 +474,22 @@ export async function handleDeleteScreenCapture(payload: any): Promise<any> {
 }
 
 /**
+ * Delete an image explanation from IndexedDB
+ */
+export async function handleDeleteImageExplanation(payload: any): Promise<any> {
+  try {
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Deleting image explanation for:', payload.imageUrl);
+    const { deleteImageExplanation } = await import('../../utils/dbService.ts');
+    const success = await deleteImageExplanation(payload.paperId, payload.imageUrl);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] ✓ Image explanation deleted');
+    return { success };
+  } catch (dbError) {
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to delete image explanation:', dbError);
+    return { success: false, error: String(dbError) };
+  }
+}
+
+/**
  * Extract paper from HTML in offscreen document
  * Receives HTML from content script and triggers offscreen extraction
  */

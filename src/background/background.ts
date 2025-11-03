@@ -473,6 +473,14 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         sendResponse(await dbHandlers.handleDeleteScreenCapture(message.payload));
         break;
 
+      case MessageType.DELETE_IMAGE_EXPLANATION:
+        sendResponse(await dbHandlers.handleDeleteImageExplanation(message.payload));
+        break;
+
+      case MessageType.DESTROY_AI_SESSION:
+        sendResponse(await aiHandlers.handleDestroyAISession(message.payload));
+        break;
+
       // Citation Operations
       case 'ADD_CITATION':
         sendResponse(await citationHandlers.handleAddCitation(message.payload));

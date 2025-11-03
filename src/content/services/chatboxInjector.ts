@@ -1767,6 +1767,41 @@ class ChatboxInjector {
     if (tab.type === 'image' && tab.imageUrl && this.currentPaper) {
       await ChromeService.clearImageChatHistory(this.currentPaper.id, tab.imageUrl);
 
+      // Delete image explanation from IndexedDB
+      try {
+        await ChromeService.deleteImageExplanation(this.currentPaper.id, tab.imageUrl);
+        logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Deleted image explanation from IndexedDB');
+      } catch (error) {
+        logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to delete image explanation:', error);
+      }
+
+      // Destroy AI session for this image chat
+      try {
+        // Calculate hash (same logic as chatHandlers.ts)
+        let hash = 0;
+        for (let i = 0; i < tab.imageUrl.length; i++) {
+          const char = tab.imageUrl.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash = hash & hash;
+        }
+        const contextId = `image-chat-${this.currentPaper.id}-img_${Math.abs(hash)}`;
+        await ChromeService.destroyAISession(contextId);
+        logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Destroyed AI session for image chat');
+      } catch (error) {
+        logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to destroy AI session:', error);
+      }
+
+      // Update button state for regular images (screen captures will be removed completely below)
+      if (!tab.imageUrl.startsWith('screen-capture-') && !tab.imageUrl.startsWith('pdf-capture-')) {
+        try {
+          const { imageExplanationHandler } = await import('./imageExplanationHandler.ts');
+          imageExplanationHandler.clearExplanationState(tab.imageUrl);
+          logger.debug('CONTENT_SCRIPT', '[Kuma Chat] ✓ Cleared button explanation state');
+        } catch (error) {
+          logger.error('CONTENT_SCRIPT', '[Kuma Chat] Failed to clear button state:', error);
+        }
+      }
+
       // Delete screen capture blob from IndexedDB if it's a screen capture
       if (tab.imageUrl.startsWith('screen-capture-') || tab.imageUrl.startsWith('pdf-capture-')) {
         try {

@@ -1269,3 +1269,58 @@ export async function deleteScreenCapture(
     return { success: false, error: String(error) };
   }
 }
+
+/**
+ * Delete an image explanation from IndexedDB
+ */
+export async function deleteImageExplanation(
+  paperId: string,
+  imageUrl: string
+): Promise<ChromeMessageResponse<boolean>> {
+  logger.debug('SERVICE', '[ChromeService] Deleting image explanation for:', imageUrl);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.DELETE_IMAGE_EXPLANATION,
+      payload: { paperId, imageUrl },
+    });
+
+    if (response.success) {
+      logger.debug('SERVICE', '[ChromeService] ✓ Image explanation deleted successfully');
+      return response;
+    } else {
+      logger.error('SERVICE', '[ChromeService] Failed to delete image explanation:', response.error);
+      return response;
+    }
+  } catch (error) {
+    logger.error('SERVICE', '[ChromeService] Error deleting image explanation:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Destroy an AI session by context ID
+ */
+export async function destroyAISession(
+  contextId: string
+): Promise<ChromeMessageResponse<boolean>> {
+  logger.debug('SERVICE', '[ChromeService] Destroying AI session:', contextId);
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: MessageType.DESTROY_AI_SESSION,
+      payload: { contextId },
+    });
+
+    if (response.success) {
+      logger.debug('SERVICE', '[ChromeService] ✓ AI session destroyed successfully');
+      return response;
+    } else {
+      logger.error('SERVICE', '[ChromeService] Failed to destroy AI session:', response.error);
+      return response;
+    }
+  } catch (error) {
+    logger.error('SERVICE', '[ChromeService] Error destroying AI session:', error);
+    return { success: false, error: String(error) };
+  }
+}
