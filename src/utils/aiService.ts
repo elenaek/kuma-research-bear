@@ -2175,7 +2175,9 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
     const session = await this.getOrCreateSession(languageContextId, {
       systemPrompt,
       expectedInputs: [{ type: "text", languages: ["en", "es", "ja"] }],
-      expectedOutputs: [{ type: "text", languages: [outputLanguage || "en"] }]
+      expectedOutputs: [{ type: "text", languages: [outputLanguage || "en"] }],
+      temperature: 0.0,
+      topK: 1
     });
 
     // Validate prompt size with retry logic
@@ -2806,7 +2808,9 @@ IMPORTANT: All definitions, contexts, and analogies must be in ${languageName}. 
       // Create session if it doesn't exist (needed for validation)
       await this.getOrCreateSession(languageContextId, {
         expectedInputs: [{ type: "text", languages: ["en"] }],
-        expectedOutputs: [{ type: "text", languages: [outputLanguage] }]
+        expectedOutputs: [{ type: "text", languages: [outputLanguage] }],
+        temperature: 0.0,
+        topK: 1
       });
 
       // Get session for quota tracking and validation (use let so we can reassign on timeout)
@@ -2957,7 +2961,7 @@ For mathematical expressions in definitions, contexts, or analogies:
             [{ type: "text", languages: [outputLanguage] }],
             0,  // temperature
             1,  // topK
-            { timeoutMs: 60000, maxRetries: 2, retryDelayMs: 1000, recreateSessionOnTimeout: true }
+            { timeoutMs: 30000, maxRetries: 2, retryDelayMs: 1000, recreateSessionOnTimeout: true }
           );
 
           // Track actual token usage after successful call
@@ -3185,7 +3189,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const chunkContextId = `${contextId}-chunk-${index}`;
-          const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, chunkContextId, undefined, undefined, 0.0, 1);
+          const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, chunkContextId, undefined, undefined, 0.0, 1, { timeoutMs: 30000, maxRetries: 2, retryDelayMs: 1000, recreateSessionOnTimeout: true });
           const parsed = JSON.parse(response);
 
           logger.debug('AI_SERVICE', `[Hierarchical Summary] Chunk ${index + 1}/${chunks.length} summarized:`, parsed.summary.length, 'chars,', parsed.terms.length, 'terms');

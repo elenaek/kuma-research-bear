@@ -319,7 +319,9 @@ User question: ${message}`;
       session = await aiService.getOrCreateSession(contextId, {
         initialPrompts,
         expectedInputs: sessionOptions?.expectedInputs || [{ type: 'text', languages: ["en", "es", "ja"] }],
-        expectedOutputs: sessionOptions?.expectedOutputs || [{ type: 'text', languages: [outputLanguage || "en"] }]
+        expectedOutputs: sessionOptions?.expectedOutputs || [{ type: 'text', languages: [outputLanguage || "en"] }],
+        temperature: 0.0,
+        topK: 1
       });
       hasSummarized = true;
       logger.debug('CHATBOX', '[prepareContextWithValidation] ✓ Summarization complete, session recreated. Retrying validation...');
@@ -650,7 +652,9 @@ async function processAndStreamResponse(
         session = await aiService.getOrCreateSession(contextId, { 
           initialPrompts, 
           expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
-          expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }] 
+          expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }],
+          temperature: 0.0,
+          topK: 1
         });
         logger.debug('CHATBOX', '[ChatHandlers] ✓ Session recreated after summarization');
       }
@@ -695,7 +699,9 @@ async function processAndStreamResponse(
       session = await aiService.getOrCreateSession(contextId, {
         expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
         expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }],
-        initialPrompts: [{ role: 'system', content: systemPrompt }]
+        initialPrompts: [{ role: 'system', content: systemPrompt }],
+        temperature: 0.0,
+        topK: 1
       });
     }
 
@@ -1460,7 +1466,9 @@ async function processAndStreamImageChatResponse(
         session = await aiService.getOrCreateSession(contextId, {
           initialPrompts,
           expectedInputs: [{ type: 'image', languages: ['en', 'es', 'ja'] }],
-          expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
+          expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }],
+          temperature: 0.0,
+          topK: 1
         });
         logger.debug('CHATBOX', '[ImageChatHandlers] ✓ Session recreated after summarization');
       }
@@ -1498,7 +1506,9 @@ async function processAndStreamImageChatResponse(
       session = await aiService.getOrCreateSession(contextId, {
         initialPrompts,
         expectedInputs: [{ type: 'image', languages: ['en', 'es', 'ja'] }], // Enable multimodal
-        expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
+        expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }],
+        temperature: 0.0,
+        topK: 1
       });
     } else {
       // First message - create fresh multimodal session
@@ -1507,7 +1517,9 @@ async function processAndStreamImageChatResponse(
       session = await aiService.getOrCreateSession(contextId, {
         initialPrompts: [{ role: 'system', content: systemPrompt }],
         expectedInputs: [{ type: 'image', languages: ['en', 'es', 'ja'] }], // Enable multimodal
-        expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
+        expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }],
+        temperature: 0.0,
+        topK: 1
       });
     }
 
