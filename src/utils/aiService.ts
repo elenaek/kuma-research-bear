@@ -199,6 +199,8 @@ class ChromeAIService {
           const testSession = await LanguageModel.create({
             expectedInputs: [{ type: 'image', languages: ["en", "es", "ja"] }],
             expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en" ] }], // Default for test session
+            temperature: 0.0,
+            topK: 1
           });
           supportsImages = true;
           testSession.destroy();
@@ -261,7 +263,7 @@ class ChromeAIService {
       // Create a session with image input support
       const session = await LanguageModel.create({
         temperature: 0.0,
-        topK: 3,
+        topK: 1,
         expectedInputs: [{ type: 'image', languages: ["en", "es", "ja"] }],
         expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }], // Use user's preferred language
         systemPrompt: buildImageExplanationPrompt(persona, purpose, language, verbosity),
@@ -3400,6 +3402,8 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       initialPrompts,
       expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
       expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }],
+      temperature: 0.0,
+      topK: 1
     });
 
     // Update session map

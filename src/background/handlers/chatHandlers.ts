@@ -45,6 +45,13 @@ Reference specific sections when used in producing answer. Remember conversation
 };
 
 /**
+ * Timeout configuration for chat streaming
+ * Applies to initial response (first non-empty chunk) only
+ */
+const CHAT_TIMEOUT_MS = 10000; // 10 seconds
+const MAX_CHAT_RETRIES = 3; // Total attempts (initial + 2 retries)
+
+/**
  * Extract LaTeX expressions from raw JSON string content and replace with safe placeholders
  * This protects LaTeX from being corrupted by JSON escape sequence processing
  *
@@ -692,37 +699,66 @@ async function processAndStreamResponse(
       });
     }
 
-    // Validate prompt size before sending (with progressive trimming strategies)
-    const validationResult = await prepareContextWithValidation(
-      session,
-      contextChunks,
-      message,
-      chatHistory,
-      conversationState,
-      systemPrompt,
-      contextId,
-      storedPaper.title
-    );
-
-    // Check if validation failed
-    if (validationResult.errorMessage) {
-      logger.error('CHATBOX', '[ChatHandlers] Context validation failed:', validationResult.errorMessage);
-      await sendChatEnd(tabId, validationResult.errorMessage, []);
-      return;
-    }
-
-    // Use validated context and updated session
-    session = validationResult.session;
-    let promptWithContext = validationResult.validatedContext;
-
-    // Retry loop for handling QuotaExceededError during streaming
-    let retryCount = 0;
-    const MAX_QUOTA_RETRIES = 3;
-    let currentChunks = contextChunks;
+    // Outer retry loop for timeout handling
+    let timeoutAttempt = 0;
     let answer = '';
     let extractedSources: string[] = [];
     let sourceInfoArray: SourceInfo[] = [];
+    let currentChunks = contextChunks;
+    let promptWithContext = '';
 
+    while (timeoutAttempt < MAX_CHAT_RETRIES) {
+      try {
+        // Check if tab still exists before attempting
+        try {
+          await chrome.tabs.get(tabId);
+        } catch {
+          logger.warn('CHATBOX', '[ChatHandlers] Tab closed, aborting chat request');
+          return;
+        }
+
+        // Validate prompt size before sending (with progressive trimming strategies)
+        const validationResult = await prepareContextWithValidation(
+          session,
+          currentChunks,
+          message,
+          chatHistory,
+          conversationState,
+          systemPrompt,
+          contextId,
+          storedPaper.title
+        );
+
+        // Check if validation failed
+        if (validationResult.errorMessage) {
+          logger.error('CHATBOX', '[ChatHandlers] Context validation failed:', validationResult.errorMessage);
+          await sendChatEnd(tabId, validationResult.errorMessage, []);
+          return;
+        }
+
+        // Use validated context and updated session
+        session = validationResult.session;
+        promptWithContext = validationResult.validatedContext;
+
+        // Setup timeout detection for first chunk
+        let timeoutHandle: NodeJS.Timeout | null = null;
+        let resolveFirstChunk: (() => void) | null = null;
+        let firstChunkReceived = false;
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(() => reject(new Error('CHAT_TIMEOUT')), CHAT_TIMEOUT_MS);
+        });
+
+        const firstChunkPromise = new Promise<void>((resolve) => {
+          resolveFirstChunk = resolve;
+        });
+
+        // Retry loop for handling QuotaExceededError during streaming
+        let retryCount = 0;
+        const MAX_QUOTA_RETRIES = 3;
+
+        // Wrap streaming in async function so we can race it
+        const performStreaming = async () => {
     while (retryCount <= MAX_QUOTA_RETRIES) {
       try {
         // Stream response with structured output constraint
@@ -770,6 +806,12 @@ async function processAndStreamResponse(
             const finalDelta = answer.substring(lastSentLength);
             if (finalDelta) {
               await sendChatChunk(tabId, finalDelta);
+              // Mark first chunk as received (clear timeout)
+              if (!firstChunkReceived && resolveFirstChunk) {
+                firstChunkReceived = true;
+                resolveFirstChunk();
+                if (timeoutHandle) clearTimeout(timeoutHandle);
+              }
             }
 
             shouldStopDisplaying = true; // Stop sending to user but continue loop to get full JSON
@@ -797,6 +839,12 @@ async function processAndStreamResponse(
             if (newDelta) {
               await sendChatChunk(tabId, newDelta);
               lastSentLength = unescapedVisible.length; // Track position in unescaped content
+              // Mark first chunk as received (clear timeout)
+              if (!firstChunkReceived && resolveFirstChunk) {
+                firstChunkReceived = true;
+                resolveFirstChunk();
+                if (timeoutHandle) clearTimeout(timeoutHandle);
+              }
             }
           }
           // If less than 11 chars accumulated, keep buffering (don't send yet)
@@ -824,7 +872,7 @@ async function processAndStreamResponse(
         }
 
         // Map extracted sources to sourceInfo for scroll-to-source functionality
-        const sourceInfoArray: SourceInfo[] = extractedSources
+        sourceInfoArray = extractedSources
           .map(sourceText => {
             // Normalize by stripping paragraph numbers: "Section: Methods > P 3" → "Section: Methods"
             const normalized = sourceText.replace(/\s*>\s*P\s+\d+(\s*>\s*Sentences)?$/, '');
@@ -875,6 +923,69 @@ async function processAndStreamResponse(
         }
 
         // Not a quota error or out of retries - rethrow
+        throw error;
+      }
+    }
+        }; // End of performStreaming function
+
+        // Start streaming (don't await yet)
+        const streamingPromise = performStreaming();
+
+        // Race for first chunk vs timeout
+        await Promise.race([firstChunkPromise, timeoutPromise]);
+
+        // First chunk received - clear timeout and wait for streaming to complete
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        await streamingPromise;
+
+        // Success - exit timeout retry loop
+        break;
+
+      } catch (error) {
+        // Clear timeout if it's still active
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+
+        // Check if this is a timeout error and we have retries left
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage === 'CHAT_TIMEOUT' && timeoutAttempt < MAX_CHAT_RETRIES - 1) {
+          logger.warn('CHATBOX', `[ChatHandlers] Timeout after ${CHAT_TIMEOUT_MS}ms (attempt ${timeoutAttempt + 1}/${MAX_CHAT_RETRIES}). Recreating session...`);
+
+          // Destroy the potentially stuck session
+          aiService.destroySessionForContext(contextId);
+
+          // Clone session with conversation history
+          const outputLanguage = await getOutputLanguage();
+          await aiService.cloneSessionWithHistory(
+            contextId,
+            conversationState,
+            systemPrompt,
+            {
+              expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
+              expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }],
+              temperature: 0.0,
+              topK: 1
+            }
+          );
+
+          // Get the new session reference
+          session = aiService['sessions'].get(contextId)!;
+
+          logger.debug('CHATBOX', '[ChatHandlers] Session cloned successfully. Retrying...');
+
+          // Small delay before retry
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          timeoutAttempt++;
+          continue; // Retry with new session
+        }
+
+        // If this is a timeout error and we're out of retries, send error message
+        if (errorMessage === 'CHAT_TIMEOUT') {
+          logger.error('CHATBOX', '[ChatHandlers] Chat request timed out after multiple attempts');
+          await sendChatEnd(tabId, 'Chat request timed out after multiple attempts. Please try again.', []);
+          return;
+        }
+
+        // Not a timeout error - rethrow
         throw error;
       }
     }
@@ -1400,42 +1511,71 @@ async function processAndStreamImageChatResponse(
       });
     }
 
-    // Validate prompt size before sending (with progressive trimming strategies)
-    const outputLanguage = await getOutputLanguage();
-    const validationResult = await prepareContextWithValidation(
-      session,
-      contextChunks,
-      message,
-      imageChatHistory,
-      imageChatConversationState,
-      systemPrompt,
-      contextId,
-      paper.title,
-      {
-        expectedInputs: [{ type: 'image', languages: ['en', 'es', 'ja'] }],
-        expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
-      }
-    );
-
-    // Check if validation failed
-    if (validationResult.errorMessage) {
-      logger.error('CHATBOX', '[ImageChatHandlers] Context validation failed:', validationResult.errorMessage);
-      await sendImageChatEnd(tabId, validationResult.errorMessage, []);
-      return;
-    }
-
-    // Use validated context and updated session
-    session = validationResult.session;
-    let promptWithContext = validationResult.validatedContext;
-
-    // Retry loop for handling QuotaExceededError during streaming
-    let retryCount = 0;
-    const MAX_QUOTA_RETRIES = 3;
-    let currentChunks = contextChunks;
+    // Outer retry loop for timeout handling
+    let timeoutAttempt = 0;
     let answer = '';
     let extractedSources: string[] = [];
     let sourceInfoArray: SourceInfo[] = [];
+    let currentChunks = contextChunks;
+    let promptWithContext = '';
 
+    while (timeoutAttempt < MAX_CHAT_RETRIES) {
+      try {
+        // Check if tab still exists before attempting
+        try {
+          await chrome.tabs.get(tabId);
+        } catch {
+          logger.warn('CHATBOX', '[ImageChatHandlers] Tab closed, aborting image chat request');
+          return;
+        }
+
+        // Validate prompt size before sending (with progressive trimming strategies)
+        const outputLanguage = await getOutputLanguage();
+        const validationResult = await prepareContextWithValidation(
+          session,
+          currentChunks,
+          message,
+          imageChatHistory,
+          imageChatConversationState,
+          systemPrompt,
+          contextId,
+          paper.title,
+          {
+            expectedInputs: [{ type: 'image', languages: ['en', 'es', 'ja'] }],
+            expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }]
+          }
+        );
+
+        // Check if validation failed
+        if (validationResult.errorMessage) {
+          logger.error('CHATBOX', '[ImageChatHandlers] Context validation failed:', validationResult.errorMessage);
+          await sendImageChatEnd(tabId, validationResult.errorMessage, []);
+          return;
+        }
+
+        // Use validated context and updated session
+        session = validationResult.session;
+        promptWithContext = validationResult.validatedContext;
+
+        // Setup timeout detection for first chunk
+        let timeoutHandle: NodeJS.Timeout | null = null;
+        let resolveFirstChunk: (() => void) | null = null;
+        let firstChunkReceived = false;
+
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(() => reject(new Error('CHAT_TIMEOUT')), CHAT_TIMEOUT_MS);
+        });
+
+        const firstChunkPromise = new Promise<void>((resolve) => {
+          resolveFirstChunk = resolve;
+        });
+
+        // Retry loop for handling QuotaExceededError during streaming
+        let retryCount = 0;
+        const MAX_QUOTA_RETRIES = 3;
+
+        // Wrap streaming in async function so we can race it
+        const performStreaming = async () => {
     while (retryCount <= MAX_QUOTA_RETRIES) {
       try {
         // Use append() for multimodal input (image + text)
@@ -1494,6 +1634,12 @@ async function processAndStreamImageChatResponse(
             const finalDelta = answer.substring(lastSentLength);
             if (finalDelta) {
               await sendImageChatChunk(tabId, finalDelta);
+              // Mark first chunk as received (clear timeout)
+              if (!firstChunkReceived && resolveFirstChunk) {
+                firstChunkReceived = true;
+                resolveFirstChunk();
+                if (timeoutHandle) clearTimeout(timeoutHandle);
+              }
             }
 
             shouldStopDisplaying = true; // Stop sending to user but continue loop to get full JSON
@@ -1521,6 +1667,12 @@ async function processAndStreamImageChatResponse(
             if (newDelta) {
               await sendImageChatChunk(tabId, newDelta);
               lastSentLength = unescapedVisible.length; // Track position in unescaped content
+              // Mark first chunk as received (clear timeout)
+              if (!firstChunkReceived && resolveFirstChunk) {
+                firstChunkReceived = true;
+                resolveFirstChunk();
+                if (timeoutHandle) clearTimeout(timeoutHandle);
+              }
             }
           }
           // If less than 11 chars accumulated, keep buffering (don't send yet)
@@ -1548,7 +1700,7 @@ async function processAndStreamImageChatResponse(
         }
 
         // Map extracted sources to sourceInfo for scroll-to-source functionality
-        const sourceInfoArray: SourceInfo[] = extractedSources
+        sourceInfoArray = extractedSources
           .map(sourceText => {
             // Normalize by stripping paragraph numbers: "Section: Methods > P 3" → "Section: Methods"
             const normalized = sourceText.replace(/\s*>\s*P\s+\d+(\s*>\s*Sentences)?$/, '');
@@ -1604,6 +1756,69 @@ async function processAndStreamImageChatResponse(
         }
 
         // Not a quota error or out of retries - rethrow
+        throw error;
+      }
+    }
+        }; // End of performStreaming function
+
+        // Start streaming (don't await yet)
+        const streamingPromise = performStreaming();
+
+        // Race for first chunk vs timeout
+        await Promise.race([firstChunkPromise, timeoutPromise]);
+
+        // First chunk received - clear timeout and wait for streaming to complete
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+        await streamingPromise;
+
+        // Success - exit timeout retry loop
+        break;
+
+      } catch (error) {
+        // Clear timeout if it's still active
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+
+        // Check if this is a timeout error and we have retries left
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage === 'CHAT_TIMEOUT' && timeoutAttempt < MAX_CHAT_RETRIES - 1) {
+          logger.warn('CHATBOX', `[ImageChatHandlers] Timeout after ${CHAT_TIMEOUT_MS}ms (attempt ${timeoutAttempt + 1}/${MAX_CHAT_RETRIES}). Recreating session...`);
+
+          // Destroy the potentially stuck session
+          aiService.destroySessionForContext(contextId);
+
+          // Clone session with conversation history
+          const outputLanguage = await getOutputLanguage();
+          await aiService.cloneSessionWithHistory(
+            contextId,
+            imageChatConversationState,
+            systemPrompt,
+            {
+              expectedInputs: [{ type: 'image', languages: ['en', 'es', 'ja'] }],
+              expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }],
+              temperature: 0.0,
+              topK: 1
+            }
+          );
+
+          // Get the new session reference
+          session = aiService['sessions'].get(contextId)!;
+
+          logger.debug('CHATBOX', '[ImageChatHandlers] Session cloned successfully. Retrying...');
+
+          // Small delay before retry
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          timeoutAttempt++;
+          continue; // Retry with new session
+        }
+
+        // If this is a timeout error and we're out of retries, send error message
+        if (errorMessage === 'CHAT_TIMEOUT') {
+          logger.error('CHATBOX', '[ImageChatHandlers] Image chat request timed out after multiple attempts');
+          await sendImageChatEnd(tabId, 'Chat request timed out after multiple attempts. Please try again.', []);
+          return;
+        }
+
+        // Not a timeout error - rethrow
         throw error;
       }
     }

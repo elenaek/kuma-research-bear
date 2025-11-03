@@ -34,6 +34,8 @@ class InputQuotaService {
       const tempSession = await LanguageModel.create({
         expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
         expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }], // Default for quota detection
+        temperature: 0.0,
+        topK: 1
       });
       this.inputQuota = tempSession.inputQuota;
 

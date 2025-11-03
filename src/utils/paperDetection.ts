@@ -210,6 +210,7 @@ async function aiDetectionFallback(): Promise<{ isResearchPaper: boolean; reason
     const outputLanguage = await getOutputLanguage();
     const session = await LanguageModel.create({
       temperature: 0.0, // Deterministic
+      topK: 1,
       systemPrompt: buildPaperDetectionPrompt(),
       expectedInputs: [{ type: 'text', languages: ["en", "es", "ja"] }],
       expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }], // Paper detection should be consistent
