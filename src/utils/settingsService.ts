@@ -15,7 +15,7 @@ const SETTINGS_KEY = 'kuma_settings';
 export interface Settings {
   outputLanguage: string; // ISO 639-1 language code
   showImageButtons?: boolean; // Show/hide image explanation buttons
-  persona?: Persona; // User persona (default: 'professional')
+  persona?: Persona; // User persona (default: 'student')
   purpose?: Purpose; // User purpose (default: 'learning')
   verbosity?: number; // Response verbosity level 1-5 (default: 3, balanced)
 }
@@ -128,18 +128,18 @@ export async function setShowImageButtons(show: boolean): Promise<void> {
 
 /**
  * Gets the current persona setting
- * Returns 'professional' as default if not set
+ * Returns 'student' as default if not set
  */
 export async function getPersona(): Promise<Persona> {
   try {
     const result = await chrome.storage.sync.get(SETTINGS_KEY);
     const settings = result[SETTINGS_KEY] as Settings | undefined;
 
-    // Default to 'professional' if not set
-    return settings?.persona ?? 'professional';
+    // Default to 'student' if not set
+    return settings?.persona ?? 'student';
   } catch (error) {
     logger.error('SETTINGS', 'Error getting persona:', error);
-    return 'professional';
+    return 'student';
   }
 }
 
@@ -153,7 +153,7 @@ export async function setPersona(persona: Persona): Promise<void> {
     const result = await chrome.storage.sync.get(SETTINGS_KEY);
     const settings: Settings = (result[SETTINGS_KEY] as Settings) || {
       outputLanguage: getBrowserLanguage(),
-      persona: 'professional',
+      persona: 'student',
       purpose: 'learning'
     };
 
@@ -197,7 +197,7 @@ export async function setPurpose(purpose: Purpose): Promise<void> {
     const result = await chrome.storage.sync.get(SETTINGS_KEY);
     const settings: Settings = (result[SETTINGS_KEY] as Settings) || {
       outputLanguage: getBrowserLanguage(),
-      persona: 'professional',
+      persona: 'student',
       purpose: 'learning'
     };
 
@@ -244,7 +244,7 @@ export async function setVerbosity(verbosity: number): Promise<void> {
     const result = await chrome.storage.sync.get(SETTINGS_KEY);
     const settings: Settings = (result[SETTINGS_KEY] as Settings) || {
       outputLanguage: getBrowserLanguage(),
-      persona: 'professional',
+      persona: 'student',
       purpose: 'learning',
       verbosity: 3
     };
@@ -274,8 +274,8 @@ export async function getPersonaPurposeConfig(): Promise<PersonaPurposeConfig> {
     return PERSONA_PURPOSE_CONFIGS[persona][purpose];
   } catch (error) {
     logger.error('SETTINGS', 'Error getting persona/purpose config:', error);
-    // Return default config (professional + learning)
-    return PERSONA_PURPOSE_CONFIGS.professional.learning;
+    // Return default config (student + learning)
+    return PERSONA_PURPOSE_CONFIGS.student.learning;
   }
 }
 
@@ -290,7 +290,7 @@ export async function getSettings(): Promise<Settings> {
     return settings || {
       outputLanguage: getBrowserLanguage(),
       showImageButtons: true,
-      persona: 'professional',
+      persona: 'student',
       purpose: 'learning',
       verbosity: 3
     };
@@ -299,7 +299,7 @@ export async function getSettings(): Promise<Settings> {
     return {
       outputLanguage: 'en',
       showImageButtons: true,
-      persona: 'professional',
+      persona: 'student',
       purpose: 'learning',
       verbosity: 3
     };
@@ -387,7 +387,7 @@ export function onPersonaPurposeChanged(
     if (areaName === 'sync' && changes[SETTINGS_KEY]) {
       const newSettings = changes[SETTINGS_KEY].newValue as Settings | undefined;
       if (newSettings?.persona || newSettings?.purpose) {
-        const persona = newSettings.persona ?? 'professional';
+        const persona = newSettings.persona ?? 'student';
         const purpose = newSettings.purpose ?? 'learning';
         const config = PERSONA_PURPOSE_CONFIGS[persona][purpose];
         callback(persona, purpose, config);

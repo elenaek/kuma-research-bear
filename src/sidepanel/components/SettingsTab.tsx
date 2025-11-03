@@ -26,7 +26,7 @@ import { logger } from '../../utils/logger.ts';
  */
 export function SettingsTab() {
   const [showImageButtons, setShowImageButtonsState] = useState<boolean>(true);
-  const [currentPersona, setCurrentPersona] = useState<Persona>('professional');
+  const [currentPersona, setCurrentPersona] = useState<Persona>('student');
   const [currentPurpose, setCurrentPurpose] = useState<Purpose>('learning');
 
   // Load current settings on mount and listen for changes

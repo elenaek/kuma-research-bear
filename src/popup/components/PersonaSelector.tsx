@@ -32,7 +32,7 @@ const PERSONA_OPTIONS: PersonaOption[] = [
  * Settings are persisted globally and affect the AI's tone and approach
  */
 export function PersonaSelector() {
-  const [selectedPersona, setSelectedPersona] = useState<Persona>('professional');
+  const [selectedPersona, setSelectedPersona] = useState<Persona>('student');
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 

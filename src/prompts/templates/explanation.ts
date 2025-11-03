@@ -77,10 +77,11 @@ export function buildExplainAbstractPrompt(
  *
  * @param persona - The persona of the user
  * @param purpose - The purpose of the user
+ * @param language - The output language
  * @param verbosity - The verbosity level (1-5)
  * @returns The image explanation system prompt
  */
-export function buildImageExplanationPrompt(persona?: Persona, purpose?: Purpose, verbosity?: number): string {
+export function buildImageExplanationPrompt(persona?: Persona, purpose?: Purpose, language?: PromptLanguage, verbosity?: number): string {
   const builder = new PromptBuilder()
     .withRole('expertResearchAssistant')
     .withTask('Provide clear, concise explanations of images in the context of the paper.');
@@ -93,6 +94,7 @@ export function buildImageExplanationPrompt(persona?: Persona, purpose?: Purpose
     .withVerbosity(verbosity ?? 3)
     .withLatexSupport()
     .withMarkdownFormatting()
+    .withLanguage(language || 'en', 'entire')
     .buildString();
 }
 

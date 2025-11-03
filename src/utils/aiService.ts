@@ -33,8 +33,9 @@ import { buildMethodologyAnalysisPrompt, buildConfounderAnalysisPrompt, buildImp
 import { buildQAPrompt } from '../prompts/templates/qa.ts';
 import { buildJSONRepairPrompt, buildJSONRepairInput } from '../prompts/templates/utility.ts';
 import { buildExtractTermsPrompt, buildExtractChunkTermsPrompt, buildDefinitionPrompt, buildDeduplicateTermsPrompt } from '../prompts/templates/glossary.ts';
-import { getLanguageName } from '../prompts/components/language.ts';
+import { getLanguageName, getLanguageInstruction } from '../prompts/components/language.ts';
 import { getVerbosity } from '../utils/settingsService.ts';
+import type { PromptLanguage } from '../prompts/types.ts';
 
 /**
  * Utility: Sleep for a specified duration
@@ -254,6 +255,8 @@ class ChromeAIService {
       const { imageExplanationSchema } = await import('../schemas/analysisSchemas.ts');
       const persona = await getPersona();
       const purpose = await getPurpose();
+      const language = await getOutputLanguage() as PromptLanguage;
+      const verbosity = await getVerbosity();
 
       // Create a session with image input support
       const session = await LanguageModel.create({
@@ -261,7 +264,7 @@ class ChromeAIService {
         topK: 3,
         expectedInputs: [{ type: 'image', languages: ["en", "es", "ja"] }],
         expectedOutputs: [{ type: 'text', languages: [outputLanguage || "en"] }], // Use user's preferred language
-        systemPrompt: buildImageExplanationPrompt(persona, purpose),
+        systemPrompt: buildImageExplanationPrompt(persona, purpose, language, verbosity),
       });
 
       logger.debug('AI_SERVICE', '[ImageExplain] Session created, sending image...');
@@ -278,7 +281,7 @@ class ChromeAIService {
 
 Paper abstract: ${paperAbstract}
 
-Respond in ${outputLanguage === 'en' ? 'English' : outputLanguage === 'es' ? 'Spanish' : outputLanguage === 'ja' ? 'Japanese' : 'English'}.`,
+${getLanguageInstruction(outputLanguage as PromptLanguage, 'entire').content}`,
             },
             {
               type: 'image',
@@ -319,7 +322,10 @@ ${purpose === 'learning' ? `Explain this image in plain language.
   ### Examples (Provide 1-2 examples of integrating key concepts of this visual into an essay topic.)
 
   ### Caveats (In 1-2 sentences, mention limitations, missing data, or possible bias of the image.)
-</Explanation Format>`
+</Explanation Format>
+
+${getLanguageInstruction(outputLanguage as PromptLanguage, 'entire').content}
+`
 }`, {
         responseConstraint: imageExplanationSchema,
       });

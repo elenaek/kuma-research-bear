@@ -73,7 +73,7 @@ export function getPersonaInstruction(persona: Persona): string {
     case 'student':
       return STUDENT_TONE;
     default:
-      return PROFESSIONAL_TONE;
+      return STUDENT_TONE;
   }
 }
 
