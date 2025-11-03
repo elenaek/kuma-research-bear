@@ -42,6 +42,7 @@ You will respond with a JSON object containing:
 
 Only include sources you actually referenced. If you didn't use specific sources, provide an empty array.`)
     .withCustomInstruction('paper-context', `Paper title: ${paperTitle}`)
+    .withMarkdownFormatting(true)
     .buildString();
 }
 
