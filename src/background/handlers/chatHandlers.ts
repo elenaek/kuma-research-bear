@@ -1,7 +1,6 @@
 import { MessageType, ChatMessage, ConversationState, SourceInfo } from '../../types/index.ts';
 import { getPaperByUrl, getRelevantChunksSemantic, updatePaper } from '../../utils/dbService.ts';
 import { aiService } from '../../utils/aiService.ts';
-import { getOptimalRAGChunkCount } from '../../utils/adaptiveRAGService.ts';
 import { inputQuotaService } from '../../utils/inputQuotaService.ts';
 import { JSONSchema } from '../../utils/typeToSchema.ts';
 import { logger } from '../../utils/logger.ts';

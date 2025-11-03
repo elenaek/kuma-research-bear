@@ -1001,8 +1001,8 @@ export async function handleGenerateGlossaryManual(payload: any, tabId?: number)
       const glossaryTerms: GlossaryTerm[] = [];
       let successCount = 0;
 
-      // Process definitions in batches (5 at a time for progressive UI updates)
-      const definitionBatchSize = 5;
+      // Process definitions in batches (10 at a time for progressive UI updates)
+      const definitionBatchSize = 10;
       const totalTerms = deduplicatedTerms.length;
 
       for (let i = 0; i < totalTerms; i += definitionBatchSize) {

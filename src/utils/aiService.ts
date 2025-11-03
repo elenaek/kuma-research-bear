@@ -2521,164 +2521,159 @@ For mathematical expressions in definitions, contexts, or analogies:
   }
 
   /**
-   * Calculate token overhead for a definition batch
+   * Prepare glossary context with iterative validation (similar to chat's prepareContextWithValidation)
+   * Progressively trims chunks until the prompt fits within token quota
    *
-   * Shared helper to avoid duplicating overhead calculation logic.
-   *
-   * @param schema - The glossary schema object
-   * @param instructionText - The instruction text for the prompt
-   * @param paperTitle - The paper title
-   * @param batchSize - Number of terms in the batch
-   * @param sampleKeyword - Sample keyword to estimate per-keyword overhead
-   * @returns Object with breakdown of all overhead components
-   */
-  private calculateBatchOverhead(
-    schema: JSONSchema,
-    instructionText: string,
-    paperTitle: string,
-    batchSize: number,
-    sampleKeyword: string
-  ): {
-    schemaTokens: number;
-    instructionTokens: number;
-    paperTitleTokens: number;
-    batchStructureTokens: number;
-    perKeywordTokens: number;
-    responseBuffer: number;
-    totalOverhead: number;
-  } {
-    // 1. Schema tokens (from actual schema)
-    const schemaTokens = this.estimateTokens(JSON.stringify(schema));
-
-    // 2. Instruction text tokens (from actual instructions)
-    const instructionTokens = this.estimateTokens(instructionText);
-
-    // 3. Paper title tokens (from actual title)
-    const paperTitleTokens = this.estimateTokens(paperTitle);
-
-    // 4. Batch structure overhead (JSON wrapper, separators)
-    const batchStructureText = '{\n  "terms": [\n  ]\n}\n' + '---\n'.repeat(batchSize);
-    const batchStructureTokens = this.estimateTokens(batchStructureText);
-
-    // 5. Per-keyword overhead (labels, formatting for one keyword)
-    const perKeywordFormat = `\nTERM 1: "${sampleKeyword}"\nRelevant excerpts from paper:\n[Chunk 1]\n`;
-    const perKeywordTokens = this.estimateTokens(perKeywordFormat) * batchSize;
-
-    // 6. Response buffer (Conservative estimate for JSON response generation)
-    const responseBuffer = 800 + (60 * batchSize);
-
-    const totalOverhead = schemaTokens + instructionTokens + paperTitleTokens +
-                          batchStructureTokens + perKeywordTokens + responseBuffer;
-
-    return {
-      schemaTokens,
-      instructionTokens,
-      paperTitleTokens,
-      batchStructureTokens,
-      perKeywordTokens,
-      responseBuffer,
-      totalOverhead
-    };
-  }
-
-  /**
-   * Calculate optimal chunk limit for definition batch based on token budget
-   *
-   * Dynamically calculates token overhead from actual prompt components instead of
-   * hardcoded constants. This ensures accuracy even when prompts change.
-   *
-   * @param session - Current session (for quota/usage tracking) or null
-   * @param schema - The glossary schema object
-   * @param instructionText - The instruction text for the prompt
-   * @param paperTitle - The paper title
-   * @param keywords - Sample keywords to estimate per-keyword overhead
-   * @returns Number of chunks to fetch per keyword
-   */
-  private async calculateDefinitionBatchChunkLimit(
-    session: { inputQuota?: number; inputUsage?: number } | null,
-    schema: JSONSchema,
-    instructionText: string,
-    paperTitle: string,
-    keywords: string[]
-  ): Promise<number> {
-    const { inputQuotaService } = await import('./inputQuotaService.ts');
-    const inputQuota = session?.inputQuota || await inputQuotaService.getInputQuota();
-    const sessionUsage = session?.inputUsage || 0;
-    const batchSize = keywords.length;
-
-    // Calculate overhead using shared helper
-    const sampleKeyword = keywords[0] || 'SAMPLE';
-    const overhead = this.calculateBatchOverhead(schema, instructionText, paperTitle, batchSize, sampleKeyword);
-
-    logger.debug('AI_SERVICE', `[DefinitionBatch] Token Overhead Breakdown:
-  - Schema: ${overhead.schemaTokens} tokens
-  - Instructions: ${overhead.instructionTokens} tokens
-  - Paper title: ${overhead.paperTitleTokens} tokens
-  - Batch structure: ${overhead.batchStructureTokens} tokens
-  - Per-keyword (${batchSize}): ${overhead.perKeywordTokens} tokens
-  - Response buffer: ${overhead.responseBuffer} tokens
-  - TOTAL: ${overhead.totalOverhead} tokens`);
-
-    // Calculate available budget for ALL chunks combined
-    const availableForAllChunks = Math.max(0, inputQuota - sessionUsage - overhead.totalOverhead);
-
-    // Distribute evenly across keywords
-    const tokensPerKeyword = Math.floor(availableForAllChunks / batchSize);
-
-    // Estimate chunks per keyword using class constant
-    const chunksPerKeyword = Math.max(0, Math.floor(tokensPerKeyword / this.ESTIMATED_TOKENS_PER_CHUNK));
-
-    logger.debug('AI_SERVICE', `[DefinitionBatch] Budget-based limit - Total quota: ${inputQuota}, Session usage: ${sessionUsage}, Overhead: ${overhead.totalOverhead}, Available: ${availableForAllChunks}, Per-keyword: ${tokensPerKeyword}, Chunks/keyword: ${chunksPerKeyword}`);
-
-    return chunksPerKeyword;
-  }
-
-  /**
-   * Trim chunks for definition batch with batch-aware budget calculation
-   * Uses dynamic token estimation from actual prompt components.
-   *
+   * @param session - AI session for quota tracking
    * @param keywordContexts - Array of keywords with their RAG chunks
-   * @param session - Current session (for usage tracking) or null
    * @param schema - The glossary schema object
-   * @param instructionText - The instruction text for the prompt
+   * @param instructionTemplate - The instruction text for the prompt
    * @param paperTitle - The paper title
-   * @returns Trimmed contexts with budget-aware chunk selection
+   * @param languageName - Output language name (e.g., 'English', 'Spanish')
+   * @param maxAttempts - Maximum number of trimming attempts (default: 10)
+   * @returns Validated prompt with final keyword contexts OR error message
    */
-  private async trimChunksForDefinitionBatch(
+  private async prepareGlossaryContextWithValidation(
+    session: AILanguageModelSession,
     keywordContexts: Array<{ keyword: string; chunks: ContentChunk[] }>,
-    session: AILanguageModelSession | null,
     schema: JSONSchema,
-    instructionText: string,
-    paperTitle: string
-  ): Promise<Array<{ keyword: string; chunks: ContentChunk[] }>> {
-    // Get quota info
-    const { inputQuotaService } = await import('./inputQuotaService.ts');
-    const inputQuota = session?.inputQuota || await inputQuotaService.getInputQuota();
-    const sessionUsage = session?.inputUsage || 0;
-    const batchSize = keywordContexts.length;
-
-    // Calculate overhead using shared helper
-    const sampleKeyword = keywordContexts[0]?.keyword || 'SAMPLE';
-    const overhead = this.calculateBatchOverhead(schema, instructionText, paperTitle, batchSize, sampleKeyword);
-
-    // Calculate available budget for ALL chunks combined
-    const availableForAllChunks = Math.max(0, inputQuota - sessionUsage - overhead.totalOverhead);
-
-    // Distribute evenly across keywords
-    const tokensPerKeyword = Math.floor(availableForAllChunks / batchSize);
-
-    logger.debug('AI_SERVICE', `[DefinitionBatch] Batch budget - Total quota: ${inputQuota}, Session usage: ${sessionUsage}, Overhead: ${overhead.totalOverhead}, Available: ${availableForAllChunks}, Per-keyword: ${tokensPerKeyword}`);
-
-    // Trim each keyword's chunks to fit allocation using class constant
-    const chunksPerKeyword = Math.max(0, Math.floor(tokensPerKeyword / this.ESTIMATED_TOKENS_PER_CHUNK));
-
-    return keywordContexts.map(kc => {
-      const trimmedChunks = kc.chunks.slice(0, chunksPerKeyword);
+    instructionTemplate: string,
+    paperTitle: string,
+    languageName: string,
+    maxAttempts: number = 500
+  ): Promise<{
+    validatedPrompt?: string;
+    systemPrompt?: string;
+    finalKeywordContexts: Array<{ keyword: string; chunks: ContentChunk[] }>;
+    errorMessage?: string;
+  }> {
+    // Safety check - session must exist
+    if (!session) {
+      logger.error('AI_SERVICE', '[GlossaryValidation] Session is null - cannot validate');
       return {
-        keyword: kc.keyword,
-        chunks: trimmedChunks
+        finalKeywordContexts: keywordContexts,
+        errorMessage: 'Session not initialized'
       };
-    });
+    }
+
+    let currentKeywordContexts = keywordContexts;
+    const keywords = keywordContexts.map(kc => kc.keyword);
+
+    // Helper function to build the full prompt from keyword contexts
+    const buildGlossaryPrompt = (kcs: Array<{ keyword: string; chunks: ContentChunk[] }>) => {
+      const keywordContextsFormatted = kcs.map(kc => {
+        const contextText = kc.chunks
+          .map((chunk, i) => `[Chunk ${i + 1}]\n${chunk.content}`)
+          .join('\n\n');
+
+        return {
+          keyword: kc.keyword,
+          context: contextText || 'No relevant context found'
+        };
+      });
+
+      const keywordSections = keywordContextsFormatted.map((kc, idx) => {
+        return `
+TERM ${idx + 1}: "${kc.keyword}"
+Relevant excerpts from paper:
+${kc.context}
+`;
+      }).join('\n---\n');
+
+      const input = `IMPORTANT: All definitions, study contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.
+
+Paper Title: ${paperTitle}
+
+Define the following ${kcs.length} terms/acronyms based on how they are used in this research paper:
+
+${keywordSections}
+
+For EACH term, provide:
+1. The acronym/term (keep it in its original form)
+2. The full expanded form (if it's an acronym, otherwise same as term)
+3. A clear, concise definition based on the paper's context
+4. An array of study contexts with sections - for each unique way the term is used:
+   - context: describe how the term is used in this paper (string)
+   - sections: array of section names where this usage appears (array of strings like ["Introduction", "Methods"])
+5. A simple analogy to help understand it
+
+Focus on how each term is specifically used in THIS paper.
+Return an array with ${kcs.length} term definitions in the same order as listed above.
+
+For mathematical expressions in definitions, contexts, or analogies:
+- Use $expression$ for inline math (e.g., $\\alpha$, $n=100$)
+- Use $$expression$$ for display equations
+- Alternatively use \\(expression\\) for inline, \\[expression\\] for display`;
+
+      return input;
+    };
+
+    // Iterative validation loop
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      // Build prompt with current keyword contexts
+      const prompt = buildGlossaryPrompt(currentKeywordContexts);
+
+      // Validate using actual token measurement
+      const validation = await this.validatePromptSize(session, prompt);
+
+      if (validation.fits) {
+        logger.debug('AI_SERVICE', `[GlossaryValidation] ✓ Validation passed on attempt ${attempt} (${validation.actualUsage} tokens)`);
+
+        const systemPrompt = `You are a research paper terminology expert who provides clear, accurate definitions for technical terms and acronyms.
+When mathematical expressions, equations, or formulas are needed in definitions or contexts:
+- Use $expression$ for inline math (e.g., $E = mc^2$, $\\alpha$)
+- Use $$expression$$ for display equations on separate lines
+- Alternative: \\(expression\\) for inline, \\[expression\\] for display
+- Ensure proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters)
+IMPORTANT: All definitions, contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.`;
+
+        return {
+          validatedPrompt: prompt,
+          systemPrompt,
+          finalKeywordContexts: currentKeywordContexts
+        };
+      }
+
+      // Prompt too large - trim chunks progressively
+      logger.warn('AI_SERVICE', `[GlossaryValidation] Prompt too large (${validation.actualUsage} > ${validation.available}) on attempt ${attempt}/${maxAttempts}`);
+
+      if (attempt < maxAttempts) {
+        // Strategy: Remove 1 chunk from each keyword (distributed trimming)
+        // If a keyword has 0 chunks, keep it with no chunks but continue with others
+        const totalChunksBefore = currentKeywordContexts.reduce((sum, kc) => sum + kc.chunks.length, 0);
+
+        currentKeywordContexts = currentKeywordContexts.map(kc => ({
+          keyword: kc.keyword,
+          chunks: kc.chunks.length > 0 ? kc.chunks.slice(0, kc.chunks.length - 1) : []
+        }));
+
+        const totalChunksAfter = currentKeywordContexts.reduce((sum, kc) => sum + kc.chunks.length, 0);
+
+        logger.debug('AI_SERVICE', `[GlossaryValidation] Trimmed ${totalChunksBefore - totalChunksAfter} chunks (${totalChunksBefore} → ${totalChunksAfter})`);
+
+        // Check if we've run out of chunks completely
+        if (totalChunksAfter === 0) {
+          logger.error('AI_SERVICE', '[GlossaryValidation] No chunks remaining after trimming');
+          return {
+            finalKeywordContexts: currentKeywordContexts,
+            errorMessage: 'Insufficient quota for glossary batch. All chunks trimmed but prompt still too large.'
+          };
+        }
+      } else {
+        // Final attempt - use minimal chunks (1 chunk per keyword, or 0 if none available)
+        logger.warn('AI_SERVICE', `[GlossaryValidation] Max attempts reached, using minimal chunks`);
+        currentKeywordContexts = currentKeywordContexts.map(kc => ({
+          keyword: kc.keyword,
+          chunks: kc.chunks.slice(0, Math.min(1, kc.chunks.length))
+        }));
+      }
+    }
+
+    // Should never reach here, but return error just in case
+    return {
+      finalKeywordContexts: currentKeywordContexts,
+      errorMessage: 'Failed to validate glossary context after all attempts'
+    };
   }
 
   /**
@@ -2707,8 +2702,20 @@ For mathematical expressions in definitions, contexts, or analogies:
       const outputLanguage = await getOutputLanguage();
       const languageContextId = `${contextId}-${outputLanguage}`;
 
-      // Get session for quota tracking
-      const session = await this.getSessionForContext(languageContextId);
+      // Create session if it doesn't exist (needed for validation)
+      await this.getOrCreateSession(languageContextId, {
+        expectedInputs: [{ type: "text", languages: ["en"] }],
+        expectedOutputs: [{ type: "text", languages: [outputLanguage] }]
+      });
+
+      // Get session for quota tracking and validation (use let so we can reassign on timeout)
+      let session = await this.getSessionForContext(languageContextId);
+
+      // Session should now exist, but check just in case
+      if (!session) {
+        logger.error('AI_SERVICE', '[DefinitionBatch] Failed to create session');
+        return keywords.map(() => null);
+      }
 
       // Get schema and build instruction template BEFORE fetching chunks
       // This allows accurate token estimation in budget calculation
@@ -2751,28 +2758,12 @@ For mathematical expressions in definitions, contexts, or analogies:
 
       logger.debug('AI_SERVICE', '[DefinitionBatch] Gathering RAG context for all keywords...');
 
-      // Calculate budget-based chunk limit BEFORE fetching (uses actual text for accurate estimates)
-      const chunksPerKeyword = await this.calculateDefinitionBatchChunkLimit(
-        session,
-        schema,
-        instructionTemplate,
-        paperTitle,
-        keywords
-      );
+      // Start with adaptive initial chunk limit (will be validated and trimmed as needed)
+      const initialChunksPerKeyword = Math.min(5, Math.max(3, Math.floor(10 / keywords.length)));
 
-      // Check if we have enough quota for even a minimal batch
-      if (chunksPerKeyword === 0) {
-        logger.error('AI_SERVICE', `[DefinitionBatch] Insufficient quota for batch of ${keywords.length} keywords. Cannot fit any chunks. Consider reducing batch size or increasing quota.`);
-        // Return array of nulls - batch cannot proceed
-        return keywords.map(() => null);
-      }
+      logger.debug('AI_SERVICE', `[DefinitionBatch] Fetching initial ${initialChunksPerKeyword} chunks per keyword (will validate and trim as needed)`);
 
-      // Add 10% retry buffer for error handling
-      const chunksPerKeywordWithBuffer = Math.max(1, Math.ceil(chunksPerKeyword * 1.1));
-
-      logger.debug('AI_SERVICE', `[DefinitionBatch] Fetching ${chunksPerKeywordWithBuffer} chunks per keyword (${chunksPerKeyword} + 10% buffer) based on token budget`);
-
-      // First, gather all chunks for all keywords (without trimming yet)
+      // Gather all chunks for all keywords
       const keywordChunks = await Promise.all(
         keywords.map(async (keyword) => {
           let relevantChunks = [];
@@ -2780,7 +2771,7 @@ For mathematical expressions in definitions, contexts, or analogies:
           // Use keyword-only search if specified
           if (useKeywordOnly) {
             const { getRelevantChunks } = await import('./dbService.ts');
-            relevantChunks = await getRelevantChunks(paperId, keyword, Math.min(chunksPerKeywordWithBuffer, 3));
+            relevantChunks = await getRelevantChunks(paperId, keyword, initialChunksPerKeyword);
           } else {
             // Try semantic search
             const hasEmbeddings = allChunks.some(chunk => chunk.embedding !== undefined);
@@ -2788,7 +2779,7 @@ For mathematical expressions in definitions, contexts, or analogies:
             if (hasEmbeddings) {
               try {
                 const { searchSemanticOffscreen } = await import('../background/services/offscreenService.ts');
-                const searchResult = await searchSemanticOffscreen(paperId, keyword, chunksPerKeywordWithBuffer);
+                const searchResult = await searchSemanticOffscreen(paperId, keyword, initialChunksPerKeyword);
 
                 if (searchResult.success && searchResult.chunkIds && searchResult.chunkIds.length > 0) {
                   relevantChunks = searchResult.chunkIds
@@ -2803,7 +2794,7 @@ For mathematical expressions in definitions, contexts, or analogies:
             // Fallback to keyword search
             if (relevantChunks.length === 0) {
               const { getRelevantChunks } = await import('./dbService.ts');
-              relevantChunks = await getRelevantChunks(paperId, keyword, chunksPerKeywordWithBuffer);
+              relevantChunks = await getRelevantChunks(paperId, keyword, initialChunksPerKeyword);
             }
           }
 
@@ -2814,55 +2805,37 @@ For mathematical expressions in definitions, contexts, or analogies:
         })
       );
 
-      // Trim to exact budget (removing 10% buffer) and validate
-      const totalFetched = keywordChunks.reduce((sum, kc) => sum + kc.chunks.length, 0);
-
-      // Trim each keyword to exact chunksPerKeyword limit
-      const trimmedKeywordContexts = keywordChunks.map(kc => ({
-        keyword: kc.keyword,
-        chunks: kc.chunks.slice(0, chunksPerKeyword)
-      }));
-
-      const totalAfterTrim = trimmedKeywordContexts.reduce((sum, kc) => sum + kc.chunks.length, 0);
-
-      // Log if buffer was used (chunks were trimmed)
-      if (totalFetched > totalAfterTrim) {
-        logger.debug('AI_SERVICE', `[DefinitionBatch] Trimmed ${totalFetched - totalAfterTrim} chunks from 10% retry buffer (${totalFetched} → ${totalAfterTrim})`);
-      }
-
-      // Keep track of chunks for potential reduction on quota errors
-      let currentKeywordContexts = trimmedKeywordContexts;
-
-      // Helper function to format contexts from chunks
-      const formatKeywordContexts = (kcs: Array<{ keyword: string; chunks: ContentChunk[] }>) => {
-        return kcs.map(kc => {
-          const contextText = kc.chunks
-            .map((chunk, i) => `[Chunk ${i + 1}]\n${chunk.content}`)
-            .join('\n\n');
-
-          if (!contextText) {
-            logger.warn('AI_SERVICE', `[DefinitionBatch] No chunks available for term "${kc.keyword}"`);
-          }
-
-          return {
-            keyword: kc.keyword,
-            context: contextText || 'No relevant context found'
-          };
-        });
-      };
-
       logger.debug('AI_SERVICE', '[DefinitionBatch] ✓ RAG context gathered for all keywords');
 
-      // Step 2: Prepare system prompt (reuse languageName from earlier)
-      const systemPrompt = `You are a research paper terminology expert who provides clear, accurate definitions for technical terms and acronyms.
-When mathematical expressions, equations, or formulas are needed in definitions or contexts:
-- Use $expression$ for inline math (e.g., $E = mc^2$, $\\alpha$)
-- Use $$expression$$ for display equations on separate lines
-- Alternative: \\(expression\\) for inline, \\[expression\\] for display
-- Ensure proper LaTeX syntax (e.g., \\frac{a}{b}, \\sum_{i=1}^{n}, Greek letters)
-IMPORTANT: All definitions, contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.`;
+      // Step 2: Validate context and trim if needed
+      const validationResult = await this.prepareGlossaryContextWithValidation(
+        session,
+        keywordChunks,
+        schema,
+        instructionTemplate,
+        paperTitle,
+        languageName
+      );
+
+      // Handle validation failure
+      if (validationResult.errorMessage) {
+        logger.error('AI_SERVICE', `[DefinitionBatch] Validation failed: ${validationResult.errorMessage}`);
+        return keywords.map(() => null);
+      }
+
+      // Extract validated prompt and system prompt
+      const { validatedPrompt, systemPrompt, finalKeywordContexts } = validationResult;
+
+      if (!validatedPrompt || !systemPrompt) {
+        logger.error('AI_SERVICE', '[DefinitionBatch] Validation returned empty prompt or system prompt');
+        return keywords.map(() => null);
+      }
+
+      const totalChunksUsed = finalKeywordContexts.reduce((sum, kc) => sum + kc.chunks.length, 0);
+      logger.debug('AI_SERVICE', `[DefinitionBatch] Using ${totalChunksUsed} total chunks after validation`);
 
       // Step 3: Generate definitions with retry logic (schema already defined above)
+      // Keep retry logic as backup for transient errors (not quota errors - those are handled by validation)
       const maxRetries = 3;
       let lastError: any;
 
@@ -2870,46 +2843,17 @@ IMPORTANT: All definitions, contexts, and analogies must be in ${languageName}. 
         try {
           logger.debug('AI_SERVICE', `[DefinitionBatch] Attempt ${attempt}/${maxRetries} - Generating definitions for ${keywords.length} terms`);
 
-          // Build prompt with current contexts (may be reduced on retry)
-          const keywordContexts = formatKeywordContexts(currentKeywordContexts);
-          const keywordSections = keywordContexts.map((kc, idx) => {
-            return `
-TERM ${idx + 1}: "${kc.keyword}"
-Relevant excerpts from paper:
-${kc.context}
-`;
-          }).join('\n---\n');
-
-          const input = `IMPORTANT: All definitions, study contexts, and analogies must be in ${languageName}. Keep the term/acronym in its original form, but explain it in ${languageName}.
-
-Paper Title: ${paperTitle}
-
-Define the following ${keywords.length} terms/acronyms based on how they are used in this research paper:
-
-${keywordSections}
-
-For EACH term, provide:
-1. The acronym/term (keep it in its original form)
-2. The full expanded form (if it's an acronym, otherwise same as term)
-3. A clear, concise definition based on the paper's context
-4. An array of study contexts with sections - for each unique way the term is used:
-   - context: describe how the term is used in this paper (string)
-   - sections: array of section names where this usage appears (array of strings like ["Introduction", "Methods"])
-5. A simple analogy to help understand it
-
-Focus on how each term is specifically used in THIS paper.
-Return an array with ${keywords.length} term definitions in the same order as listed above.
-
-For mathematical expressions in definitions, contexts, or analogies:
-- Use $expression$ for inline math (e.g., $\\alpha$, $n=100$)
-- Use $$expression$$ for display equations
-- Alternatively use \\(expression\\) for inline, \\[expression\\] for display`;
-
           // Track session usage before call
           const usageBeforeCall = session?.inputUsage || 0;
 
-          const response = await this.prompt(
-            input,
+          // Create 60-second timeout promise for glossarization
+          const timeoutPromise = new Promise<string>((_, reject) =>
+            setTimeout(() => reject(new Error('GLOSSARIZATION_TIMEOUT')), 60000)
+          );
+
+          // Race the prompt call against the timeout
+          const promptPromise = this.prompt(
+            validatedPrompt,
             systemPrompt,
             schema,
             languageContextId,
@@ -2919,27 +2863,19 @@ For mathematical expressions in definitions, contexts, or analogies:
             3   // topK
           );
 
+          // Use the validated prompt with 60s timeout protection
+          const response = await Promise.race([promptPromise, timeoutPromise]);
+
           // Track actual token usage after successful call
           const updatedSession = await this.getSessionForContext(languageContextId);
           const usageAfterCall = updatedSession?.inputUsage || usageBeforeCall;
           const actualTokensUsed = usageAfterCall - usageBeforeCall;
 
-          // Calculate how many chunks we actually used
-          const actualChunksUsed = currentKeywordContexts.reduce((sum, kc) => sum + kc.chunks.length, 0);
-
-          // Calculate actual overhead for comparison with actual token usage
-          const sampleKeyword = keywords[0] || 'SAMPLE';
-          const overhead = this.calculateBatchOverhead(schema, instructionTemplate, paperTitle, keywords.length, sampleKeyword);
-          const estimatedTotal = overhead.totalOverhead + (actualChunksUsed * this.ESTIMATED_TOKENS_PER_CHUNK);
-
-          // Log comprehensive token usage for validation
-          logger.debug('AI_SERVICE', `[DefinitionBatch] Token Usage Analysis:
+          // Log token usage
+          logger.debug('AI_SERVICE', `[DefinitionBatch] Token Usage:
   - Batch size: ${keywords.length} keywords
-  - Chunks used: ${actualChunksUsed} chunks
-  - Estimated total: ${estimatedTotal} tokens
-  - Actual tokens used: ${actualTokensUsed} tokens
-  - Difference: ${actualTokensUsed - estimatedTotal} tokens (${actualTokensUsed > estimatedTotal ? 'over' : 'under'})
-  - Estimation accuracy: ${((1 - Math.abs(actualTokensUsed - estimatedTotal) / actualTokensUsed) * 100).toFixed(1)}%`);
+  - Chunks used: ${totalChunksUsed} chunks
+  - Actual tokens used: ${actualTokensUsed} tokens`);
 
           // Step 4: Parse response
           const parsed = JSON.parse(response);
@@ -2953,32 +2889,53 @@ For mathematical expressions in definitions, contexts, or analogies:
           const errorMessage = error instanceof Error ? error.message : String(error);
           const errorLower = errorMessage.toLowerCase();
 
-          // Case-insensitive error classification with specific quota patterns
-          const isRetryableError = errorLower.includes('unknownerror') ||
-                                   errorLower.includes('generic failures') ||
-                                   errorLower.includes('timeout') ||
-                                   errorLower.includes('resource') ||
-                                   errorLower.includes('quota') ||
-                                   errorMessage.includes('QuotaExceededError') ||
-                                   errorLower.includes('input is too large');
+          // Check if this was a timeout error
+          const isTimeoutError = errorMessage === 'GLOSSARIZATION_TIMEOUT' || errorLower.includes('timeout');
 
-          if (attempt < maxRetries && isRetryableError) {
-            // Special handling for quota errors - reduce context for next attempt
-            if (errorLower.includes('quota') || errorLower.includes('input is too large')) {
-              const reductionFactor = Math.pow(0.5, attempt); // 0.5, 0.25 for attempts 1, 2
-              logger.warn('AI_SERVICE', `[DefinitionBatch] Quota exceeded. Reducing chunks to ${(reductionFactor * 100)}% for next attempt`);
+          // If timeout occurred, destroy and recreate session before retrying
+          if (isTimeoutError && attempt < maxRetries) {
+            logger.warn('AI_SERVICE', `[DefinitionBatch] Timeout after 60s (attempt ${attempt}/${maxRetries}). Recreating session...`);
 
-              // Reduce chunks for each keyword
-              currentKeywordContexts = currentKeywordContexts.map(kc => ({
-                keyword: kc.keyword,
-                chunks: kc.chunks.slice(0, Math.max(1, Math.floor(kc.chunks.length * reductionFactor)))
-              }));
+            // Destroy the potentially stuck session
+            this.destroySessionForContext(languageContextId);
+
+            // Create a fresh session
+            await this.getOrCreateSession(languageContextId, {
+              expectedInputs: [{ type: "text", languages: ["en"] }],
+              expectedOutputs: [{ type: "text", languages: [outputLanguage] }]
+            });
+
+            // Get the new session reference
+            session = await this.getSessionForContext(languageContextId);
+
+            if (!session) {
+              logger.error('AI_SERVICE', '[DefinitionBatch] Failed to recreate session after timeout');
+              break;
             }
 
+            logger.debug('AI_SERVICE', `[DefinitionBatch] Session recreated successfully. Retrying...`);
+
+            // Small delay before retry
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue; // Retry immediately with new session
+          }
+
+          // Only retry on transient errors (not quota - validation already handled that)
+          const isTransientError = errorLower.includes('unknownerror') ||
+                                   errorLower.includes('generic failures') ||
+                                   errorLower.includes('resource');
+
+          // If we get a quota error after validation, something is wrong - don't retry
+          if (errorLower.includes('quota') || errorLower.includes('input is too large')) {
+            logger.error('AI_SERVICE', `[DefinitionBatch] Unexpected quota error after validation: ${errorMessage}`);
+            break; // Don't retry quota errors - validation should have prevented this
+          }
+
+          if (attempt < maxRetries && isTransientError) {
             const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
-            logger.warn('AI_SERVICE', `[DefinitionBatch] Failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
+            logger.warn('AI_SERVICE', `[DefinitionBatch] Transient error (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms:`, errorMessage);
             await new Promise(resolve => setTimeout(resolve, delay));
-          } else if (!isRetryableError) {
+          } else if (!isTransientError) {
             logger.error('AI_SERVICE', '[DefinitionBatch] Non-retryable error, aborting:', errorMessage);
             break;
           } else if (attempt === maxRetries) {
