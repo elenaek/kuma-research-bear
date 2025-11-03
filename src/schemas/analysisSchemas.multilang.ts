@@ -519,7 +519,7 @@ export const glossarySchema_en: JSONSchema = {
         properties: {
           acronym: {
             type: 'string',
-            description: 'The acronym, initialism, technical abbreviation, or key term (e.g., RCT, CI, FDA)',
+            description: 'The acronym, initialism, technical abbreviation, or key term in short form (e.g., RCT, CI, FDA)',
             maxLength: 20,
           },
           longForm: {

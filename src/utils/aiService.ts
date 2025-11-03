@@ -557,6 +557,19 @@ ${getLanguageInstruction(outputLanguage as PromptLanguage, 'entire').content}
         delete sessionOptions.systemPrompt;
       }
 
+      if(!sessionOptions?.temperature) {
+        sessionOptions = {
+          ...sessionOptions,
+          temperature: 0.0
+        };
+      }
+      if(!sessionOptions?.topK) {
+        sessionOptions = {
+          ...sessionOptions,
+          topK: 1
+        };
+      }
+
       // Add expectedOutputs if not already specified
       if (!sessionOptions?.expectedOutputs) {
         let outputLanguage = 'en'; // Default fallback
@@ -707,8 +720,8 @@ ${getLanguageInstruction(outputLanguage as PromptLanguage, 'entire').content}
     contextId: string = 'default',
     expectedInputs?: Array<{ type: string; languages: string[] }>,
     expectedOutputs?: Array<{ type: string; languages: string[] }>,
-    temperature?: number,
-    topK?: number
+    temperature: number = 0.0,
+    topK: number = 1
   ): Promise<string> {
     try {
       logger.debug('PROMPT_ENGINEERING', '[Prompt] contextId:', contextId);
@@ -767,7 +780,7 @@ ${getLanguageInstruction(outputLanguage as PromptLanguage, 'entire').content}
     const input = buildJSONRepairInput(malformedJson);
 
     try {
-      const response = await this.prompt(input, systemPrompt, undefined, contextId);
+      const response = await this.prompt(input, systemPrompt, undefined, contextId, undefined, undefined, 0.0, 1);
       return response.trim();
     } catch (error) {
       logger.error('AI_SERVICE', 'Failed to fix malformed JSON:', error);
@@ -887,7 +900,9 @@ ${abstract}`;
       undefined,
       languageContextId,
       [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
-      [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
+      [{ type: "text", languages: [outputLanguage || "en"] }],  // expectedOutputs
+      0.0,
+      1
     );
 
     return {
@@ -976,7 +991,7 @@ KEY POINTS:
 - [point 3]`;
     }
 
-    const response = await this.prompt(input, systemPrompt, undefined, contextId);
+    const response = await this.prompt(input, systemPrompt, undefined, contextId, undefined, undefined, 0.0, 1);
 
     // Parse the response
     const summaryMatch = response.match(/SUMMARY:\s*(.+?)(?=KEY POINTS:|$)/s);
@@ -1009,7 +1024,7 @@ KEY POINTS:
       ? `Explain the term "${term}" in the context of: ${context}`
       : `Explain the term "${term}" in simple terms`;
 
-    return await this.prompt(input, systemPrompt, undefined, contextId);
+    return await this.prompt(input, systemPrompt, undefined, contextId, undefined, undefined, 0.0, 1);
   }
 
   /**
@@ -1020,7 +1035,7 @@ KEY POINTS:
 
     const input = `Rewrite this text in simpler terms:\n\n${text}`;
 
-    return await this.prompt(input, systemPrompt, undefined, contextId);
+    return await this.prompt(input, systemPrompt, undefined, contextId, undefined, undefined, 0.0, 1);
   }
 
   /**
@@ -1104,7 +1119,7 @@ Return ONLY the JSON object, no other text. Extract as much information as you c
 
     try {
       logger.debug('AI_SERVICE', `Attempting AI extraction (attempt ${currentRetries + 1}/${maxRetries})...`);
-      const response = await this.prompt(input, systemPrompt, undefined, contextId);
+      const response = await this.prompt(input, systemPrompt, undefined, contextId, undefined, undefined, 0.0, 1);
 
       // Try to extract JSON from response
       // Sometimes the AI adds markdown code blocks
@@ -1240,7 +1255,7 @@ ${context}
 Return ONLY the JSON object, no other text. If you cannot determine a field, use null.`;
 
     try {
-      const response = await this.prompt(input, systemPrompt, undefined, contextId);
+      const response = await this.prompt(input, systemPrompt, undefined, contextId, undefined, undefined, 0.0, 1);
 
       // Parse JSON from response
       let jsonStr = response.trim();
@@ -1531,7 +1546,9 @@ Provide a comprehensive analysis of the study design, methods, and rigor.`;
             schema,
             languageContextId,
             [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
-            [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
+            [{ type: "text", languages: [outputLanguage || "en"] }],  // expectedOutputs
+            0.0,
+            1
           );
 
           // Clean up session immediately after successful use
@@ -1667,7 +1684,9 @@ Provide a comprehensive analysis of confounders, biases, and control measures.`;
             schema,
             languageContextId,
             [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
-            [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
+            [{ type: "text", languages: [outputLanguage || "en"] }],  // expectedOutputs
+            0.0,
+            1
           );
 
           // Clean up session immediately after successful use
@@ -1799,7 +1818,9 @@ Provide a comprehensive analysis of real-world applications, significance, and f
             schema,
             languageContextId,
             [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
-            [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
+            [{ type: "text", languages: [outputLanguage || "en"] }],  // expectedOutputs
+            0.0,
+            1
           );
 
           // Clean up session immediately after successful use
@@ -1931,7 +1952,9 @@ Provide a comprehensive analysis of study limitations and generalizability.`;
             schema,
             languageContextId,
             [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
-            [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
+            [{ type: "text", languages: [outputLanguage || "en"] }],  // expectedOutputs
+            0.0,
+            1
           );
 
           // Clean up session immediately after successful use
@@ -2145,7 +2168,9 @@ Use markdown formatting for better readability:
         undefined,
         languageContextId,
         [{ type: "text", languages: ["en", "es", "ja"] }],  // expectedInputs
-        [{ type: "text", languages: [outputLanguage || "en"] }]  // expectedOutputs
+        [{ type: "text", languages: [outputLanguage || "en"] }],  // expectedOutputs
+        0.0,
+        1
       );
 
       // Extract section references from the answer (simple heuristic)
@@ -2236,8 +2261,8 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
         contextId,
         [{ type: "text", languages: ["en", "es", "ja"] }],
         [{ type: "text", languages: [outputLanguage || "en"] }],
-        0,  // temperature
-        3   // topK
+        0.0,  // temperature
+        1   // topK
       );
 
       // Parse comma-separated list
@@ -2284,7 +2309,7 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
     const maxRetries = 3;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const response = await this.prompt(input, systemPrompt, chunkSchema, contextId, undefined, undefined, 0, 3);
+        const response = await this.prompt(input, systemPrompt, chunkSchema, contextId, undefined, undefined, 0, 1);
         const parsed = JSON.parse(response);
 
         logger.debug('AI_SERVICE', '[ChunkTermExtraction] ✓ Extracted', parsed.terms.length, 'terms');
@@ -2498,7 +2523,7 @@ For mathematical expressions in definitions, contexts, or analogies:
         [{ type: "text", languages: ["en", "es", "ja"] }],
         [{ type: "text", languages: [outputLanguage || "en"] }],
         0,  // temperature
-        3   // topK
+        1   // topK
       );
 
       const term = JSON.parse(response) as GlossaryTerm;
@@ -2836,7 +2861,7 @@ For mathematical expressions in definitions, contexts, or analogies:
 
       // Step 3: Generate definitions with retry logic (schema already defined above)
       // Keep retry logic as backup for transient errors (not quota errors - those are handled by validation)
-      const maxRetries = 3;
+      const maxRetries = 2;
       let lastError: any;
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -2860,7 +2885,7 @@ For mathematical expressions in definitions, contexts, or analogies:
             [{ type: "text", languages: ["en"] }],
             [{ type: "text", languages: [outputLanguage] }],
             0,  // temperature
-            3   // topK
+            1   // topK
           );
 
           // Use the validated prompt with 60s timeout protection
@@ -3024,7 +3049,7 @@ IMPORTANT: Respond in ${languageName} but keep technical terms and acronyms in t
         [{ type: "text", languages: ["en", "es", "ja"] }],
         [{ type: "text", languages: [outputLanguage || "en"] }],
         0,  // temperature
-        3   // topK
+        1   // topK
       );
 
       // Parse comma-separated list
@@ -3094,7 +3119,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
     if (chunks.length === 1) {
       logger.debug('AI_SERVICE', '[Hierarchical Summary] Document is small, creating single summary with terms');
       const input = `Summarize this research paper content concisely, capturing all important points. Also extract the 5-10 most important technical terms and acronyms:\n\n${fullText.slice(0, 6000)}`;
-      const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, contextId);
+      const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, contextId, undefined, undefined, 0.0, 1);
       const parsed = JSON.parse(response);
       logger.debug('AI_SERVICE', '[Hierarchical Summary] Single summary created:', parsed.summary.length, 'chars,', parsed.terms.length, 'terms');
       return { summary: parsed.summary, chunkTerms: [parsed.terms] };
@@ -3121,7 +3146,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           const chunkContextId = `${contextId}-chunk-${index}`;
-          const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, chunkContextId);
+          const response = await this.prompt(input, chunkSummarySystemPrompt, chunkSchema, chunkContextId, undefined, undefined, 0.0, 1);
           const parsed = JSON.parse(response);
 
           logger.debug('AI_SERVICE', `[Hierarchical Summary] Chunk ${index + 1}/${chunks.length} summarized:`, parsed.summary.length, 'chars,', parsed.terms.length, 'terms');
@@ -3205,7 +3230,7 @@ For mathematical expressions: use $expression$ for inline math, $$expression$$ f
     const metaInput = `Create a comprehensive summary of this research paper from these section summaries. Capture all key findings, methodology, results, and conclusions:\n\n${combinedSummaries.slice(0, 20000)}`;
 
     try {
-      const finalSummary = await this.prompt(metaInput, metaSystemPrompt, undefined, `${contextId}-meta`);
+      const finalSummary = await this.prompt(metaInput, metaSystemPrompt, undefined, `${contextId}-meta`, undefined, undefined, 0.0, 1);
       logger.debug('AI_SERVICE', '[Hierarchical Summary] ✓ Meta-summary created:', finalSummary.length, 'chars');
       return { summary: finalSummary, chunkTerms };
     } catch (error) {
