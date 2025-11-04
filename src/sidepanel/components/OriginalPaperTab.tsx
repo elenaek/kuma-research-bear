@@ -1,4 +1,4 @@
-import { ResearchPaper } from '../../types/index.ts';
+import { ResearchPaper } from '../../shared/types/index.ts';
 import { CollapsibleSection } from './ui/CollapsibleSection.tsx';
 
 interface OriginalPaperTabProps {

@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { repairLatexCommands } from '../utils/latexRepair.ts';
-import { logger } from '../utils/logger.ts';
+import { repairLatexCommands } from '../shared/utils/latexRepair.ts';
+import { logger } from '../shared/utils/logger.ts';
 
 // Cache for MathJax modules to avoid re-importing on every render
 let mathjaxModulesCache: {

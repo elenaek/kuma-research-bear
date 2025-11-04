@@ -1,6 +1,6 @@
 import { memo } from 'preact/compat';
 import { FileText, AlertTriangle, TrendingUp, AlertCircle, CheckCircle, Sparkles } from 'lucide-preact';
-import { PaperAnalysisResult } from '../../types/index.ts';
+import { PaperAnalysisResult } from '../../shared/types/index.ts';
 import { Tooltip } from '../../components/Tooltip.tsx';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
 import { CollapsibleSection } from './ui/CollapsibleSection.tsx';

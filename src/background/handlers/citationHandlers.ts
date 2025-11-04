@@ -1,6 +1,6 @@
-import { Citation } from '../../types/index.ts';
+import { Citation } from '../../shared/types/index.ts';
 import { addCitation, getAllCitations, deleteCitation } from '../../services/citationsStorage.ts';
-import { logger } from '../../utils/logger.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Citation Message Handlers

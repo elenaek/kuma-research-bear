@@ -1,6 +1,6 @@
 import { Loader, PawPrint, RefreshCw } from 'lucide-preact';
 import type { AIStatus, DownloadingModel } from '../hooks/useAIStatus.ts';
-import type { AIAvailability } from '../../types/index.ts';
+import type { AIAvailability } from '../../shared/types/index.ts';
 
 interface AIStatusCardProps {
   aiStatus: AIStatus;

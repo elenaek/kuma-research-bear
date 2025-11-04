@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
-import { getVerbosity, setVerbosity } from '../../utils/settingsService.ts';
-import { getVerbosityLabel } from '../../prompts/components/verbosity.ts';
-import { logger } from '../../utils/logger.ts';
+import { getVerbosity, setVerbosity } from '../../shared/utils/settingsService.ts';
+import { getVerbosityLabel } from '../../shared/prompts/components/verbosity.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Verbosity Slider Component

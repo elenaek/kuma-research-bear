@@ -1,8 +1,8 @@
 import { h } from 'preact';
 import { useState, useRef, useEffect } from 'preact/hooks';
-import { Citation, CitationFormat } from '../../types/index.ts';
-import { generateInlineCitation, generateQuoteCitation } from '../../utils/citationFormatters.ts';
-import { logger } from '../../utils/logger.ts';
+import { Citation, CitationFormat } from '../../shared/types/index.ts';
+import { generateInlineCitation, generateQuoteCitation } from '../../shared/utils/citationFormatters.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 interface CitationItemProps {
   citation: Citation;

@@ -14,12 +14,12 @@ import { PersonaSelector } from '../../popup/components/PersonaSelector.tsx';
 import { PurposeSelector } from '../../popup/components/PurposeSelector.tsx';
 import { LanguageDropdown } from '../../popup/components/LanguageDropdown.tsx';
 import { VerbositySlider } from '../../popup/components/VerbositySlider.tsx';
-import { getShowImageButtons, setShowImageButtons } from '../../utils/settingsService.ts';
-import type { Persona, Purpose } from '../../types/personaPurpose.ts';
-import { PERSONA_PURPOSE_CONFIGS } from '../../types/personaPurpose.ts';
-import { getPersona, getPurpose, onPersonaChanged, onPurposeChanged } from '../../utils/settingsService.ts';
-import { MessageType } from '../../types/index.ts';
-import { logger } from '../../utils/logger.ts';
+import { getShowImageButtons, setShowImageButtons } from '../../shared/utils/settingsService.ts';
+import type { Persona, Purpose } from '../../shared/types/personaPurpose.ts';
+import { PERSONA_PURPOSE_CONFIGS } from '../../shared/types/personaPurpose.ts';
+import { getPersona, getPurpose, onPersonaChanged, onPurposeChanged } from '../../shared/utils/settingsService.ts';
+import { MessageType } from '../../shared/types/index.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Settings Tab - Global extension settings

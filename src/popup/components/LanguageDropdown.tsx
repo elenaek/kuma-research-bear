@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp, Check, Globe } from 'lucide-preact';
-import { SUPPORTED_LANGUAGES, LanguageOption } from '../../types/index.ts';
-import { getOutputLanguage, setOutputLanguage } from '../../utils/settingsService.ts';
-import { logger } from '../../utils/logger.ts';
+import { SUPPORTED_LANGUAGES, LanguageOption } from '../../shared/types/index.ts';
+import { getOutputLanguage, setOutputLanguage } from '../../shared/utils/settingsService.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Language Dropdown Component

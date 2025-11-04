@@ -1,4 +1,4 @@
-import { logger } from '../../utils/logger.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Image Detection Service

@@ -1,5 +1,5 @@
-import { ResearchPaper } from '../../types/index.ts';
-import { logger } from '../../utils/logger.ts';
+import { ResearchPaper } from '../../shared/types/index.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Mutation Handler

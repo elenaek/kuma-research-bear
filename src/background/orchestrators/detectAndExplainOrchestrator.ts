@@ -1,9 +1,9 @@
-import { MessageType } from '../../types/index.ts';
-import { aiService } from '../../utils/aiService.ts';
-import { getPaperByUrl } from '../../utils/dbService.ts';
+import { MessageType } from '../../shared/types/index.ts';
+import { aiService } from '../../shared/utils/aiService.ts';
+import { getPaperByUrl } from '../../shared/utils/dbService.ts';
 import * as operationStateService from '../services/operationStateService.ts';
 import * as iconService from '../services/iconService.ts';
-import { logger } from '../../utils/logger.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Detect and Explain Orchestrator

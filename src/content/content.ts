@@ -1,12 +1,12 @@
-import { ResearchPaper } from '../types/index.ts';
+import { ResearchPaper } from '../shared/types/index.ts';
 import { detectAndStorePaper } from './services/paperDetectionService.ts';
 import { createMessageRouter } from './handlers/messageHandlers.ts';
 import { createMutationObserver, startObserving } from './handlers/mutationHandler.ts';
 import { chatboxInjector } from './services/chatboxInjector.ts';
 import { textSelectionHandler } from './services/textSelectionHandler.ts';
 import { imageExplanationHandler } from './services/imageExplanationHandler.ts';
-import { normalizeUrl } from '../utils/urlUtils.ts';
-import { logger } from '../utils/logger.ts';
+import { normalizeUrl } from '../shared/utils/urlUtils.ts';
+import { logger } from '../shared/utils/logger.ts';
 
 /**
  * Content Script

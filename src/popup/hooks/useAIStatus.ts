@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
-import * as ChromeService from '../../services/ChromeService.ts';
-import type { AIAvailability } from '../../types/index.ts';
-import { logger } from '../../utils/logger.ts';
+import * as ChromeService from '../../services/chromeService.ts';
+import type { AIAvailability } from '../../shared/types/index.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 export type AIStatus = 'checking' | 'ready' | 'needsInit' | 'downloading' | 'error';
 export type DownloadingModel = 'gemini' | 'embedding' | null;
@@ -165,9 +165,7 @@ export function useAIStatus(): UseAIStatusReturn {
       // Final status check
       await checkAIStatus();
 
-      if (response.success) {
-        // alert('Kuma is here! You can now use all features.');
-      } else {
+      if (!response.success) {
         alert(`Kuma couldn't wake up. (Failed to initialize AI: ${response.error})`);
       }
     } catch (error) {

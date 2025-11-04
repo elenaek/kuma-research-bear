@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp, Check, User, GraduationCap } from 'lucide-preact';
-import type { Persona } from '../../types/personaPurpose';
-import { getPersona, setPersona } from '../../utils/settingsService.ts';
-import { logger } from '../../utils/logger.ts';
+import type { Persona } from '../../shared/types/personaPurpose';
+import { getPersona, setPersona } from '../../shared/utils/settingsService.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 interface PersonaOption {
   value: Persona;

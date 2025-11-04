@@ -1,6 +1,6 @@
 import { memo } from 'preact/compat';
 import { BookOpen, Sparkles } from 'lucide-preact';
-import { GlossaryResult } from '../../types/index.ts';
+import { GlossaryResult } from '../../shared/types/index.ts';
 import { GlossaryList } from '../../components/GlossaryCard.tsx';
 import { LottiePlayer } from '../../shared/components/LottiePlayer.tsx';
 import { LoopPurpose } from '../../shared/components/LottiePlayer.tsx';

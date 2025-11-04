@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'preact/hooks';
-import * as ChromeService from '../services/ChromeService.ts';
+import * as ChromeService from '../services/chromeService.ts';
 import { useAIStatus } from './hooks/useAIStatus.ts';
 import { useOperationState } from './hooks/useOperationState.ts';
 import { usePaperStatus } from './hooks/usePaperStatus.ts';
@@ -15,10 +15,10 @@ import { PersonaSelector } from './components/PersonaSelector.tsx';
 import { PurposeSelector } from './components/PurposeSelector.tsx';
 import { VerbositySlider } from './components/VerbositySlider.tsx';
 import { ImageButtonsToggle } from './components/ImageButtonsToggle.tsx';
-import { normalizeUrl } from '../utils/urlUtils.ts';
-import { MessageType } from '../types/index.ts';
-import { getShowImageButtons, setShowImageButtons as saveShowImageButtons } from '../utils/settingsService.ts';
-import { logger } from '../utils/logger.ts';
+import { normalizeUrl } from '../shared/utils/urlUtils.ts';
+import { MessageType } from '../shared/types/index.ts';
+import { getShowImageButtons, setShowImageButtons as saveShowImageButtons } from '../shared/utils/settingsService.ts';
+import { logger } from '../shared/utils/logger.ts';
 import { Settings, ChevronDown, ChevronUp } from 'lucide-preact';
 
 export function Popup() {

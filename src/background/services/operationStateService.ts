@@ -1,9 +1,9 @@
-import { OperationState, MessageType } from '../../types/index.ts';
+import { OperationState, MessageType } from '../../shared/types/index.ts';
 import { tabPaperTracker } from './tabPaperTracker.ts';
 import { updateContextMenuForPaper, updateContextMenuState } from '../background.ts';
-import { normalizeUrl } from '../../utils/urlUtils.ts';
+import { normalizeUrl } from '../../shared/utils/urlUtils.ts';
 import * as iconService from './iconService.ts';
-import { logger } from '../../utils/logger.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Operation State Service

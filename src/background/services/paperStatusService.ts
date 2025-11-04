@@ -1,8 +1,8 @@
-import { StoredPaper, ResearchPaper } from '../../types/index.ts';
-import * as dbService from '../../utils/dbService.ts';
+import { StoredPaper, ResearchPaper } from '../../shared/types/index.ts';
+import * as dbService from '../../shared/utils/dbService.ts';
 import * as operationStateService from './operationStateService.ts';
 import { tabPaperTracker } from './tabPaperTracker.ts';
-import { logger } from '../../utils/logger.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Paper Status Service
