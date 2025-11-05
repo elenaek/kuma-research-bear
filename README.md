@@ -16,7 +16,7 @@
 ---
 
 **Quick Navigation:**
-[🎯 Problem](#the-problem) • [💡 Solution](#the-solution) • [✨ Features](#-key-features) • [🏗️ Architecture](#%EF%B8%8F-technical-architecture) • [🚀 Installation](#-installation) • [📖 Usage](#-usage-guide) • [🏆 Hackathon](#-chrome-built-in-ai-challenge-2025-keypoints) • [🛣️ Roadmap](#-future-roadmap) • [🛠️ Development](#-development) • [🔗 Links](#-links)
+[🎯 Problem](#the-problem) • [💡 Solution](#the-solution) • [✨ Features](#-key-features) • [🏗️ Architecture](#%EF%B8%8F-technical-architecture) • [🚀 Installation](#-installation) • [📖 Usage](#-usage-guide) • [🏆 Hackathon](#-chrome-built-in-ai-challenge-2025-keypoints) • [🛣️ Roadmap](#-future-roadmap) • [🛠️ Development](#-development) • [🔗 Links and Videos](#-links)
 
 </div>
 
@@ -804,7 +804,8 @@ The **Kuma bear mascot**, Lottie animations, and all branding elements are **NOT
 
 ## 🔗 Links
 
-- **Demo Video:** [YouTube Video](https://youtu.be/gnCz6BK_hx0)
+- **Demo Video:** [Demo Video](https://youtu.be/gnCz6BK_hx0)
+- **Features Compilation Video:** [Features Video](https://www.youtube.com/watch?v=1hwVX56t6iY)
 - **Devpost Submission:** [Kuma the Research Bear](https://devpost.com/software/kuma-the-research-bear)
 - **Chrome Built-in AI Challenge:** [Google Chrome Built-in AI Challenge 2025](https://googlechromeai2025.devpost.com/)
 
