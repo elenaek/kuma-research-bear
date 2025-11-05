@@ -1,5 +1,5 @@
 import { TrendingUp, FileText, Loader } from 'lucide-preact';
-import { StoredPaper } from '../../types/index.ts';
+import { StoredPaper } from '../../shared/types/index.ts';
 
 interface AvailableFeaturesCardProps {
   storedPaper: StoredPaper | null;

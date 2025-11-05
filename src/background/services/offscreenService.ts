@@ -3,8 +3,8 @@
  * Manages the lifecycle of the offscreen document for embedding generation
  */
 
-import { MessageType } from '../../types/index.ts';
-import { logger } from '../../utils/logger.ts';
+import { MessageType } from '../../shared/types/index.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 const OFFSCREEN_DOCUMENT_PATH = '/src/offscreen/offscreen.html';
 let creating: Promise<void> | null = null;

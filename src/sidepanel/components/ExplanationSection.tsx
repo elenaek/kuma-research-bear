@@ -1,5 +1,5 @@
 import { FileText, Sparkles } from 'lucide-preact';
-import { ExplanationResult } from '../../types/index.ts';
+import { ExplanationResult } from '../../shared/types/index.ts';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
 import { CollapsibleSection } from './ui/CollapsibleSection.tsx';
 import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.tsx';

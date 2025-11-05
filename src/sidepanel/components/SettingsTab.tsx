@@ -13,19 +13,20 @@ import { Settings } from 'lucide-preact';
 import { PersonaSelector } from '../../popup/components/PersonaSelector.tsx';
 import { PurposeSelector } from '../../popup/components/PurposeSelector.tsx';
 import { LanguageDropdown } from '../../popup/components/LanguageDropdown.tsx';
-import { getShowImageButtons, setShowImageButtons } from '../../utils/settingsService.ts';
-import type { Persona, Purpose } from '../../types/personaPurpose.ts';
-import { PERSONA_PURPOSE_CONFIGS } from '../../types/personaPurpose.ts';
-import { getPersona, getPurpose, onPersonaChanged, onPurposeChanged } from '../../utils/settingsService.ts';
-import { MessageType } from '../../types/index.ts';
-import { logger } from '../../utils/logger.ts';
+import { VerbositySlider } from '../../popup/components/VerbositySlider.tsx';
+import { getShowImageButtons, setShowImageButtons } from '../../shared/utils/settingsService.ts';
+import type { Persona, Purpose } from '../../shared/types/personaPurpose.ts';
+import { PERSONA_PURPOSE_CONFIGS } from '../../shared/types/personaPurpose.ts';
+import { getPersona, getPurpose, onPersonaChanged, onPurposeChanged } from '../../shared/utils/settingsService.ts';
+import { MessageType } from '../../shared/types/index.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Settings Tab - Global extension settings
  */
 export function SettingsTab() {
   const [showImageButtons, setShowImageButtonsState] = useState<boolean>(true);
-  const [currentPersona, setCurrentPersona] = useState<Persona>('professional');
+  const [currentPersona, setCurrentPersona] = useState<Persona>('student');
   const [currentPurpose, setCurrentPurpose] = useState<Purpose>('learning');
 
   // Load current settings on mount and listen for changes
@@ -115,6 +116,11 @@ export function SettingsTab() {
             <span class="text-xs text-gray-500 block mt-0.5">You want to...</span>
           </label>
           <PurposeSelector />
+        </div>
+
+        {/* Verbosity Slider */}
+        <div class="settings-row mb-4">
+          <VerbositySlider />
         </div>
 
         {/* Configuration Info Card */}

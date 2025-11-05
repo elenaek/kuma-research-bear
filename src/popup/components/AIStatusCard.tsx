@@ -1,6 +1,6 @@
 import { Loader, PawPrint, RefreshCw } from 'lucide-preact';
 import type { AIStatus, DownloadingModel } from '../hooks/useAIStatus.ts';
-import type { AIAvailability } from '../../types/index.ts';
+import type { AIAvailability } from '../../shared/types/index.ts';
 
 interface AIStatusCardProps {
   aiStatus: AIStatus;
@@ -102,17 +102,13 @@ export function AIStatusCard({
         </button>
       )}
 
-      {/* Downloading Status - Shows real progress for both GeminiNano and Embedding models */}
+      {/* Downloading Status - Shows real progress for Gemini Nano model */}
       {aiStatus === 'downloading' && (
         <div class="mt-3">
           <div class="flex items-center gap-2 text-sm text-gray-700 mb-2">
             <Loader size={16} class="animate-spin" />
             <span class="font-medium">
-              {currentDownloadingModel === 'gemini'
-                ? 'Downloading Gemini Nano model...'
-                : currentDownloadingModel === 'embedding'
-                ? 'Downloading Embedding model...'
-                : 'Downloading AI models...'}
+              Downloading Gemini Nano model...
             </span>
           </div>
 
@@ -127,11 +123,7 @@ export function AIStatusCard({
           {/* Progress percentage and model-specific info */}
           <div class="flex justify-between items-center mt-2">
             <p class="text-xs text-gray-500">
-              {currentDownloadingModel === 'gemini'
-                ? '~1.5-2GB download'
-                : currentDownloadingModel === 'embedding'
-                ? '~80-300MB download'
-                : 'Downloading...'}
+              ~1.5-2GB download
             </p>
             <p class="text-xs font-medium text-gray-700">
               {downloadProgress > 0 ? downloadProgress.toFixed(0) + '%' : (

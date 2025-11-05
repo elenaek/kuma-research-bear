@@ -1,5 +1,5 @@
 import * as operationStateService from '../services/operationStateService.ts';
-import { logger } from '../../utils/logger.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * State Message Handlers

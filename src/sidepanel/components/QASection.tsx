@@ -2,7 +2,7 @@ import { memo } from 'preact/compat';
 import { Loader, InfoIcon } from 'lucide-preact';
 import { useState, useEffect, useRef } from 'preact/hooks';
 import { ChevronDown, ChevronUp } from 'lucide-preact';
-import { QuestionAnswer, StoredPaper } from '../../types/index.ts';
+import { QuestionAnswer, StoredPaper } from '../../shared/types/index.ts';
 import { MarkdownRenderer } from '../../components/MarkdownRenderer.tsx';
 import { LottiePlayer, LoopPurpose } from '../../shared/components/LottiePlayer.tsx';
 

@@ -1,6 +1,6 @@
-import { extractPageText, isPDFPage } from '../../utils/contentExtractor.ts';
-import { getPDFUrl, extractPDFText } from '../../utils/pdfExtractor.ts';
-import { logger } from '../../utils/logger.ts';
+import { extractPageText, isPDFPage } from '../../shared/utils/contentExtractor.ts';
+import { getPDFUrl, extractPDFText } from '../../shared/utils/pdfExtractor.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Text Extraction Service

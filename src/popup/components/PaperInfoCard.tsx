@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'preact/hooks';
 import { Database, Trash2 } from 'lucide-preact';
-import type { ResearchPaper } from '../../types/index.ts';
+import type { ResearchPaper } from '../../shared/types/index.ts';
 import { OperationBadges } from './OperationBadges.tsx';
 import { CompletionBadges } from './CompletionBadges.tsx';
 

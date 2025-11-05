@@ -522,6 +522,10 @@ Before installing Kuma, ensure your system meets these requirements for Chrome's
    chrome://flags/#prompt-api-for-gemini-nano-multimodal-input → Enabled Multilingual
    chrome://flags/#summarization-api-for-gemini-nano → Enabled Multilingual
    chrome://flags/#optimization-guide-on-device-model → Enabled (EnabledBypassPerfRef if wanting to test without good hardware but won't work well)
+
+   # If you're using a laptop with an APU and a discrete GPU you may want to enable Force High Performance GPU to force discrete GPU use for embedding
+
+   chrome://flags/#force-high-performance-gpu → Enabled
    ```
 
 2. **Restart Chrome**

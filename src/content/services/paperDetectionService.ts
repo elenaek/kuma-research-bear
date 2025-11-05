@@ -1,8 +1,8 @@
-import { ResearchPaper } from '../../types/index.ts';
-import { detectPaper, detectPaperWithAI } from '../../utils/paperDetectors.ts';
+import { ResearchPaper } from '../../shared/types/index.ts';
+import { detectPaper, detectPaperWithAI } from '../../shared/utils/paperDetectors.ts';
 import { storePaperSimple } from './paperStorageService.ts';
-import { aiService } from '../../utils/aiService.ts';
-import { logger } from '../../utils/logger.ts';
+import { aiService } from '../../shared/utils/aiService.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Paper Detection Service

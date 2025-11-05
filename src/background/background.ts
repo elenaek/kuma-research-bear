@@ -11,7 +11,7 @@
  * - Utils: Tab lifecycle management, message routing
  */
 
-import { MessageType } from '../types/index.ts';
+import { MessageType } from '../shared/types/index.ts';
 import { registerTabLifecycleHandlers } from './utils/tabLifecycleHandlers.ts';
 import { tabPaperTracker } from './services/tabPaperTracker.ts';
 import * as operationStateService from './services/operationStateService.ts';
@@ -22,9 +22,9 @@ import * as uiHandlers from './handlers/uiHandlers.ts';
 import * as chatHandlers from './handlers/chatHandlers.ts';
 import * as citationHandlers from './handlers/citationHandlers.ts';
 import { executeDetectAndExplainFlow } from './orchestrators/detectAndExplainOrchestrator.ts';
-import { inputQuotaService } from '../utils/inputQuotaService.ts';
-import { getShowImageButtons, setShowImageButtons } from '../utils/settingsService.ts';
-import { logger } from '../utils/logger.ts';
+import { inputQuotaService } from '../shared/utils/inputQuotaService.ts';
+import { getShowImageButtons, setShowImageButtons } from '../shared/utils/settingsService.ts';
+import { logger } from '../shared/utils/logger.ts';
 
 // Download progress state storage (for popup state reinitialization)
 // Uses chrome.storage.local to persist across service worker restarts
@@ -473,6 +473,14 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
         sendResponse(await dbHandlers.handleDeleteScreenCapture(message.payload));
         break;
 
+      case MessageType.DELETE_IMAGE_EXPLANATION:
+        sendResponse(await dbHandlers.handleDeleteImageExplanation(message.payload));
+        break;
+
+      case MessageType.DESTROY_AI_SESSION:
+        sendResponse(await aiHandlers.handleDestroyAISession(message.payload));
+        break;
+
       // Citation Operations
       case 'ADD_CITATION':
         sendResponse(await citationHandlers.handleAddCitation(message.payload));
@@ -509,7 +517,7 @@ async function handleMessage(message: any, sender: chrome.runtime.MessageSender,
           const paperUrl = message.payload.paperUrl;
           if (!paperUrl) {
             // Try to get paperUrl from pending extractions or stored papers
-            const { getPaperById } = await import('../utils/dbService.ts');
+            const { getPaperById } = await import('../shared/utils/dbService.ts');
             const paper = await getPaperById(paperId);
             if (paper) {
               const tabIds = tabPaperTracker.getTabsForPaperUrl(paper.url);

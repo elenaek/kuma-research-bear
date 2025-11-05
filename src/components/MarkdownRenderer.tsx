@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'preact/hooks';
 import { createPortal } from 'preact/compat';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { repairLatexCommands } from '../utils/latexRepair.ts';
-import { logger } from '../utils/logger.ts';
+import { repairLatexCommands } from '../shared/utils/latexRepair.ts';
+import { logger } from '../shared/utils/logger.ts';
 
 // Cache for MathJax modules to avoid re-importing on every render
 let mathjaxModulesCache: {
@@ -101,23 +101,23 @@ function calculatePopoverPosition(
   const spacing = 12; // Gap between trigger and popover
   const viewport = {
     width: window.innerWidth,
-    height: window.innerHeight,
-    scrollX: window.scrollX,
-    scrollY: window.scrollY
+    height: window.innerHeight
   };
 
   // Try positions in order of preference: top, bottom, right, left
   // Choose first one that fits comfortably in viewport
+  // Note: Both chatbox and popover use position:fixed, so getBoundingClientRect()
+  // already gives us viewport-relative coordinates. No need to add scroll offsets.
 
   // Try top
   if (triggerRect.top - popoverHeight - spacing > 20) {
     return {
       placement: 'top',
-      top: triggerRect.top + viewport.scrollY - popoverHeight - spacing,
+      top: triggerRect.top - popoverHeight - spacing,
       left: Math.max(
         20,
         Math.min(
-          triggerRect.left + viewport.scrollX + (triggerRect.width - popoverWidth) / 2,
+          triggerRect.left + (triggerRect.width - popoverWidth) / 2,
           viewport.width - popoverWidth - 20
         )
       )
@@ -128,11 +128,11 @@ function calculatePopoverPosition(
   if (triggerRect.bottom + popoverHeight + spacing < viewport.height - 20) {
     return {
       placement: 'bottom',
-      top: triggerRect.bottom + viewport.scrollY + spacing,
+      top: triggerRect.bottom + spacing,
       left: Math.max(
         20,
         Math.min(
-          triggerRect.left + viewport.scrollX + (triggerRect.width - popoverWidth) / 2,
+          triggerRect.left + (triggerRect.width - popoverWidth) / 2,
           viewport.width - popoverWidth - 20
         )
       )
@@ -146,11 +146,11 @@ function calculatePopoverPosition(
       top: Math.max(
         20,
         Math.min(
-          triggerRect.top + viewport.scrollY + (triggerRect.height - popoverHeight) / 2,
+          triggerRect.top + (triggerRect.height - popoverHeight) / 2,
           viewport.height - popoverHeight - 20
         )
       ),
-      left: triggerRect.right + viewport.scrollX + spacing
+      left: triggerRect.right + spacing
     };
   }
 
@@ -160,11 +160,11 @@ function calculatePopoverPosition(
     top: Math.max(
       20,
       Math.min(
-        triggerRect.top + viewport.scrollY + (triggerRect.height - popoverHeight) / 2,
+        triggerRect.top + (triggerRect.height - popoverHeight) / 2,
         viewport.height - popoverHeight - 20
       )
     ),
-    left: triggerRect.left + viewport.scrollX - popoverWidth - spacing
+    left: triggerRect.left - popoverWidth - spacing
   };
 }
 
@@ -250,6 +250,11 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
     triggerRect: DOMRect;
   } | null>(null);
   const [latexCopied, setLatexCopied] = useState(false);
+
+  // Drag state management
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [customPosition, setCustomPosition] = useState<{ x: number; y: number } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -372,7 +377,61 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
   const closeZoom = () => {
     setZoomedFormula(null);
     setLatexCopied(false);
+    setCustomPosition(null); // Reset custom position when closing
+    setIsDragging(false);
   };
+
+  // Drag event handlers
+  const handleMouseDown = (e: MouseEvent) => {
+    if (!popoverRef.current) return;
+
+    // Only allow dragging from the header area (not the buttons)
+    const target = e.target as HTMLElement;
+    if (target.closest('.math-popover-close, .math-popover-copy')) return;
+
+    const popoverRect = popoverRef.current.getBoundingClientRect();
+    setDragOffset({
+      x: e.clientX - popoverRect.left,
+      y: e.clientY - popoverRect.top
+    });
+    setIsDragging(true);
+    e.preventDefault(); // Prevent text selection during drag
+  };
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return;
+
+    // Calculate new position
+    let newX = e.clientX - dragOffset.x;
+    let newY = e.clientY - dragOffset.y;
+
+    // Keep popover within viewport bounds (20px margins)
+    const popoverWidth = 500;
+    const popoverHeight = 300;
+    const minMargin = 20;
+
+    newX = Math.max(minMargin, Math.min(newX, window.innerWidth - popoverWidth - minMargin));
+    newY = Math.max(minMargin, Math.min(newY, window.innerHeight - popoverHeight - minMargin));
+
+    setCustomPosition({ x: newX, y: newY });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Attach global mouse move/up listeners when dragging
+  useEffect(() => {
+    if (!isDragging) return;
+
+    document.addEventListener('mousemove', handleMouseMove as any);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove as any);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragOffset]);
 
   // Copy to clipboard helper with fallback
   const copyToClipboard = async (text: string): Promise<boolean> => {
@@ -447,8 +506,11 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
   }, [zoomedFormula]);
 
   // Calculate popover position if formula is zoomed
+  // Use custom position if dragged, otherwise auto-calculate
   const popoverPosition = zoomedFormula
-    ? calculatePopoverPosition(zoomedFormula.triggerRect, 500, 300)
+    ? (customPosition
+        ? { top: customPosition.y, left: customPosition.x, placement: 'top' as const }
+        : calculatePopoverPosition(zoomedFormula.triggerRect, 500, 300))
     : null;
 
   return (
@@ -467,47 +529,64 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
       {zoomedFormula && popoverPosition && createPortal(
         <div
           ref={popoverRef}
-          className={`math-popover math-popover-${popoverPosition.placement}`}
+          className={`math-popover math-popover-${popoverPosition.placement}${isDragging ? ' dragging' : ''}`}
           style={{
             position: 'fixed',
             top: `${popoverPosition.top}px`,
-            left: `${popoverPosition.left}px`
+            left: `${popoverPosition.left}px`,
+            transition: isDragging ? 'none' : undefined
           }}
           role="tooltip"
           aria-label="Zoomed formula"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="math-popover-arrow" />
-          <button
-            className="math-popover-close"
-            onClick={closeZoom}
-            aria-label="Close"
-            title="Close (ESC)"
+          <div
+            className="math-popover-header"
+            onMouseDown={handleMouseDown as any}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
           >
-            ✕
-          </button>
-          <button
-            className={`math-popover-copy ${latexCopied ? 'copied' : ''}`}
-            onClick={handleCopyLatex}
-            aria-label="Copy LaTeX source"
-            title="Copy LaTeX source"
-          >
-            {latexCopied ? (
-              <>
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <span>Copied!</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                <span>Copy</span>
-              </>
-            )}
-          </button>
+            <div className="math-popover-arrow" />
+            <div className="math-popover-drag-handle" title="Drag to reposition">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                <circle cx="7" cy="5" r="1.5" />
+                <circle cx="13" cy="5" r="1.5" />
+                <circle cx="7" cy="10" r="1.5" />
+                <circle cx="13" cy="10" r="1.5" />
+                <circle cx="7" cy="15" r="1.5" />
+                <circle cx="13" cy="15" r="1.5" />
+              </svg>
+            </div>
+            <button
+              className="math-popover-close"
+              onClick={closeZoom}
+              aria-label="Close"
+              title="Close (ESC)"
+            >
+              ✕
+            </button>
+            <button
+              className={`math-popover-copy ${latexCopied ? 'copied' : ''}`}
+              onClick={handleCopyLatex}
+              aria-label="Copy LaTeX source"
+              title="Copy LaTeX source"
+            >
+              {latexCopied ? (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <div>Copied!</div>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <div>Copy</div>
+                </>
+              )}
+            </button>
+          </div>
           <div
             className="math-popover-formula"
             dangerouslySetInnerHTML={{ __html: zoomedFormula.svg }}

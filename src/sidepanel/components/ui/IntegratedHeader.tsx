@@ -12,7 +12,7 @@ import {
   X,
   MessageCircle
 } from 'lucide-preact';
-import { StoredPaper } from '../../../types/index.ts';
+import { StoredPaper } from '../../../shared/types/index.ts';
 
 interface IntegratedHeaderProps {
   // Paper data

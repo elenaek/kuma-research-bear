@@ -1,6 +1,6 @@
-import * as ChromeService from '../../services/ChromeService.ts';
-import { StoredPaper } from '../../types/index.ts';
-import { logger } from '../../utils/logger.ts';
+import * as ChromeService from '../../services/chromeService.ts';
+import { StoredPaper } from '../../shared/types/index.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 interface UsePaperDataReturn {
   checkForStoredPaper: (paperUrl: string, maxRetries?: number) => Promise<StoredPaper | null>;

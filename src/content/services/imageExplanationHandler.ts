@@ -1,11 +1,11 @@
 import { h, render } from 'preact';
 import { ImageExplainButton } from '../components/ImageExplainButton.tsx';
 import { detectImages, imageElementToBlob, watchForNewImages, DetectedImage } from './imageDetectionService.ts';
-import * as ChromeService from '../../services/ChromeService.ts';
-import { aiService } from '../../utils/aiService.ts';
+import * as ChromeService from '../../services/chromeService.ts';
+import { aiService } from '../../shared/utils/aiService.ts';
 import { chatboxInjector } from './chatboxInjector.ts'; // NEW: Multi-tab chatbox integration
-import { getShowImageButtons } from '../../utils/settingsService.ts';
-import { logger } from '../../utils/logger.ts';
+import { getShowImageButtons } from '../../shared/utils/settingsService.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 interface ImageState {
   element: HTMLImageElement;
@@ -15,6 +15,8 @@ interface ImageState {
   isLoading: boolean;
   buttonContainer: HTMLDivElement | null;
   buttonRoot: HTMLElement | null;
+  scrollListener?: () => void;
+  resizeListener?: () => void;
 }
 
 /**
@@ -28,12 +30,20 @@ class ImageExplanationHandler {
   private multimodalAvailable = false;
   private currentPaper: any = null;
   private showImageButtons = true; // Stores user setting for button visibility
+  private explanationQueue: Promise<any> = Promise.resolve(); // Queue to serialize AI requests
 
   /**
    * Get image state by URL (used for tab restoration)
    */
   getImageStateByUrl(imageUrl: string): ImageState | undefined {
     return this.imageStates.get(imageUrl);
+  }
+
+  /**
+   * Set image state by URL (used for screen capture restoration)
+   */
+  setImageState(imageUrl: string, state: ImageState): void {
+    this.imageStates.set(imageUrl, state);
   }
 
   /**
@@ -47,12 +57,35 @@ class ImageExplanationHandler {
     }
   }
 
+  /**
+   * Clear explanation state for an image and re-render button
+   * Used when closing image tabs to reset button to unexplained state
+   */
+  clearExplanationState(imageUrl: string): void {
+    const imageState = this.imageStates.get(imageUrl);
+    if (imageState) {
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] Clearing explanation state for:', imageUrl);
+
+      // Clear explanation and title
+      imageState.explanation = null;
+      imageState.title = null;
+
+      // Re-render button to show unexplained state (Q&A Lottie)
+      if (imageState.buttonRoot) {
+        this.renderButton(imageUrl, imageState.buttonRoot);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Button re-rendered to unexplained state');
+      }
+    }
+  }
+
   async initialize(currentPaper: any) {
     if (this.isInitialized) {
       logger.debug('CONTENT_SCRIPT', '[ImageExplain] Already initialized');
       return;
     }
 
+    // Set flag immediately to prevent race conditions
+    this.isInitialized = true;
     this.currentPaper = currentPaper;
 
     logger.debug('CONTENT_SCRIPT', '[ImageExplain] Initializing image explanation handler...');
@@ -65,10 +98,12 @@ class ImageExplanationHandler {
 
       if (!available) {
         logger.debug('CONTENT_SCRIPT', '[ImageExplain] Multimodal API not available, feature will be hidden');
+        this.isInitialized = false; // Reset flag on early return
         return; // Don't initialize if API not available
       }
     } catch (error) {
       logger.error('CONTENT_SCRIPT', '[ImageExplain] Error checking multimodal availability:', error);
+      this.isInitialized = false; // Reset flag on early return
       return;
     }
 
@@ -89,7 +124,6 @@ class ImageExplanationHandler {
       await this.setupImages();
     });
 
-    this.isInitialized = true;
     logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Image explanation handler initialized');
   }
 
@@ -177,13 +211,20 @@ class ImageExplanationHandler {
     // Render button
     this.renderButton(image.url, buttonRoot);
 
+    // Create and store event listeners for cleanup
+    const scrollListener = () => {
+      this.positionButton(image.element, buttonContainer);
+    };
+    const resizeListener = () => {
+      this.positionButton(image.element, buttonContainer);
+    };
+
+    imageState.scrollListener = scrollListener;
+    imageState.resizeListener = resizeListener;
+
     // Re-position on scroll or resize
-    window.addEventListener('scroll', () => {
-      this.positionButton(image.element, buttonContainer);
-    }, true);
-    window.addEventListener('resize', () => {
-      this.positionButton(image.element, buttonContainer);
-    });
+    window.addEventListener('scroll', scrollListener, true);
+    window.addEventListener('resize', resizeListener);
   }
 
   private positionButton(img: HTMLImageElement, buttonContainer: HTMLDivElement) {
@@ -194,19 +235,25 @@ class ImageExplanationHandler {
 
   private async loadCachedExplanation(imageState: ImageState) {
     if (!this.currentPaper || !this.currentPaper.id) {
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] Cannot load cached explanation: no paper or paper ID');
       return;
     }
 
     try {
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] Checking for cached explanation:', imageState.url, 'paperId:', this.currentPaper.id);
       const response = await ChromeService.getImageExplanation(
         this.currentPaper.id,
         imageState.url
       );
 
-      if (response && response.explanation) {
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] Cache check response:', { success: response.success, hasExplanation: !!response.explanation });
+
+      if (response.success && response.explanation) {
         imageState.title = response.explanation.title || 'Image Explanation';
         imageState.explanation = response.explanation.explanation;
-        logger.debug('CONTENT_SCRIPT', '[ImageExplain] Loaded cached explanation for:', imageState.url);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Loaded cached explanation for:', imageState.url);
+      } else {
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] No cached explanation found for:', imageState.url);
       }
     } catch (error) {
       logger.error('CONTENT_SCRIPT', '[ImageExplain] Error loading cached explanation:', error);
@@ -270,6 +317,7 @@ class ImageExplanationHandler {
 
       // Store blob in IndexedDB for persistence
       try {
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 Storing screen capture with paperId:', this.currentPaper.id, 'imageUrl:', imageUrl);
         await ChromeService.storeScreenCapture(this.currentPaper.id, imageUrl, blob, overlayPosition);
         logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Screen capture blob stored in IndexedDB');
       } catch (error) {
@@ -280,7 +328,8 @@ class ImageExplanationHandler {
       // Open chatbox with the captured image
       // Pass overlay element as imageButtonElement for scroll-to-image functionality
       const title = 'Image Capture Explanation';
-      await chatboxInjector.openImageTab(imageUrl, blob, overlayElement || null, title, true);
+      // Show loading state while generating explanation
+      await chatboxInjector.openImageTab(imageUrl, blob, overlayElement || null, '___LOADING_EXPLANATION___', title);
 
       // Generate explanation
       await this.generateExplanationFromBlob(imageUrl, blob);
@@ -314,12 +363,13 @@ class ImageExplanationHandler {
     try {
       const blob = await imageElementToBlob(imageState.element);
       const title = imageState.title || 'Image Explanation';
-      const buttonElement = imageState.buttonContainer; // Can be null when buttons are hidden
+      const buttonElement = imageState.buttonContainer; // For compass tracking; scroll uses imageState.element
       const hasExplanation = !!imageState.explanation;
 
       // Open image tab with loading state if no explanation exists
-      // buttonElement can be null - chatbox will use default positioning
-      await chatboxInjector.openImageTab(imageUrl, blob, buttonElement, title, !hasExplanation);
+      // buttonElement is used for compass tracking (scroll-to-image looks up the actual image element)
+      const loadingMessage = !hasExplanation ? '___LOADING_EXPLANATION___' : undefined;
+      await chatboxInjector.openImageTab(imageUrl, blob, buttonElement, loadingMessage, title);
 
       // Generate explanation if it doesn't exist
       if (!hasExplanation) {
@@ -343,32 +393,50 @@ class ImageExplanationHandler {
   }
 
   private async generateExplanation(imageUrl: string) {
+    // Queue this request to prevent concurrent AI calls
+    this.explanationQueue = this.explanationQueue.then(() => this._generateExplanationImpl(imageUrl));
+    return this.explanationQueue;
+  }
+
+  private async _generateExplanationImpl(imageUrl: string) {
     const imageState = this.imageStates.get(imageUrl);
     if (!imageState || !this.currentPaper) {
       return;
     }
 
-    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Generating explanation for:', imageUrl);
+    const startTime = Date.now();
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 [START] Generating explanation for:', imageUrl, 'at', startTime);
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 Image element src:', imageState.element?.src?.substring(0, 100));
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 ImageState URL:', imageState.url);
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 IsLoading before:', imageState.isLoading);
 
     imageState.isLoading = true;
     this.renderButton(imageUrl, imageState.buttonRoot!);
 
     try {
       // Convert image to blob
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 Converting element to blob...');
       const blob = await imageElementToBlob(imageState.element);
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 Blob created, size:', blob.size, 'type:', blob.type);
 
       // Generate explanation using AI (now returns {title, explanation})
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 [AI START] Calling AI for:', imageUrl);
       const result = await aiService.explainImage(
         blob,
         this.currentPaper.title,
         this.currentPaper.abstract
       );
+      const endTime = Date.now();
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 [AI END] AI response for:', imageUrl, 'took', endTime - startTime, 'ms');
 
       if (result) {
         imageState.title = result.title;
         imageState.explanation = result.explanation;
 
         // Store in database
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 Storing regular image explanation with URL:', imageUrl);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 Title:', result.title);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 Paper ID:', this.currentPaper.id);
         await ChromeService.storeImageExplanation(
           this.currentPaper.id,
           imageUrl,
@@ -377,7 +445,6 @@ class ImageExplanationHandler {
         );
 
         logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Generated and stored explanation');
-        logger.debug('CONTENT_SCRIPT', '[ImageExplain] Title:', result.title);
       } else {
         logger.warn('CONTENT_SCRIPT', '[ImageExplain] Failed to generate explanation');
         imageState.title = 'Error';
@@ -399,28 +466,44 @@ class ImageExplanationHandler {
    * Similar to generateExplanation but skips the element-to-blob conversion
    */
   private async generateExplanationFromBlob(imageUrl: string, blob: Blob): Promise<void> {
+    // Queue this request to prevent concurrent AI calls
+    this.explanationQueue = this.explanationQueue.then(() => this._generateExplanationFromBlobImpl(imageUrl, blob));
+    return this.explanationQueue;
+  }
+
+  private async _generateExplanationFromBlobImpl(imageUrl: string, blob: Blob): Promise<void> {
     const imageState = this.imageStates.get(imageUrl);
     if (!imageState || !this.currentPaper) {
       return;
     }
 
-    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Generating explanation from blob for:', imageUrl);
+    const startTime = Date.now();
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 [START] Generating explanation from blob for:', imageUrl, 'at', startTime);
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 Blob size:', blob.size, 'type:', blob.type);
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 ImageState URL:', imageState.url);
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 IsLoading before:', imageState.isLoading);
 
     imageState.isLoading = true;
 
     try {
       // Generate explanation using AI (now returns {title, explanation})
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 [AI START] Calling AI service for screen capture:', imageUrl);
       const result = await aiService.explainImage(
         blob,
         this.currentPaper.title,
         this.currentPaper.abstract
       );
+      const endTime = Date.now();
+      logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 [AI END] AI response for screen capture:', imageUrl, 'took', endTime - startTime, 'ms');
 
       if (result) {
         imageState.title = result.title;
         imageState.explanation = result.explanation;
 
         // Store in database
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 Storing screen capture explanation with URL:', imageUrl);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 Title:', result.title);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] 🔍 Paper ID:', this.currentPaper.id);
         await ChromeService.storeImageExplanation(
           this.currentPaper.id,
           imageUrl,
@@ -429,7 +512,6 @@ class ImageExplanationHandler {
         );
 
         logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Generated and stored explanation from blob');
-        logger.debug('CONTENT_SCRIPT', '[ImageExplain] Title:', result.title);
       } else {
         logger.warn('CONTENT_SCRIPT', '[ImageExplain] Failed to generate explanation from blob');
         imageState.title = 'Error';
@@ -450,12 +532,14 @@ class ImageExplanationHandler {
       return;
     }
 
+    const hasExplanation = !!imageState.explanation;
+
     // Only render full button if setting is enabled
     if (this.showImageButtons) {
       render(
         h(ImageExplainButton, {
           visible: true,
-          hasExplanation: !!imageState.explanation,
+          hasExplanation,
           isLoading: imageState.isLoading,
           onClick: () => this.handleButtonClick(imageUrl),
         }),
@@ -724,11 +808,39 @@ class ImageExplanationHandler {
     logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Buttons shown');
   }
 
+  /**
+   * Refresh button states by re-checking for cached explanations
+   * Called after chatbox restores tabs to sync button states with chat history
+   */
+  async refreshButtonStates() {
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] Refreshing button states...');
+
+    for (const [url, state] of this.imageStates) {
+      // Re-check for cached explanation
+      await this.loadCachedExplanation(state);
+
+      // Re-render button with updated state
+      if (state.buttonRoot) {
+        this.renderButton(url, state.buttonRoot);
+      }
+    }
+
+    logger.debug('CONTENT_SCRIPT', '[ImageExplain] ✓ Button states refreshed');
+  }
+
   destroy() {
     logger.debug('CONTENT_SCRIPT', '[ImageExplain] Destroying image explanation handler...');
 
-    // Remove all button containers and screen capture overlays
+    // Remove all button containers, event listeners, and screen capture overlays
     for (const [url, state] of this.imageStates) {
+      // Remove event listeners
+      if (state.scrollListener) {
+        window.removeEventListener('scroll', state.scrollListener, true);
+      }
+      if (state.resizeListener) {
+        window.removeEventListener('resize', state.resizeListener);
+      }
+
       // Remove button container
       if (state.buttonContainer && state.buttonContainer.parentNode) {
         state.buttonContainer.parentNode.removeChild(state.buttonContainer);
@@ -743,6 +855,25 @@ class ImageExplanationHandler {
         }
       }
     }
+
+    // Defensive cleanup: Remove any orphaned button containers from DOM
+    // (in case we lost track of references)
+    const orphanedContainers = document.querySelectorAll('.kuma-image-button-container');
+    orphanedContainers.forEach(container => {
+      if (container.parentNode) {
+        container.parentNode.removeChild(container);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] Removed orphaned button container');
+      }
+    });
+
+    // Defensive cleanup: Remove any orphaned screen capture overlays
+    const orphanedOverlays = document.querySelectorAll('.kuma-screen-capture-overlay');
+    orphanedOverlays.forEach(overlay => {
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+        logger.debug('CONTENT_SCRIPT', '[ImageExplain] Removed orphaned screen capture overlay');
+      }
+    });
 
     // Disconnect mutation observer
     if (this.mutationObserver) {

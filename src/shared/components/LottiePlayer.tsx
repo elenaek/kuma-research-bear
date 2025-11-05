@@ -1,6 +1,6 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef } from 'preact/compat';
 import { DotLottie } from '@lottiefiles/dotlottie-web';
-import { logger } from '../../utils/logger.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 interface LottiePlayerProps {
   path: string;

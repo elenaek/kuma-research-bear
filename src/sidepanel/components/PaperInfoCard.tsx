@@ -1,5 +1,5 @@
 import { ExternalLink, Database, Clock, Calendar, BookOpen, Hash, Download, Globe } from 'lucide-preact';
-import { ResearchPaper, StoredPaper, SUPPORTED_LANGUAGES } from '../../types/index.ts';
+import { ResearchPaper, StoredPaper, SUPPORTED_LANGUAGES } from '../../shared/types/index.ts';
 
 interface PaperInfoCardProps {
   paper: ResearchPaper | null;

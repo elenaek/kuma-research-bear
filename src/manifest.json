@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Kuma the Research Bear",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A bear that helps you understand research papers using Chrome's built-in AI",
   "permissions": [
     "activeTab",
@@ -22,10 +22,10 @@
   "action": {
     "default_popup": "src/popup/popup.html",
     "default_icon": {
-      "128": "icons/icon128.png",
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
-      "48": "icons/icon48.png"
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
   },
   "background": {
@@ -44,8 +44,12 @@
         "file:///*",
         "<all_urls>"
       ],
-      "js": ["src/content/content.ts"],
-      "css": ["src/content/content.css"],
+      "js": [
+        "src/content/content.ts"
+      ],
+      "css": [
+        "src/content/content.css"
+      ],
       "match_about_blank": true
     }
   ],
@@ -53,10 +57,10 @@
     "default_path": "src/sidepanel/sidepanel.html"
   },
   "icons": {
-    "128": "icons/icon128.png",
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
-    "48": "icons/icon48.png"
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "web_accessible_resources": [
     {
@@ -66,6 +70,12 @@
         "ort-wasm-simd-threaded.jsep.wasm",
         "ort-wasm-simd-threaded.mjs",
         "ort-wasm-simd-threaded.jsep.mjs",
+        "ort-wasm-simd.wasm",
+        "ort-wasm-simd.mjs",
+        "ort-wasm-threaded.wasm",
+        "ort-wasm-threaded.mjs",
+        "ort-wasm.wasm",
+        "ort-wasm.mjs",
         "src/content/components/chatbox.css",
         "src/content/styles/askKumaButton.css",
         "src/content/styles/selectionToolbar.css",
@@ -74,7 +84,9 @@
         "lotties/*",
         "icons/*"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "content_security_policy": {

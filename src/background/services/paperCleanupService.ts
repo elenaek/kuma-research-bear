@@ -6,11 +6,11 @@
  * - Clears operation states
  */
 
-import { aiService } from '../../utils/aiService.ts';
+import { aiService } from '../../shared/utils/aiService.ts';
 import * as operationStateService from './operationStateService.ts';
 import * as requestDeduplicationService from './requestDeduplicationService.ts';
 import { tabPaperTracker } from './tabPaperTracker.ts';
-import { logger } from '../../utils/logger.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * AI context IDs that might exist for a given tab
@@ -73,7 +73,7 @@ export async function cleanupPaper(
     for (const context of AI_CONTEXTS) {
       const contextId = `tab-${tabId}-${context}`;
       try {
-        aiService.destroySessionForContext(contextId);
+        await aiService.destroySessionForContext(contextId);
         aiSessionsDestroyed++;
         logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Destroyed AI session: ${contextId}`);
       } catch (error) {
@@ -110,7 +110,7 @@ export async function cleanupPaper(
         for (const context of AI_CONTEXTS) {
           const contextId = `tab-${currentTabId}-${context}`;
           try {
-            aiService.destroySessionForContext(contextId);
+            await aiService.destroySessionForContext(contextId);
             aiSessionsDestroyed++;
             logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Destroyed AI session: ${contextId}`);
           } catch (error) {
@@ -163,7 +163,7 @@ export async function cleanupPaper(
   if (paperId && tabId === undefined) {
     const chatContextId = `chat-${paperId}`;
     try {
-      aiService.destroySessionForContext(chatContextId);
+      await aiService.destroySessionForContext(chatContextId);
       chatSessionsDestroyed++;
       logger.debug('BACKGROUND_SCRIPT', `[PaperCleanup] ✓ Destroyed chat session: ${chatContextId}`);
     } catch (error) {

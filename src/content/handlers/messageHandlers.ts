@@ -1,10 +1,10 @@
-import { MessageType, ResearchPaper } from '../../types/index.ts';
+import { MessageType, ResearchPaper } from '../../shared/types/index.ts';
 import { detectPaperWithAIOnly } from '../services/paperDetectionService.ts';
 import { storePaper } from '../services/paperStorageService.ts';
-import { aiService } from '../../utils/aiService.ts';
+import { aiService } from '../../shared/utils/aiService.ts';
 import { chatboxInjector } from '../services/chatboxInjector.ts';
 import { imageExplanationHandler } from '../services/imageExplanationHandler.ts';
-import { logger } from '../../utils/logger.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Message Handlers

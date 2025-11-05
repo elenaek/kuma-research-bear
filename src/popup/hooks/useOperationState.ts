@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
-import { MessageType } from '../../types/index.ts';
-import { logger } from '../../utils/logger.ts';
+import { MessageType } from '../../shared/types/index.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 interface OperationState {
   tabId?: number;

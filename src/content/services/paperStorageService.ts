@@ -1,10 +1,10 @@
-import { ResearchPaper, MessageType } from '../../types/index.ts';
-import * as ChromeService from '../../services/ChromeService.ts';
+import { ResearchPaper, MessageType } from '../../shared/types/index.ts';
+import * as ChromeService from '../../services/chromeService.ts';
 import { extractFullText } from './textExtractionService.ts';
-import { detectResearchPaper } from '../../utils/paperDetection.ts';
-import { generatePaperId } from '../../utils/dbService.ts';
-import { extractResearchPaper, isPDFPage } from '../../utils/contentExtractor.ts';
-import { logger } from '../../utils/logger.ts';
+import { detectResearchPaper } from '../../shared/utils/paperDetection.ts';
+import { generatePaperId } from '../../shared/utils/dbService.ts';
+import { extractResearchPaper, isPDFPage } from '../../shared/utils/contentExtractor.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Paper Storage Service
@@ -28,7 +28,7 @@ export interface StorageResult {
 export function createMetadataChunk(
   paper: ResearchPaper,
   paperId: string
-): import('../../types/index.ts').ContentChunk {
+): import('../../shared/types/index.ts').ContentChunk {
   // Format metadata as semantic-search-friendly text
   const metadataParts: string[] = [];
 

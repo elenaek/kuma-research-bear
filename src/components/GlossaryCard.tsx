@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
 import { ChevronDown, ChevronUp, BookOpen, Search, X, ChevronLeft, ChevronRight } from 'lucide-preact';
 import { Tooltip } from './Tooltip.tsx';
-import { GlossaryTerm } from '../types/index.ts';
+import { GlossaryTerm } from '../shared/types/index.ts';
 
 interface GlossaryCardProps {
   term: GlossaryTerm;

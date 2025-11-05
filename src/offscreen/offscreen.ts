@@ -6,12 +6,12 @@
  * of content scripts, allowing embeddings to complete even if user navigates away.
  */
 
-import { MessageType } from '../types/index.ts';
-import { getPaperChunks } from '../utils/dbService.ts';
-import { embeddingService } from '../utils/embeddingService.ts';
-import { DEFAULT_HYBRID_CONFIG } from '../types/embedding.ts';
+import { MessageType } from '../shared/types/index.ts';
+import { getPaperChunks } from '../shared/utils/dbService.ts';
+import { embeddingService } from '../shared/utils/embeddingService.ts';
+import { DEFAULT_HYBRID_CONFIG } from '../shared/types/embedding.ts';
 import BM25 from 'okapibm25';
-import { logger } from '../utils/logger.ts';
+import { logger } from '../shared/utils/logger.ts';
 
 logger.debug('EMBEDDINGS', '[Offscreen] Offscreen document initialized');
 
@@ -176,7 +176,7 @@ async function generateEmbeddingsForPaper(
     }
 
     // Store embeddings in IndexedDB
-    const { updateChunkEmbeddings } = await import('../utils/dbService.ts');
+    const { updateChunkEmbeddings } = await import('../shared/utils/dbService.ts');
     await updateChunkEmbeddings(paperId, embeddings);
 
     // Calculate final performance metrics
@@ -426,7 +426,7 @@ async function searchHybrid(
 async function extractPaperFromHTML(
   paperHtml: string,
   paperUrl: string,
-  paper: import('../types/index.ts').ResearchPaper
+  paper: import('../shared/types/index.ts').ResearchPaper
 ): Promise<void> {
   // LEVEL 2 DEDUPLICATION: Skip if already extracting this URL
   if (inFlightExtractions.has(paperUrl)) {
@@ -449,7 +449,7 @@ async function extractPaperFromHTML(
     }
 
     // Extract sections using researchPaperSplitter
-    const { extractHTMLSections } = await import('../utils/researchPaperSplitter.ts');
+    const { extractHTMLSections } = await import('../shared/utils/researchPaperSplitter.ts');
     const sections = await extractHTMLSections(doc);
 
     if (!sections || sections.length === 0) {
@@ -460,11 +460,11 @@ async function extractPaperFromHTML(
     logger.debug('PDF_EXTRACTION', `[Offscreen] ✓ Extracted ${sections.length} sections`);
 
     // Generate paper ID
-    const { generatePaperId } = await import('../utils/dbService.ts');
+    const { generatePaperId } = await import('../shared/utils/dbService.ts');
     const paperId = generatePaperId(paperUrl);
 
     // Chunk sections adaptively by paragraphs
-    const { chunkSections } = await import('../utils/adaptiveChunker.ts');
+    const { chunkSections } = await import('../shared/utils/adaptiveChunker.ts');
     const { chunks, stats } = await chunkSections(sections, paperId);
 
     logger.debug('CHUNKING', `[Offscreen] ✓ Created ${chunks.length} adaptive chunks`);

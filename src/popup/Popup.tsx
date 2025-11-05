@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'preact/hooks';
-import * as ChromeService from '../services/ChromeService.ts';
+import * as ChromeService from '../services/chromeService.ts';
 import { useAIStatus } from './hooks/useAIStatus.ts';
 import { useOperationState } from './hooks/useOperationState.ts';
 import { usePaperStatus } from './hooks/usePaperStatus.ts';
@@ -13,11 +13,12 @@ import { LoopPurpose, LottiePlayer, LottiePlayerHandle } from '../shared/compone
 import { LanguageDropdown } from './components/LanguageDropdown.tsx';
 import { PersonaSelector } from './components/PersonaSelector.tsx';
 import { PurposeSelector } from './components/PurposeSelector.tsx';
+import { VerbositySlider } from './components/VerbositySlider.tsx';
 import { ImageButtonsToggle } from './components/ImageButtonsToggle.tsx';
-import { normalizeUrl } from '../utils/urlUtils.ts';
-import { MessageType } from '../types/index.ts';
-import { getShowImageButtons, setShowImageButtons as saveShowImageButtons } from '../utils/settingsService.ts';
-import { logger } from '../utils/logger.ts';
+import { normalizeUrl } from '../shared/utils/urlUtils.ts';
+import { MessageType } from '../shared/types/index.ts';
+import { getShowImageButtons, setShowImageButtons as saveShowImageButtons } from '../shared/utils/settingsService.ts';
+import { logger } from '../shared/utils/logger.ts';
 import { Settings, ChevronDown, ChevronUp } from 'lucide-preact';
 
 export function Popup() {
@@ -409,17 +410,8 @@ export function Popup() {
     lottiePath = '/lotties/kuma-sleeping.lottie';
   } 
   else if (aiStatus.aiStatus === 'downloading') {
-    // Show different animations based on which model is downloading
-    if (aiStatus.currentDownloadingModel === 'gemini') {
-      // GeminiNano downloading (0-80%)
-      lottiePath = '/lotties/kuma-sleeping-shaking-zzz.lottie';
-    } else if (aiStatus.currentDownloadingModel === 'embedding') {
-      // Embedding downloading (80-100%)
-      lottiePath = '/lotties/kuma-sleeping-shaking-nozzz.lottie';
-    } else {
-      // Fallback during download (shouldn't happen but just in case)
-      lottiePath = '/lotties/kuma-sleeping-shaking-zzz.lottie';
-    }
+    // Show shaking animation during model download (Gemini Nano during initialization)
+    lottiePath = '/lotties/kuma-sleeping-shaking-zzz.lottie';
   }
   // Otherwise use default kuma-research-bear.lottie
 
@@ -586,6 +578,9 @@ export function Popup() {
                 <label class="text-sm font-light text-gray-700">and you want to...</label>
                 <PurposeSelector />
               </div>
+
+              {/* Verbosity Slider */}
+              <VerbositySlider />
 
               {/* Image Buttons Toggle */}
               <ImageButtonsToggle

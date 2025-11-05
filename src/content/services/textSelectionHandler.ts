@@ -1,9 +1,9 @@
 import { h, render } from 'preact';
 import { SelectionToolbar } from '../components/SelectionToolbar.tsx';
-import * as ChromeService from '../../services/ChromeService.ts';
-import { generateCitation } from '../../utils/citationGenerator.ts';
-import { showSuccessToast, showErrorToast } from '../../utils/toast.ts';
-import { logger } from '../../utils/logger.ts';
+import * as ChromeService from '../../services/chromeService.ts';
+import { generateCitation } from '../../shared/utils/citationGenerator.ts';
+import { showSuccessToast, showErrorToast } from '../../shared/utils/toast.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 const MIN_SELECTION_LENGTH = 3;
 const BUTTON_OFFSET_X = 10;

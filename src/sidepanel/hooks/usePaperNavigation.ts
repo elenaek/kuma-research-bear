@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
-import { StoredPaper, QuestionAnswer } from '../../types/index.ts';
-import * as ChromeService from '../../services/ChromeService.ts';
-import { logger } from '../../utils/logger.ts';
+import { StoredPaper, QuestionAnswer } from '../../shared/types/index.ts';
+import * as ChromeService from '../../services/chromeService.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 interface UsePaperNavigationProps {
   onPaperSwitch?: (paper: StoredPaper) => Promise<void>;

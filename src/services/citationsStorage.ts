@@ -1,6 +1,6 @@
-import { Citation, CitationFormat, CitationsStore } from '../types/index.ts';
-import { initDB, CITATIONS_STORE, CITATIONS_SETTINGS_STORE } from '../utils/dbService.ts';
-import { logger } from '../utils/logger.ts';
+import { Citation, CitationFormat, CitationsStore } from '../shared/types/index.ts';
+import { initDB, CITATIONS_STORE, CITATIONS_SETTINGS_STORE } from '../shared/utils/dbService.ts';
+import { logger } from '../shared/utils/logger.ts';
 
 const SETTINGS_ID = 'global-settings';
 const DEFAULT_FORMAT: CitationFormat = 'apa';
@@ -39,10 +39,10 @@ export async function addCitation(citation: Citation): Promise<Citation> {
     });
 
     logger.debug('SERVICE', '✓ Citation added:', citation.id);
-    db.close();
+
     return citation;
   } catch (error) {
-    db.close();
+
     logger.error('SERVICE', 'Error adding citation:', error);
     throw error;
   }
@@ -64,10 +64,10 @@ export async function getCitation(id: string): Promise<Citation | null> {
       request.onerror = () => reject(new Error('Failed to get citation'));
     });
 
-    db.close();
+
     return citation;
   } catch (error) {
-    db.close();
+
     logger.error('SERVICE', 'Error getting citation:', error);
     return null;
   }
@@ -89,12 +89,12 @@ export async function getAllCitations(): Promise<Citation[]> {
       request.onerror = () => reject(new Error('Failed to get citations'));
     });
 
-    db.close();
+
 
     // Sort citations
     return sortCitations(citations);
   } catch (error) {
-    db.close();
+
     logger.error('SERVICE', 'Error getting all citations:', error);
     return [];
   }
@@ -117,10 +117,10 @@ export async function getCitationsForPaper(paperId: string): Promise<Citation[]>
       request.onerror = () => reject(new Error('Failed to get citations for paper'));
     });
 
-    db.close();
+
     return sortCitations(citations);
   } catch (error) {
-    db.close();
+
     logger.error('SERVICE', 'Error getting citations for paper:', error);
     return [];
   }
@@ -143,10 +143,10 @@ export async function updateCitation(citation: Citation): Promise<Citation> {
     });
 
     logger.debug('SERVICE', '✓ Citation updated:', citation.id);
-    db.close();
+
     return citation;
   } catch (error) {
-    db.close();
+
     logger.error('SERVICE', 'Error updating citation:', error);
     throw error;
   }
@@ -169,9 +169,9 @@ export async function deleteCitation(id: string): Promise<void> {
     });
 
     logger.debug('SERVICE', '✓ Citation deleted:', id);
-    db.close();
+
   } catch (error) {
-    db.close();
+
     logger.error('SERVICE', 'Error deleting citation:', error);
     throw error;
   }
@@ -206,9 +206,9 @@ export async function updateCitationsOrder(citationIds: string[]): Promise<void>
     }
 
     logger.debug('SERVICE', '✓ Citation order updated');
-    db.close();
+
   } catch (error) {
-    db.close();
+
     logger.error('SERVICE', 'Error updating citation order:', error);
     throw error;
   }
@@ -243,9 +243,9 @@ export async function resetCitationsOrder(): Promise<void> {
     }
 
     logger.debug('SERVICE', '✓ Citation order reset to alphabetical');
-    db.close();
+
   } catch (error) {
-    db.close();
+
     logger.error('SERVICE', 'Error resetting citation order:', error);
     throw error;
   }
@@ -267,10 +267,10 @@ export async function getSelectedFormat(): Promise<CitationFormat> {
       request.onerror = () => reject(new Error('Failed to get citation format'));
     });
 
-    db.close();
+
     return settings?.selectedFormat || DEFAULT_FORMAT;
   } catch (error) {
-    db.close();
+
     logger.error('SERVICE', 'Error getting selected format:', error);
     return DEFAULT_FORMAT;
   }
@@ -293,9 +293,9 @@ export async function setSelectedFormat(format: CitationFormat): Promise<void> {
     });
 
     logger.debug('SERVICE', '✓ Citation format set to:', format);
-    db.close();
+
   } catch (error) {
-    db.close();
+
     logger.error('SERVICE', 'Error setting citation format:', error);
     throw error;
   }
@@ -317,10 +317,10 @@ export async function getCitationCount(): Promise<number> {
       request.onerror = () => reject(new Error('Failed to count citations'));
     });
 
-    db.close();
+
     return count;
   } catch (error) {
-    db.close();
+
     logger.error('SERVICE', 'Error counting citations:', error);
     return 0;
   }

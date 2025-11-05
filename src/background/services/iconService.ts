@@ -1,5 +1,5 @@
-import { OperationState } from '../../types/index.ts';
-import { logger } from '../../utils/logger.ts';
+import { OperationState } from '../../shared/types/index.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Icon Service

@@ -1,6 +1,6 @@
 import { h } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
-import { Citation, CitationFormat } from '../../types/index.ts';
+import { Citation, CitationFormat } from '../../shared/types/index.ts';
 import {
   getAllCitations,
   getSelectedFormat,
@@ -10,8 +10,8 @@ import {
 } from '../../services/citationsStorage.ts';
 import { CitationItem } from './CitationItem.tsx';
 import { ReferenceItem } from './ReferenceItem.tsx';
-import { generateInlineCitation, generateReferenceCitation } from '../../utils/citationFormatters.ts';
-import { logger } from '../../utils/logger.ts';
+import { generateInlineCitation, generateReferenceCitation } from '../../shared/utils/citationFormatters.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 export function CitationsSection() {
   const [citations, setCitations] = useState<Citation[]>([]);

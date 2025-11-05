@@ -1,10 +1,10 @@
-import { aiService } from '../../utils/aiService.ts';
+import { aiService } from '../../shared/utils/aiService.ts';
 import * as operationStateService from '../services/operationStateService.ts';
 import * as requestDeduplicationService from '../services/requestDeduplicationService.ts';
 import * as iconService from '../services/iconService.ts';
 import * as paperStatusService from '../services/paperStatusService.ts';
 import { tabPaperTracker } from '../services/tabPaperTracker.ts';
-import { logger } from '../../utils/logger.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Tab Lifecycle Handlers
@@ -91,7 +91,7 @@ async function checkAndUpdatePaperStatus(tabId: number, url: string): Promise<vo
 /**
  * Handle tab removal - clean up AI sessions, active requests, and operation state
  */
-export function handleTabRemoved(tabId: number, removeInfo: chrome.tabs.TabRemoveInfo): void {
+export async function handleTabRemoved(tabId: number, removeInfo: chrome.tabs.TabRemoveInfo): Promise<void> {
   logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] Tab ${tabId} closed, cleaning up AI sessions...`);
 
   // Get the paper URL before unregistering (for chat session cleanup)
@@ -109,7 +109,7 @@ export function handleTabRemoved(tabId: number, removeInfo: chrome.tabs.TabRemov
   ];
 
   for (const contextId of contextPrefixes) {
-    aiService.destroySessionForContext(contextId);
+    await aiService.destroySessionForContext(contextId);
   }
 
   // Unregister tab from tracker
@@ -125,7 +125,7 @@ export function handleTabRemoved(tabId: number, removeInfo: chrome.tabs.TabRemov
     const state = operationStateService.getRawState(tabId);
     if (state?.currentPaper?.id) {
       const chatContextId = `chat-${state.currentPaper.id}`;
-      aiService.destroySessionForContext(chatContextId);
+      await aiService.destroySessionForContext(chatContextId);
       logger.debug('BACKGROUND_SCRIPT', `[TabLifecycle] Destroyed chat session ${chatContextId}`);
     }
   } else if (paperUrl) {

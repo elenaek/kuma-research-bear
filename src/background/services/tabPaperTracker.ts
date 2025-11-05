@@ -6,9 +6,9 @@
  * are sent to ALL tabs showing a paper, not just the active tab.
  */
 
-import { StoredPaper } from '../../types/paper';
-import { normalizeUrl } from '../../utils/urlUtils.ts';
-import { logger } from '../../utils/logger.ts';
+import { StoredPaper } from '../../shared/types/paper';
+import { normalizeUrl } from '../../shared/utils/urlUtils.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 class TabPaperTracker {
   // Map: tabId -> paper URL

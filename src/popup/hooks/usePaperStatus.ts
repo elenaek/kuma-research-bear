@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
-import * as ChromeService from '../../services/ChromeService.ts';
-import { MessageType, ResearchPaper } from '../../types/index.ts';
-import { normalizeUrl } from '../../utils/urlUtils.ts';
-import { logger } from '../../utils/logger.ts';
+import * as ChromeService from '../../services/chromeService.ts';
+import { MessageType, ResearchPaper } from '../../shared/types/index.ts';
+import { normalizeUrl } from '../../shared/utils/urlUtils.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 interface UsePaperStatusReturn {
   // State

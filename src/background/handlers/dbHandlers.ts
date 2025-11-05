@@ -1,11 +1,11 @@
-import { getPaperByUrl } from '../../utils/dbService.ts';
+import { getPaperByUrl } from '../../shared/utils/dbService.ts';
 import * as operationStateService from '../services/operationStateService.ts';
 import * as paperCleanupService from '../services/paperCleanupService.ts';
 import * as iconService from '../services/iconService.ts';
 import { tabPaperTracker } from '../services/tabPaperTracker.ts';
-import { MessageType } from '../../types/index.ts';
-import { normalizeUrl } from '../../utils/urlUtils.ts';
-import { logger } from '../../utils/logger.ts';
+import { MessageType } from '../../shared/types/index.ts';
+import { normalizeUrl } from '../../shared/utils/urlUtils.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Database Message Handlers
@@ -31,7 +31,7 @@ export async function handleStorePaper(payload: any, tabId?: number): Promise<an
       });
     }
 
-    const { storePaper } = await import('../../utils/dbService.ts');
+    const { storePaper } = await import('../../shared/utils/dbService.ts');
 
     // Create progress callback to update state during chunk summarization
     const onChunkProgress = async (current: number, total: number) => {
@@ -172,7 +172,7 @@ export async function handleGetPaperByUrl(payload: any): Promise<any> {
 export async function handleIsPaperStored(payload: any): Promise<any> {
   try {
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Checking if paper is stored:', payload.url);
-    const { isPaperStored } = await import('../../utils/dbService.ts');
+    const { isPaperStored } = await import('../../shared/utils/dbService.ts');
     const isStored = await isPaperStored(payload.url);
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Paper stored check result:', isStored);
     return { success: true, isStored };
@@ -188,7 +188,7 @@ export async function handleIsPaperStored(payload: any): Promise<any> {
 export async function handleGetAllPapers(): Promise<any> {
   try {
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Getting all papers from IndexedDB');
-    const { getAllPapers } = await import('../../utils/dbService.ts');
+    const { getAllPapers } = await import('../../shared/utils/dbService.ts');
     const papers = await getAllPapers();
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Retrieved', papers.length, 'papers');
     return { success: true, papers };
@@ -206,7 +206,7 @@ export async function handleDeletePaper(payload: any): Promise<any> {
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Deleting paper:', payload.paperId);
 
     // Get paper URL before deletion for cleanup
-    const { getPaperById, deletePaper } = await import('../../utils/dbService.ts');
+    const { getPaperById, deletePaper } = await import('../../shared/utils/dbService.ts');
     const paperToDelete = await getPaperById(payload.paperId);
     const deletedPaperUrl = paperToDelete?.url;
 
@@ -312,7 +312,7 @@ export async function handleDeletePaper(payload: any): Promise<any> {
 export async function handleUpdateQAHistory(payload: any): Promise<any> {
   try {
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Updating Q&A history for paper:', payload.paperId);
-    const { updatePaperQAHistory } = await import('../../utils/dbService.ts');
+    const { updatePaperQAHistory } = await import('../../shared/utils/dbService.ts');
     const updated = await updatePaperQAHistory(payload.paperId, payload.qaHistory);
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Q&A history update result:', updated);
     return { success: updated };
@@ -332,7 +332,7 @@ export async function handleUpdateQAHistory(payload: any): Promise<any> {
 export async function handleStoreImageExplanation(payload: any): Promise<any> {
   try {
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Storing image explanation for:', payload.imageUrl);
-    const { storeImageExplanation } = await import('../../utils/dbService.ts');
+    const { storeImageExplanation } = await import('../../shared/utils/dbService.ts');
     const explanation = await storeImageExplanation(
       payload.paperId,
       payload.imageUrl,
@@ -354,7 +354,7 @@ export async function handleStoreImageExplanation(payload: any): Promise<any> {
 export async function handleGetImageExplanation(payload: any): Promise<any> {
   try {
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Getting image explanation for:', payload.imageUrl);
-    const { getImageExplanation } = await import('../../utils/dbService.ts');
+    const { getImageExplanation } = await import('../../shared/utils/dbService.ts');
     const explanation = await getImageExplanation(payload.paperId, payload.imageUrl);
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Image explanation result:', explanation ? 'Found' : 'Not found');
     return { success: true, explanation };
@@ -370,7 +370,7 @@ export async function handleGetImageExplanation(payload: any): Promise<any> {
 export async function handleGetImageExplanationsByPaper(payload: any): Promise<any> {
   try {
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Getting all image explanations for paper:', payload.paperId);
-    const { getImageExplanationsByPaper } = await import('../../utils/dbService.ts');
+    const { getImageExplanationsByPaper } = await import('../../shared/utils/dbService.ts');
     const explanations = await getImageExplanationsByPaper(payload.paperId);
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] ✓ Retrieved', explanations.length, 'image explanations');
     return { success: true, explanations };
@@ -396,7 +396,7 @@ export async function handleStoreScreenCapture(payload: any): Promise<any> {
     const blob = new Blob([bytes], { type: payload.mimeType });
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Reconstructed blob from Base64:', blob.size, 'bytes, type:', blob.type);
 
-    const { storeScreenCapture } = await import('../../utils/dbService.ts');
+    const { storeScreenCapture } = await import('../../shared/utils/dbService.ts');
     const entry = await storeScreenCapture(
       payload.paperId,
       payload.imageUrl,
@@ -417,18 +417,18 @@ export async function handleStoreScreenCapture(payload: any): Promise<any> {
 export async function handleGetScreenCapture(payload: any): Promise<any> {
   try {
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Getting screen capture for:', payload.imageUrl);
-    const { getScreenCapture } = await import('../../utils/dbService.ts');
-    const entry = await getScreenCapture(payload.paperId, payload.imageUrl);
-    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Screen capture result:', entry ? 'Found' : 'Not found');
+    const { getScreenCapture } = await import('../../shared/utils/dbService.ts');
+    const result = await getScreenCapture(payload.paperId, payload.imageUrl);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Screen capture result:', result ? 'Found' : 'Not found');
 
-    if (!entry) {
+    if (!result) {
       return { success: true, entry: null };
     }
 
     // Convert blob to base64 before sending back to content script (Chrome messaging uses JSON serialization)
-    const arrayBuffer = await entry.blob.arrayBuffer();
+    const arrayBuffer = await result.blob.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
-    const mimeType = entry.blob.type;
+    const mimeType = result.blob.type;
 
     // Convert Uint8Array to Base64 string (chunk to avoid call stack overflow)
     const chunkSize = 0x8000; // 32KB chunks
@@ -443,12 +443,12 @@ export async function handleGetScreenCapture(payload: any): Promise<any> {
     return {
       success: true,
       entry: {
-        paperId: entry.paperId,
-        imageUrl: entry.imageUrl,
-        timestamp: entry.timestamp,
+        paperId: payload.paperId,
+        imageUrl: payload.imageUrl,
+        timestamp: Date.now(),
         blobDataBase64,
         mimeType,
-        overlayPosition: entry.overlayPosition,
+        overlayPosition: result.overlayPosition,
       }
     };
   } catch (dbError) {
@@ -463,12 +463,28 @@ export async function handleGetScreenCapture(payload: any): Promise<any> {
 export async function handleDeleteScreenCapture(payload: any): Promise<any> {
   try {
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Deleting screen capture for:', payload.imageUrl);
-    const { deleteScreenCapture } = await import('../../utils/dbService.ts');
+    const { deleteScreenCapture } = await import('../../shared/utils/dbService.ts');
     const success = await deleteScreenCapture(payload.paperId, payload.imageUrl);
     logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] ✓ Screen capture deleted');
     return { success };
   } catch (dbError) {
     logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to delete screen capture:', dbError);
+    return { success: false, error: String(dbError) };
+  }
+}
+
+/**
+ * Delete an image explanation from IndexedDB
+ */
+export async function handleDeleteImageExplanation(payload: any): Promise<any> {
+  try {
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] Deleting image explanation for:', payload.imageUrl);
+    const { deleteImageExplanation } = await import('../../shared/utils/dbService.ts');
+    const success = await deleteImageExplanation(payload.paperId, payload.imageUrl);
+    logger.debug('BACKGROUND_SCRIPT', '[DBHandlers] ✓ Image explanation deleted');
+    return { success };
+  } catch (dbError) {
+    logger.error('BACKGROUND_SCRIPT', '[DBHandlers] Failed to delete image explanation:', dbError);
     return { success: false, error: String(dbError) };
   }
 }

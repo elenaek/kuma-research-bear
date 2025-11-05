@@ -1,9 +1,9 @@
 import { h, render } from 'preact';
 import { PDFCaptureButton } from '../components/PDFCaptureButton.tsx';
 import { ScreenCaptureOverlay, SelectionRect } from '../components/ScreenCaptureOverlay.tsx';
-import { isPDFPage } from '../../utils/contentExtractor.ts';
+import { isPDFPage } from '../../shared/utils/contentExtractor.ts';
 import { imageExplanationHandler } from './imageExplanationHandler.ts';
-import { logger } from '../../utils/logger.ts';
+import { logger } from '../../shared/utils/logger.ts';
 
 /**
  * Screen Capture Service

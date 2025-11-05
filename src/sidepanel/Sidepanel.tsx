@@ -1,37 +1,23 @@
 import { useState, useEffect, useRef } from 'preact/hooks';
-import {
-  Copy,
-  RefreshCw,
-  FileText,
-} from 'lucide-preact';
-import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, GlossaryResult, MessageType } from '../types/index.ts';
+import { FileText } from 'lucide-preact';
+import { ResearchPaper, ExplanationResult, SummaryResult, StoredPaper, PaperAnalysisResult, QuestionAnswer, GlossaryResult, MessageType } from '../shared/types/index.ts';
 import { useDebounce } from './hooks/useDebounce.ts';
 import { usePaperNavigation } from './hooks/usePaperNavigation.ts';
 import { useOperationState } from './hooks/useOperationState.ts';
 import { usePaperData } from './hooks/usePaperData.ts';
-import { QASection } from './components/QASection.tsx';
-import { AnalysisSection } from './components/AnalysisSection.tsx';
-import { GlossarySection } from './components/GlossarySection.tsx';
-import { ExplanationSection } from './components/ExplanationSection.tsx';
-import { SummarySection } from './components/SummarySection.tsx';
-import { OriginalPaperTab } from './components/OriginalPaperTab.tsx';
-import { CitationsSection } from './components/CitationsSection.tsx';
-import { SettingsTab } from './components/SettingsTab.tsx';
+import { usePaperOperations } from './hooks/usePaperOperations.ts';
+import { PaperDetailPanel } from './components/panels/PaperDetailPanel.tsx';
+import { CitationsPanel } from './components/panels/CitationsPanel.tsx';
+import { SettingsPanel } from './components/panels/SettingsPanel.tsx';
 import { OperationBanner } from './components/ui/OperationBanner.tsx';
-import { TabButton } from './components/ui/TabButton.tsx';
-import { TabDropdown } from './components/ui/TabDropdown.tsx';
 import { IntegratedHeader } from './components/ui/IntegratedHeader.tsx';
 import { EmptyState } from './components/ui/EmptyState.tsx';
-import { LoadingButton } from './components/ui/LoadingButton.tsx';
 import { LottiePlayer, LoopPurpose } from '../shared/components/LottiePlayer.tsx';
 import { DebugPanel } from './components/DebugPanel.tsx';
-import { PaperInfoCard } from './components/PaperInfoCard.tsx';
-import { SummaryTab } from './components/tabs/SummaryTab.tsx';
-import { normalizeUrl } from '../utils/urlUtils.ts';
-import { ExplanationTab } from './components/tabs/ExplanationTab.tsx';
-import * as ChromeService from '../services/ChromeService.ts';
-import * as StorageService from '../services/StorageService.ts';
-import { logger } from '../utils/logger.ts';
+import { normalizeUrl } from '../shared/utils/urlUtils.ts';
+import * as ChromeService from '../services/chromeService.ts';
+import * as StorageService from '../services/storageService.ts';
+import { logger } from '../shared/utils/logger.ts';
 
 type ViewState = 'loading' | 'empty' | 'content' | 'stored-only';
 type TabType = 'summary' | 'explanation' | 'qa' | 'analysis' | 'glossary' | 'original';
@@ -47,10 +33,12 @@ export function Sidepanel() {
   // State - define first so hooks can reference them
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [topLevelTab, setTopLevelTab] = useState<TopLevelTab>('papers');
-  const [activeTab, setActiveTab] = useState<TabType>('summary');
   const [data, setData] = useState<ExplanationData | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isCheckingStorage, setIsCheckingStorage] = useState(false);
+  const [isExplainingInBackground, setIsExplainingInBackground] = useState(false);
+  const [storedPaper, setStoredPaper] = useState<StoredPaper | null>(null);
+
+  // Paper content state (updated by message listeners, passed to PaperDetailPanel)
   const [analysis, setAnalysis] = useState<PaperAnalysisResult | null>(null);
   const [glossary, setGlossary] = useState<GlossaryResult | null>(null);
   const [glossaryProgress, setGlossaryProgress] = useState<{
@@ -63,18 +51,12 @@ export function Sidepanel() {
     current?: number;
     total?: number;
   } | null>(null);
-  const [isCheckingStorage, setIsCheckingStorage] = useState(false);
-  const [isExplainingInBackground, setIsExplainingInBackground] = useState(false);
-  const [storedPaper, setStoredPaper] = useState<StoredPaper | null>(null);
+  const [qaHistory, setQaHistory] = useState<QuestionAnswer[]>([]);
+  const [question, setQuestion] = useState('');
+  const [draftQuestions, setDraftQuestions] = useState<Map<string, string>>(new Map());
 
   // Ref to track current paper URL (avoids stale closure in listener)
   const currentPaperUrlRef = useRef<string | null>(null);
-
-  // Q&A state
-  const [question, setQuestion] = useState('');
-  const [isAsking, setIsAsking] = useState(false);
-  const [qaHistory, setQaHistory] = useState<QuestionAnswer[]>([]);
-  const [newlyAddedQAIndex, setNewlyAddedQAIndex] = useState<number | null>(null);
 
   // Delete all state
   const [isDeletingAll, setIsDeletingAll] = useState(false);
@@ -92,6 +74,11 @@ export function Sidepanel() {
   // Custom hooks
   const operationState = useOperationState();
   const paperData = usePaperData();
+  const paperOperations = usePaperOperations(
+    operationState,
+    setOperationQueueMessage,
+    setHasQueuedOperations
+  );
   const paperNavigation = usePaperNavigation({
     onPaperSwitch: async (paper) => {
       // Load all paper data (synchronized with navigation)
@@ -105,6 +92,7 @@ export function Sidepanel() {
         operationState.clearSummaryGeneratingPaper(deletedPaperUrl);
         operationState.clearAnalyzingPaper(deletedPaperUrl);
         operationState.clearGlossaryGeneratingPaper(deletedPaperUrl);
+        operationState.clearAskingPaper(deletedPaperUrl);
       }
     },
     onAllPapersDeleted: () => {
@@ -124,13 +112,6 @@ export function Sidepanel() {
   useEffect(() => {
     currentPaperUrlRef.current = storedPaper?.url || null;
   }, [storedPaper]);
-
-  // Reset newly added Q&A index when navigating away from Q&A tab
-  useEffect(() => {
-    if (activeTab !== 'qa') {
-      setNewlyAddedQAIndex(null);
-    }
-  }, [activeTab]);
 
   useEffect(() => {
     loadExplanation();
@@ -493,6 +474,10 @@ export function Sidepanel() {
     setStoredPaper(paper);
     setQaHistory(paper.qaHistory || []);
 
+    // Restore draft question if exists
+    const draftQuestion = draftQuestions.get(paper.url) || '';
+    setQuestion(draftQuestion);
+
     // Always show content state (all tabs) for stored papers
     // Individual section components handle showing "Generate" buttons when content doesn't exist
     setData({
@@ -593,40 +578,40 @@ export function Sidepanel() {
 
       const currentUrl = tab?.url;
 
-      // Query IndexedDB for paper matching current tab URL (single source of truth)
-      if (!currentUrl) {
-        logger.debug('UI', '[Sidepanel] No current URL, showing empty state');
-        setViewState('empty');
-        return;
-      }
-
-      logger.debug('UI', '[Sidepanel] Checking IndexedDB for paper at URL:', currentUrl);
+      logger.debug('UI', '[Sidepanel] Current tab URL:', currentUrl);
       setIsCheckingStorage(true);
 
       try {
-        const stored = await checkForStoredPaper(currentUrl);
         let paperToLoad: StoredPaper | null = null;
 
-        if (stored) {
-          // Sync navigation selector to the loaded paper
-          const paperIndex = papers.findIndex(p => p.id === stored.id);
-          if (paperIndex !== -1) {
-            paperNavigation.setCurrentPaperIndex(paperIndex);
-            logger.debug('UI', '[Sidepanel] Synced navigation to paper index:', paperIndex);
+        // Try to find paper matching current URL if we have one
+        if (currentUrl) {
+          logger.debug('UI', '[Sidepanel] Checking IndexedDB for paper at URL:', currentUrl);
+          const stored = await checkForStoredPaper(currentUrl);
+
+          if (stored) {
+            // Sync navigation selector to the loaded paper
+            const paperIndex = papers.findIndex(p => p.id === stored.id);
+            if (paperIndex !== -1) {
+              paperNavigation.setCurrentPaperIndex(paperIndex);
+              logger.debug('UI', '[Sidepanel] Synced navigation to paper index:', paperIndex);
+            }
+            paperToLoad = stored;
           }
-          paperToLoad = stored;
-        } else {
-          // No paper found for current URL - check if we have any papers to show as fallback
-          if (papers.length > 0) {
-            logger.debug('UI', '[Sidepanel] No paper for current URL, loading first paper as fallback');
-            // Set navigation to first paper
-            paperNavigation.setCurrentPaperIndex(0);
-            paperToLoad = papers[0];
-          } else {
-            // Truly no papers in database - show empty state
-            logger.debug('UI', '[Sidepanel] No papers in database');
-            setViewState('empty');
-          }
+        }
+
+        // If no paper found for current URL (or no URL), check if we have any papers to show as fallback
+        if (!paperToLoad && papers.length > 0) {
+          logger.debug('UI', '[Sidepanel] No paper for current URL, loading first paper as fallback');
+          // Set navigation to first paper
+          paperNavigation.setCurrentPaperIndex(0);
+          paperToLoad = papers[0];
+        }
+
+        // If still no paper to load, show empty state
+        if (!paperToLoad) {
+          logger.debug('UI', '[Sidepanel] No papers in database');
+          setViewState('empty');
         }
 
         // Load paper data first
@@ -696,367 +681,17 @@ export function Sidepanel() {
     }
   }
 
-  async function triggerAnalysis(paperUrl: string) {
-    // Guard: Don't retrigger if already analyzing THIS paper
-    if (operationState.isAnalyzing(paperUrl)) {
-      logger.debug('UI', '[Sidepanel] Analysis already in progress for this paper, skipping');
-      setOperationQueueMessage('Analysis already in progress for this paper');
-      setHasQueuedOperations(true);
-      setTimeout(() => {
-        setHasQueuedOperations(false);
-        setOperationQueueMessage('');
-      }, 3000);
-      return;
-    }
+  /**
+   * Find the tab ID for a paper by its URL
+   * Searches all tabs and returns the first one viewing this paper
+   * @returns Tab ID if found, undefined otherwise
+   */
+  // Analysis, Explanation, and Summary operations moved to usePaperOperations hook
 
-    try {
-      // Add to analyzing papers Set
-      operationState.addAnalyzingPaper(paperUrl);
-      logger.debug('UI', 'Starting paper analysis for:', paperUrl);
-
-      // Get active tab ID to associate operation state
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tabId = tab?.id;
-
-      const response = await ChromeService.analyzePaper(paperUrl, tabId);
-
-      if (response.success) {
-        logger.debug('UI', '✓ Paper analysis completed successfully');
-        // Analysis will be loaded automatically via storage change listener
-      } else {
-        logger.error('UI', 'Analysis failed:', response.error);
-        // Show error to user
-        setOperationQueueMessage(`Analysis failed: ${response.error}`);
-        setHasQueuedOperations(true);
-        setTimeout(() => {
-          setHasQueuedOperations(false);
-          setOperationQueueMessage('');
-        }, 5000);
-      }
-    } catch (error) {
-      logger.error('UI', 'Error triggering analysis:', error);
-      setOperationQueueMessage('Failed to start analysis');
-      setHasQueuedOperations(true);
-      setTimeout(() => {
-        setHasQueuedOperations(false);
-        setOperationQueueMessage('');
-      }, 3000);
-    } finally {
-      // Remove from analyzing papers Set
-      operationState.removeAnalyzingPaper(paperUrl);
-    }
-  }
-
-  async function triggerGlossaryGeneration(paperUrl: string) {
-    // Guard: Don't retrigger if already generating for THIS paper
-    if (operationState.isGeneratingGlossary(paperUrl)) {
-      logger.debug('UI', '[Sidepanel] Glossary generation already in progress for this paper, skipping');
-      setOperationQueueMessage('Glossary generation already in progress for this paper');
-      setHasQueuedOperations(true);
-      setTimeout(() => {
-        setHasQueuedOperations(false);
-        setOperationQueueMessage('');
-      }, 3000);
-      return;
-    }
-
-    try {
-      // Add to glossary generating papers Set (progress updates come from message listener)
-      operationState.addGlossaryGeneratingPaper(paperUrl);
-      logger.debug('UI', 'Starting glossary generation for:', paperUrl);
-
-      // Get active tab ID to associate operation state
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tabId = tab?.id;
-
-      const response = await ChromeService.generateGlossary(paperUrl, tabId);
-
-      if (response.success && response.glossary) {
-        logger.debug('UI', '✓ Glossary generated successfully');
-        const sortedGlossary = {
-          ...response.glossary,
-          terms: [...response.glossary.terms].sort((a, b) => a.acronym.localeCompare(b.acronym))
-        };
-        setGlossary(sortedGlossary);
-
-        // Update storedPaper and allPapers to reflect the new glossary
-        // This prevents the glossary from being cleared when switchToPaper is called
-        if (storedPaper) {
-          const updatedPaper = { ...storedPaper, glossary: response.glossary };
-          setStoredPaper(updatedPaper);
-
-          // Update the paper in allPapers array
-          const updatedAllPapers = [...paperNavigation.allPapers];
-          updatedAllPapers[paperNavigation.currentPaperIndex] = updatedPaper;
-          paperNavigation.setAllPapers(updatedAllPapers);
-
-          logger.debug('UI', '[Sidepanel] Updated storedPaper and allPapers with new glossary');
-        }
-      } else {
-        logger.error('UI', 'Glossary generation failed:', response.error);
-        // Show error to user
-        setOperationQueueMessage(`Glossary generation failed: ${response.error}`);
-        setHasQueuedOperations(true);
-        setTimeout(() => {
-          setHasQueuedOperations(false);
-          setOperationQueueMessage('');
-        }, 5000);
-      }
-    } catch (error) {
-      logger.error('UI', 'Error triggering glossary generation:', error);
-      setOperationQueueMessage('Failed to generate glossary');
-      setHasQueuedOperations(true);
-      setTimeout(() => {
-        setHasQueuedOperations(false);
-        setOperationQueueMessage('');
-      }, 3000);
-    } finally {
-      // Remove from glossary generating papers Set and reset progress
-      operationState.removeGlossaryGeneratingPaper(paperUrl);
-      setGlossaryProgress(null);
-    }
-  }
-
-  async function triggerExplanation(paperUrl: string) {
-    // Guard: Don't retrigger if already explaining for THIS paper
-    if (operationState.isExplaining(paperUrl)) {
-      logger.debug('UI', '[Sidepanel] Explanation generation already in progress for this paper, skipping');
-      setOperationQueueMessage('Explanation generation already in progress for this paper');
-      setHasQueuedOperations(true);
-      setTimeout(() => {
-        setHasQueuedOperations(false);
-        setOperationQueueMessage('');
-      }, 3000);
-      return;
-    }
-
-    try {
-      // Add to explaining papers Set
-      operationState.addExplainingPaper(paperUrl);
-      logger.debug('UI', 'Starting explanation generation for:', paperUrl);
-
-      // Get active tab ID to associate operation state
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tabId = tab?.id;
-
-      const response = await ChromeService.explainPaperManual(paperUrl, tabId);
-
-      if (response.success) {
-        logger.debug('UI', '✓ Explanation generated successfully');
-        // Explanation will be loaded automatically via storage change listener
-      } else {
-        logger.error('UI', 'Explanation generation failed:', response.error);
-        // Show error to user
-        setOperationQueueMessage(`Explanation generation failed: ${response.error}`);
-        setHasQueuedOperations(true);
-        setTimeout(() => {
-          setHasQueuedOperations(false);
-          setOperationQueueMessage('');
-        }, 5000);
-      }
-    } catch (error) {
-      logger.error('UI', 'Error triggering explanation generation:', error);
-      setOperationQueueMessage('Failed to generate explanation');
-      setHasQueuedOperations(true);
-      setTimeout(() => {
-        setHasQueuedOperations(false);
-        setOperationQueueMessage('');
-      }, 3000);
-    } finally {
-      // Remove from explaining papers Set
-      operationState.removeExplainingPaper(paperUrl);
-    }
-  }
-
-  async function triggerSummary(paperUrl: string) {
-    // Guard: Don't retrigger if already generating summary for THIS paper
-    if (operationState.isGeneratingSummary(paperUrl)) {
-      logger.debug('UI', '[Sidepanel] Summary generation already in progress for this paper, skipping');
-      setOperationQueueMessage('Summary generation already in progress for this paper');
-      setHasQueuedOperations(true);
-      setTimeout(() => {
-        setHasQueuedOperations(false);
-        setOperationQueueMessage('');
-      }, 3000);
-      return;
-    }
-
-    try {
-      // Add to summary generating papers Set
-      operationState.addSummaryGeneratingPaper(paperUrl);
-      logger.debug('UI', 'Starting summary generation for:', paperUrl);
-
-      // Get active tab ID to associate operation state
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tabId = tab?.id;
-
-      const response = await ChromeService.generateSummaryManual(paperUrl, tabId);
-
-      if (response.success) {
-        logger.debug('UI', '✓ Summary generated successfully');
-        // Summary will be loaded automatically via storage change listener
-      } else {
-        logger.error('UI', 'Summary generation failed:', response.error);
-        // Show error to user
-        setOperationQueueMessage(`Summary generation failed: ${response.error}`);
-        setHasQueuedOperations(true);
-        setTimeout(() => {
-          setHasQueuedOperations(false);
-          setOperationQueueMessage('');
-        }, 5000);
-      }
-    } catch (error) {
-      logger.error('UI', 'Error triggering summary generation:', error);
-      setOperationQueueMessage('Failed to generate summary');
-      setHasQueuedOperations(true);
-      setTimeout(() => {
-        setHasQueuedOperations(false);
-        setOperationQueueMessage('');
-      }, 3000);
-    } finally {
-      // Remove from summary generating papers Set
-      operationState.removeSummaryGeneratingPaper(paperUrl);
-    }
-  }
-
-  // Create debounced version of triggerAnalysis
+  // Create debounced version of triggerAnalysis from hook
   const debouncedTriggerAnalysis = useDebounce((paperUrl: string) => {
-    triggerAnalysis(paperUrl);
+    paperOperations.triggerAnalysis(paperUrl);
   }, 500); // 500ms debounce for analysis
-
-  async function handleAskQuestion() {
-    if (!question.trim() || !data?.paper.url) {
-      return;
-    }
-
-    if (!storedPaper) {
-      alert('Paper must be stored before asking questions. Please wait for paper to be stored.');
-      return;
-    }
-
-    try {
-      setIsAsking(true);
-      logger.debug('UI', 'Asking question:', question);
-
-      const sanitizedQuestion = question.trim();
-
-      const newQA = {
-        question: sanitizedQuestion,
-        answer: '',
-        sources: [],
-        timestamp: Date.now(),
-      };
-      
-      const newHistory = [newQA, ...qaHistory];
-      setQaHistory(newHistory);
-      if(activeTab === 'qa') {
-        setNewlyAddedQAIndex(0);
-      }
-
-      if (storedPaper) {
-        await ChromeService.updatePaperQAHistory(storedPaper.id, newHistory);
-      }
-
-      const response = await ChromeService.askQuestion(data.paper.url, sanitizedQuestion);
-
-      if (response.success && response.answer) {
-        logger.debug('UI', '✓ Question answered successfully');
-        // update history
-        const answeredHistory = [response.answer, ...qaHistory];
-        setQaHistory(answeredHistory);
-        setQuestion(''); // Clear input
-
-        // If user is on Q&A tab when answer arrives, mark it as newly added
-        if (activeTab === 'qa') {
-          setNewlyAddedQAIndex(0); // New answer is at index 0 (prepended to array)
-        }
-
-        // Save Q&A history to database
-        if (storedPaper) {
-          await ChromeService.updatePaperQAHistory(storedPaper.id, answeredHistory);
-        }
-      } else {
-        logger.error('UI', 'Question answering failed:', response.error);
-
-        alert(`Failed to answer question: ${response.error}`);
-      }
-    } catch (error) {
-      const revertHistory = [...qaHistory];
-      setQaHistory(revertHistory);
-      if(activeTab === 'qa') {
-        setNewlyAddedQAIndex(revertHistory.length - 1);
-      }
-
-      if (storedPaper && revertHistory.length > 0) {
-        await ChromeService.updatePaperQAHistory(storedPaper.id, revertHistory);
-      }
-      logger.error('UI', 'Error asking question:', error);
-      alert('Failed to ask question. Please try again.');
-    } finally {
-      setIsAsking(false);
-    }
-  }
-
-  async function handleCopy() {
-    if (!data) {
-      alert('No explanation to copy');
-      return;
-    }
-
-    try {
-      const { paper, explanation, summary } = data;
-
-      const text = `
-${paper.title}
-${paper.authors.join(', ')}
-
-SUMMARY:
-${summary.summary}
-
-KEY POINTS:
-${summary.keyPoints.map(p => `- ${p}`).join('\n')}
-
-EXPLANATION:
-${explanation.explanation}
-
-Source: ${paper.url}
-      `.trim();
-
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {
-      logger.error('UI', 'Error copying:', error);
-      alert('Failed to copy explanation');
-    }
-  }
-
-  async function handleRegenerate() {
-    try {
-      if (!storedPaper) {
-        alert('No paper found. Please detect a paper first.');
-        return;
-      }
-
-      setIsRegenerating(true);
-      setViewState('loading');
-
-      const response = await ChromeService.explainPaper(storedPaper);
-
-      if (response.success) {
-        await loadExplanation();
-      } else {
-        alert('Failed to regenerate explanation');
-        setViewState('empty');
-      }
-    } catch (error) {
-      logger.error('UI', 'Error regenerating:', error);
-      alert('Failed to regenerate explanation');
-      setViewState('empty');
-    } finally {
-      setIsRegenerating(false);
-    }
-  }
 
   async function handleManualRefresh() {
     logger.debug('UI', '[Sidepanel] Manual refresh requested');
@@ -1092,6 +727,15 @@ Source: ${paper.url}
       await ChromeService.updatePaperQAHistory(storedPaper.id, qaHistory);
     }
 
+    // Save current paper's draft question before switching
+    if (storedPaper && question.trim()) {
+      setDraftQuestions(prev => {
+        const next = new Map(prev);
+        next.set(storedPaper.url, question);
+        return next;
+      });
+    }
+
     // Switch to new paper
     paperNavigation.setCurrentPaperIndex(index);
     const newPaper = papers[index];
@@ -1117,6 +761,10 @@ Source: ${paper.url}
     // Load Q&A history for new paper
     setQaHistory(paperToUse.qaHistory || []);
 
+    // Restore draft question for new paper
+    const draftQuestion = draftQuestions.get(paperToUse.url) || '';
+    setQuestion(draftQuestion);
+
     // Load explanation and summary from IndexedDB (single source of truth)
     logger.debug('UI', '[Sidepanel] Loading paper data from IndexedDB');
     setData({
@@ -1124,7 +772,6 @@ Source: ${paper.url}
       explanation: paperToUse.explanation || null,
       summary: paperToUse.summary || null,
     });
-    setActiveTab('summary');
     setViewState('content');
 
     // Load analysis from IndexedDB (single source of truth)
@@ -1237,18 +884,24 @@ Source: ${paper.url}
 
     try {
       setIsDeletingAll(true);
-      logger.debug('UI', '[Sidepanel] Deleting all papers:', paperNavigation.allPapers.length);
+
+      // Create snapshot of paper IDs to avoid issues with array mutation during deletion
+      // (PAPER_DELETED messages trigger listener that updates allPapers mid-iteration)
+      const paperIdsToDelete = paperNavigation.allPapers.map(p => p.id);
+      const totalPapers = paperIdsToDelete.length;
+
+      logger.debug('UI', '[Sidepanel] Deleting all papers:', totalPapers);
 
       // Delete all papers one by one
       let successCount = 0;
-      for (const paper of paperNavigation.allPapers) {
-        const success = await ChromeService.deletePaper(paper.id);
+      for (const paperId of paperIdsToDelete) {
+        const success = await ChromeService.deletePaper(paperId);
         if (success) {
           successCount++;
         }
       }
 
-      logger.debug('UI', `[Sidepanel] Deleted ${successCount}/${paperNavigation.allPapers.length} papers`);
+      logger.debug('UI', `[Sidepanel] Deleted ${successCount}/${totalPapers} papers`);
 
       // Clear all state
       paperNavigation.setAllPapers([]);
@@ -1259,8 +912,8 @@ Source: ${paper.url}
       setQaHistory([]);
       setViewState('empty');
 
-      if (successCount < paperNavigation.allPapers.length) {
-        alert(`Deleted ${successCount} out of ${paperNavigation.allPapers.length} papers. Some papers could not be deleted.`);
+      if (successCount < totalPapers) {
+        alert(`Deleted ${successCount} out of ${totalPapers} papers. Some papers could not be deleted.`);
       }
     } catch (error) {
       logger.error('UI', '[Sidepanel] Error deleting all papers:', error);
@@ -1374,229 +1027,37 @@ Source: ${paper.url}
 
 
           {/* Citations Tab Content */}
-          {topLevelTab === 'citations' && (
-            <div class="tab-content space-y-4">
-              <CitationsSection />
-            </div>
-          )}
+          {topLevelTab === 'citations' && <CitationsPanel />}
 
           {/* Settings Tab Content */}
-          {topLevelTab === 'settings' && (
-            <div class="tab-content">
-              <SettingsTab />
-            </div>
-          )}
+          {topLevelTab === 'settings' && <SettingsPanel />}
 
           {/* Papers Tab Content */}
           {topLevelTab === 'papers' && (
-            <>
-              {/* Paper Info Card */}
-              <PaperInfoCard paper={data?.paper || null} storedPaper={storedPaper} />
-
-              {/* Tabs */}
-              {/* Dropdown for narrow screens */}
-              <>
-            <div class="mb-4 hide-on-wide text-center">
-                <TabDropdown
-                  tabs={[
-                    {
-                      id: 'summary',
-                      label: 'Summary',
-                      active: activeTab === 'summary',
-                      onClick: () => setActiveTab('summary'),
-                    },
-                    {
-                      id: 'explanation',
-                      label: 'Explanation',
-                      active: activeTab === 'explanation',
-                      onClick: () => setActiveTab('explanation'),
-                    },
-                    {
-                      id: 'analysis',
-                      label: 'Analysis',
-                      active: activeTab === 'analysis',
-                      loading: storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false,
-                      title: (storedPaper?.url && operationState.isAnalyzing(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : '',
-                      onClick: () => setActiveTab('analysis'),
-                    },
-                    {
-                      id: 'qa',
-                      label: 'Q&A',
-                      active: activeTab === 'qa',
-                      disabled: !storedPaper,
-                      title: !storedPaper ? 'Paper must be stored to ask questions' : 'Ask questions about this paper',
-                      onClick: () => setActiveTab('qa'),
-                    },
-                    {
-                      id: 'glossary',
-                      label: 'Glossary',
-                      active: activeTab === 'glossary',
-                      loading: storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false,
-                      title: (storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : '',
-                      onClick: () => setActiveTab('glossary'),
-                    },
-                    {
-                      id: 'original',
-                      label: 'Original',
-                      active: activeTab === 'original',
-                      onClick: () => setActiveTab('original'),
-                    },
-                  ]}
-                  activeTabLabel={
-                    activeTab === 'summary' ? 'Summary' :
-                    activeTab === 'explanation' ? 'Explanation' :
-                    activeTab === 'analysis' ? 'Analysis' :
-                    activeTab === 'qa' ? 'Q&A' :
-                    activeTab === 'glossary' ? 'Glossary' :
-                    'Original'
-                  }
-                />
-              </div>
-
-              {/* Horizontal tabs for wide screens */}
-              <div class="mb-4 border-b border-gray-200 -mx-responsive hide-on-narrow">
-                <div class="flex gap-1 overflow-x-auto px-responsive scrollbar-hide" style="scrollbar-width: none; -ms-overflow-style: none;">
-                  {/* Paper-Specific Tabs */}
-                  <TabButton
-                    active={activeTab === 'summary'}
-                    onClick={() => setActiveTab('summary')}
-                    loading={storedPaper?.url ? operationState.isGeneratingSummary(storedPaper.url) : false}
-                    title={(storedPaper?.url && operationState.isGeneratingSummary(storedPaper.url)) ? 'Summary being generated...' : !data?.summary ? 'Summary will be generated when paper is stored' : ''}
-                  >
-                    Summary
-                  </TabButton>
-                  <TabButton
-                    active={activeTab === 'explanation'}
-                    onClick={() => setActiveTab('explanation')}
-                    loading={storedPaper?.url ? operationState.isExplaining(storedPaper.url) : false}
-                    title={(storedPaper?.url && operationState.isExplaining(storedPaper.url)) ? 'Explanation being generated...' : !data?.explanation ? 'Explanation will be generated when paper is stored' : ''}
-                  >
-                    Explanation
-                  </TabButton>
-                  <TabButton
-                    active={activeTab === 'analysis'}
-                    onClick={() => setActiveTab('analysis')}
-                    loading={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-                    title={(storedPaper?.url && operationState.isAnalyzing(storedPaper.url)) ? 'Analysis in progress...' : !analysis ? 'Analysis will start automatically when paper is stored' : ''}
-                  >
-                    Analysis
-                  </TabButton>
-                  <TabButton
-                    active={activeTab === 'qa'}
-                    onClick={() => setActiveTab('qa')}
-                    disabled={!storedPaper}
-                    loading={isAsking}
-                    title={!storedPaper ? 'Paper must be stored to ask questions' : isAsking ? 'Kuma is thinking about your question...' : 'Ask questions about this paper'}
-                  >
-                    Q&A
-                  </TabButton>
-                  <TabButton
-                    active={activeTab === 'glossary'}
-                    onClick={() => setActiveTab('glossary')}
-                    loading={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-                    title={(storedPaper?.url && operationState.isGeneratingGlossary(storedPaper.url)) ? 'Glossary being generated...' : !glossary ? 'Glossary will be generated when paper is stored' : ''}
-                  >
-                    Glossary
-                  </TabButton>
-                  <TabButton
-                    active={activeTab === 'original'}
-                    onClick={() => setActiveTab('original')}
-                  >
-                    Original
-                  </TabButton>
-                </div>
-              </div>
-
-              {/* Tab Content */}
-              <div class="space-y-4">
-                {activeTab === 'summary' && (
-                  <div class="tab-content space-y-4">
-                    <SummarySection
-                      summary={data?.summary || null}
-                      isGeneratingSummary={storedPaper?.url ? operationState.isGeneratingSummary(storedPaper.url) : false}
-                      onGenerateSummary={storedPaper?.url ? () => triggerSummary(storedPaper.url) : undefined}
-                    />
-                  </div>
-                )}
-
-                {activeTab === 'explanation' && (
-                  <div class="tab-content space-y-4">
-                    <ExplanationSection
-                      explanation={data?.explanation || null}
-                      isExplaining={storedPaper?.url ? operationState.isExplaining(storedPaper.url) : false}
-                      onGenerateExplanation={storedPaper?.url ? () => triggerExplanation(storedPaper.url) : undefined}
-                    />
-                  </div>
-                )}
-
-                {activeTab === 'analysis' && (
-                  <div class="tab-content space-y-4">
-                    <AnalysisSection
-                      analysis={analysis}
-                      isAnalyzing={storedPaper?.url ? operationState.isAnalyzing(storedPaper.url) : false}
-                      analysisProgress={analysisProgress}
-                      onGenerateAnalysis={storedPaper?.url ? () => triggerAnalysis(storedPaper.url) : undefined}
-                    />
-                  </div>
-                )}
-
-                {activeTab === 'qa' && (
-                  <div class="tab-content space-y-4">
-                    <QASection
-                      question={question}
-                      setQuestion={setQuestion}
-                      isAsking={isAsking}
-                      qaHistory={qaHistory}
-                      storedPaper={storedPaper}
-                      onAskQuestion={handleAskQuestion}
-                      newlyAddedQAIndex={newlyAddedQAIndex}
-                    />
-                  </div>
-                )}
-
-                {activeTab === 'glossary' && (
-                  <div class="tab-content space-y-4">
-                    <GlossarySection
-                      glossary={glossary}
-                      isGenerating={storedPaper?.url ? operationState.isGeneratingGlossary(storedPaper.url) : false}
-                      glossaryProgress={glossaryProgress}
-                      onGenerateGlossary={storedPaper?.url ? () => triggerGlossaryGeneration(storedPaper.url) : undefined}
-                    />
-                  </div>
-                )}
-
-                {activeTab === 'original' && (
-                  <div class="tab-content space-y-4">
-                    <OriginalPaperTab paper={data?.paper || null} />
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div class="flex gap-3 mt-6">
-                <LoadingButton
-                    onClick={handleCopy}
-                    loading={false}
-                    variant="secondary"
-                    className="flex-1"
-                  >
-                    <Copy size={16} />
-                    {copied ? 'Copied!' : 'Copy Explanation'}
-                  </LoadingButton>
-
-                  <LoadingButton
-                    onClick={handleRegenerate}
-                    loading={isRegenerating}
-                    loadingText="Regenerating..."
-                    variant="secondary"
-                    className="flex-1"
-                  >
-                    <RefreshCw size={16} />
-                    Regenerate
-                  </LoadingButton>
-              </div>
-            </>
-            </>
+            <PaperDetailPanel
+              data={data}
+              storedPaper={storedPaper}
+              analysis={analysis}
+              glossary={glossary}
+              glossaryProgress={glossaryProgress}
+              analysisProgress={analysisProgress}
+              qaHistory={qaHistory}
+              question={question}
+              setQuestion={setQuestion}
+              draftQuestions={draftQuestions}
+              setDraftQuestions={setDraftQuestions}
+              operationState={operationState}
+              paperOperations={paperOperations}
+              paperNavigation={paperNavigation}
+              setStoredPaper={setStoredPaper}
+              setGlossary={setGlossary}
+              setGlossaryProgress={setGlossaryProgress}
+              setQaHistory={setQaHistory}
+              setOperationQueueMessage={setOperationQueueMessage}
+              setHasQueuedOperations={setHasQueuedOperations}
+              setViewState={setViewState}
+              loadExplanation={loadExplanation}
+            />
           )}
         </div>
       </div>
