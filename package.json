@@ -1,15 +1,16 @@
 {
   "name": "kuma-research-bear",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Chrome extension that explains research papers using built-in AI",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/fix-underscore-files.js",
+    "build": "vite build && node scripts/sync-version.js && node scripts/fix-underscore-files.js",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "generate-icons": "node scripts/resize-icons.cjs",
-    "generate-icon-variants": "node scripts/generate-icon-variants.cjs"
+    "generate-icon-variants": "node scripts/generate-icon-variants.cjs",
+    "version:sync": "node scripts/sync-version.js"
   },
   "keywords": [
     "chrome-extension",

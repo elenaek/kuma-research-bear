@@ -13,7 +13,7 @@
  * Extension metadata
  */
 export const EXTENSION_NAME = 'Kuma Research Bear';
-export const EXTENSION_VERSION = '0.5.0';
+export const EXTENSION_VERSION = '0.6.0';
 
 /**
  * Feature flags (for future use)

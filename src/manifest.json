@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Kuma the Research Bear",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A bear that helps you understand research papers using Chrome's built-in AI",
   "permissions": [
     "activeTab",
@@ -22,10 +22,10 @@
   "action": {
     "default_popup": "src/popup/popup.html",
     "default_icon": {
-      "128": "icons/icon128.png",
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
-      "48": "icons/icon48.png"
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
     }
   },
   "background": {
@@ -44,8 +44,12 @@
         "file:///*",
         "<all_urls>"
       ],
-      "js": ["src/content/content.ts"],
-      "css": ["src/content/content.css"],
+      "js": [
+        "src/content/content.ts"
+      ],
+      "css": [
+        "src/content/content.css"
+      ],
       "match_about_blank": true
     }
   ],
@@ -53,10 +57,10 @@
     "default_path": "src/sidepanel/sidepanel.html"
   },
   "icons": {
-    "128": "icons/icon128.png",
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
-    "48": "icons/icon48.png"
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "web_accessible_resources": [
     {
@@ -80,7 +84,9 @@
         "lotties/*",
         "icons/*"
       ],
-      "matches": ["<all_urls>"]
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "content_security_policy": {
